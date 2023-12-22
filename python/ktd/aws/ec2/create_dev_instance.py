@@ -75,11 +75,12 @@ def main() -> int:
 
     logger.info("Updating local SSH config")
     update_ssh_config(_INSTANCE_NAME, HostName=host_name)
-    logger.info("Cloning git repositories and dotfiles")
 
+    logger.info("Cloning git repositories and dotfiles")
     # yadm and git commands assume identity forwarding is setup in the SSH config
-    # TODO: update .bash_profile and .bashrc to for the remote environment
-    # subprocess.call(["ssh", _INSTANCE_NAME, f"yadm clone {_REPO_ROOT}/dotfiles"])
+    subprocess.call(
+        ["ssh", _INSTANCE_NAME, f"yadm clone {_PROJECT_REPO_ROOT}/dotfiles"]
+    )
 
     # TODO: for this to work on first connection, I had to do
     # StrictHostChecking no. This might be fine for all aws hosts, but
