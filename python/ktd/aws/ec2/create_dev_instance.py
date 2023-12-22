@@ -94,6 +94,8 @@ def main() -> int:
         cmd = f"mkdir -p {_PROJECT_PATH} && cd $_ && {'; '.join(clone_cmds)}"
         subprocess.call(["ssh", _INSTANCE_NAME, cmd])
 
+    return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

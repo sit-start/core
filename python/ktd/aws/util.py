@@ -3,12 +3,14 @@ from typing import Optional
 
 import boto3
 import botocore
+import botocore.exceptions
+
 from ktd.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-def is_logged_in(session: Optional[boto3.session] = None) -> bool:
+def is_logged_in(session: Optional[boto3.Session] = None) -> bool:
     """Check if the given session is logged in"""
     sts = session.client("sts") if session else boto3.client("sts")
     try:
