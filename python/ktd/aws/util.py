@@ -3,7 +3,7 @@ from typing import Optional
 
 import boto3
 import botocore
-from ktd.util import get_logger
+from ktd.logging import get_logger
 
 logger = get_logger(__name__)
 
