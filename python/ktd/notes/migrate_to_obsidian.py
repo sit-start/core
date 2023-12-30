@@ -11,18 +11,27 @@ import regex as re
 import yaml
 
 
-# NOTE: src_dir is the location of the bear export; new_asset_dir should
-# correspond to the 'Files and links' > 'Default location for
-# attachments' in Obsidian.
-#
-# NOTE: It also makes most sense to set 'New link format' to 'Relative
-# path to file' under the same 'Files and links' section.
+# NOTE: This was originally written for migrating from Bear to Obsidian;
+# I also used it to migrate my vscode-accessed markdown notebook and
+# course notes.
 def process(
     src_dir: str,
     tgt_dir: str,
     new_asset_dir: str = "assets",
     min_modified_date: datetime = datetime.min,
+    include_front_matter: bool = False,
 ):
+    """Updates a directory of Markdown documents for use with Obsidian.
+
+    Specifically, this updates the asset locations and links to be
+    consistent with the flat directory structure in an Obsidian vault.
+
+    The new assset directory should correspond to the 'Files and links'
+    > 'Default location for attachments' in Obsidian. It's also
+    recommended to set 'New link format' to 'Relative path to file'
+    under the same 'Files and Links' section.
+    """
+
     os.makedirs(f"{tgt_dir}/{new_asset_dir}", exist_ok=True)
 
     link_pattern = re.compile(r"\[([^][]*)\](\(((?:[^()]+|(?2))+)\))")
@@ -30,11 +39,16 @@ def process(
 
     def should_include(fn):
         modified_date = datetime.fromtimestamp(os.stat(f"{src_dir}/{fn}").st_mtime)
-        return osp.splitext(fn)[-1] == ".md" and (modified_date > min_modified_date)
+        return (
+            osp.isfile(f"{src_dir}/{fn}")
+            and osp.splitext(fn)[-1] == ".md"
+            and (modified_date > min_modified_date)
+        )
 
     md_fns = [p for p in os.listdir(src_dir) if should_include(p)]
     print(
-        f"{len(md_fns)} files are newer than the minimum modification date of {min_modified_date}"
+        f"{len(md_fns)} files are newer than the minimum modification "
+        f"date of {min_modified_date}"
     )
     for md_fn in md_fns:
         print(f"Processing file '{md_fn}'")
@@ -51,7 +65,7 @@ def process(
 
         # process all markdown links
         for _, _, src_rel_path_quoted in link_pattern.findall(md):
-            src_rel_path = unquote(src_rel_path_quoted)
+            src_rel_path = unquote(src_rel_path_quoted).strip("<>")
             src_path = f"{src_dir}/{src_rel_path}"
 
             # ignore if it's not a link to a local file
@@ -60,26 +74,27 @@ def process(
 
             # copy file, preserving stats, to the target asset directory
             # and update links to this file
-            tgt_rel_path = (
-                f"{new_asset_dir}/{src_rel_path.replace('/', '~').replace(' ', '_')}"
-            )
+            md_name = osp.basename(osp.splitext(tgt_md_path)[0])
+            tgt_rel_path = f"{new_asset_dir}/{md_name}--{osp.basename(src_path)}"
+
             tgt_path = f"{tgt_dir}/{tgt_rel_path}"
             shutil.copyfile(src_path, tgt_path)
             shutil.copystat(src_path, tgt_path)
 
-            md = md.replace(src_rel_path_quoted, tgt_rel_path)
+            md = md.replace(src_rel_path_quoted, f"<{tgt_rel_path}>")
 
         # add import-/export-related tags as yaml frontmatter
-        stat = os.stat(src_md_path)
-        # NOTE: this is platform-specific; confirmed on MacOS
-        creation_date = datetime.fromtimestamp(stat.st_birthtime)
-        modified_date = datetime.fromtimestamp(stat.st_mtime)
-        front_matter = {
-            "creation_date": f"{creation_date:%Y-%m-%d-%H-%M-%S}",
-            "modified_date": f"{modified_date:%Y-%m-%d-%H-%M-%S}",
-            "tags": ["bear-import"],
-        }
-        md = f"---\n{yaml.dump(front_matter)}---\n{md}"
+        if include_front_matter:
+            stat = os.stat(src_md_path)
+            # NOTE: this is platform-specific; confirmed on MacOS
+            creation_date = datetime.fromtimestamp(stat.st_birthtime)
+            modified_date = datetime.fromtimestamp(stat.st_mtime)
+            front_matter = {
+                "creation_date": f"{creation_date:%Y-%m-%d-%H-%M-%S}",
+                "modified_date": f"{modified_date:%Y-%m-%d-%H-%M-%S}",
+                "tags": ["bear-import"],
+            }
+            md = f"---\n{yaml.dump(front_matter)}---\n{md}"
 
         # write modified markdown file, preserving stats
         with open(tgt_md_path, "w") as f:
@@ -95,21 +110,26 @@ def process(
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("source", type=str)
-    parser.add_argument("target", type=str)
+    parser = argparse.ArgumentParser(description=process.__doc__)
+    parser.add_argument("source", type=str, help="source directory")
+    parser.add_argument("target", type=str, help="target directory")
     parser.add_argument(
-        "min_modified_date",
+        "--min_modified_date",
         type=str,
         default=datetime.min.strftime("%Y-%m-%d"),
-        help="In YYYY-MM-DD format",
+        help="earliest last-modified date to include, in YYYY-MM-DD format",
     )
-
+    parser.add_argument(
+        "--include_front_matter",
+        action=argparse.BooleanOptionalAction,
+        help="include YAML front matter",
+    )
     args = parser.parse_args()
     process(
         src_dir=args.source,
         tgt_dir=args.target,
         min_modified_date=datetime.fromisoformat(args.min_modified_date),
+        include_front_matter=args.include_front_matter,
     )
 
 
