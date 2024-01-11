@@ -1,0 +1,78 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Development server
+Parameters:
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+    Default: rsa
+  InstanceType:
+    Description: Devserver EC2 instance type. Allowed values cover all GPU types < $1.50/hr
+    Type: String
+    Default: g5g.2xlarge
+    AllowedValues:
+      - g5g.2xlarge
+      - g5g.4xlarge
+      - g5g.8xlarge
+      - g4dn.xlarge
+      - g4dn.2xlarge
+      - g4dn.4xlarge
+      - g5.xlarge
+      - g5.2xlarge
+      - p3.2xlarge
+  SecurityGroup:
+    Description: Security group to assign to the instance
+    Type: AWS::EC2::SecurityGroup::Id
+    Default: sg-07301ebcb97e0124c
+Mappings:
+  InstanceTypeToArch:
+    g5g.2xlarge:
+      Arch: aarch64
+    g5g.4xlarge:
+      Arch: aarch64
+    g5g.8xlarge:
+      Arch: aarch64
+    g4dn.xlarge:
+      Arch: x86-64
+    g4dn.2xlarge:
+      Arch: x86-64
+    g4dn.4xlarge:
+      Arch: x86-64
+    g5.xlarge:
+      Arch: x86-64
+    g5.2xlarge:
+      Arch: x86-64
+    p3.2xlarge:
+      Arch: x86-64
+  ArchToAMI:
+    aarch64:
+      AMI: ami-0b4d5df05510465c1
+    x86-64:
+      AMI: ami-0aea58e2f86048cf7 # TODO: create AMI on top of this
+Resources:
+  Ec2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !FindInMap
+        - ArchToAMI
+        - !FindInMap
+          - InstanceTypeToArch
+          - !Ref InstanceType
+          - Arch
+        - AMI
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 128
+            VolumeType: gp3
+Outputs:
+  InstanceId:
+    Description: InstanceId of the newly created EC2 instance
+    Value: !Ref Ec2Instance
