@@ -1,17 +1,42 @@
 from os.path import exists, expanduser
-from typing import Optional, Type
+from typing import Type
 
 import boto3
 from boto3.resources.base import ServiceResource
 from sshconf import empty_ssh_config_file, read_ssh_config
 
-session = boto3.Session(profile_name="kevdale-sso")
-ec2 = session.resource("ec2")
 
-
-def get_instance_name(instance: Type[ServiceResource]) -> Optional[str]:
+def get_instance_name(instance: Type[ServiceResource]) -> str | None:
+    if instance.meta is None:
+        return None
     tags = instance.meta.data.get("Tags", {})
     return next((el["Value"] for el in tags if el["Key"] == "Name"), None)
+
+
+def get_instances_with_name(
+    name: str, session: boto3.Session | None = None
+) -> list[Type[ServiceResource]]:
+    session = session or boto3.Session()
+    ec2 = session.resource("ec2")
+    return list(ec2.instances.filter(Filters=[{"Name": "tag:Name", "Values": [name]}]))
+
+
+def wait_for_instance_with_id(
+    instance_id: str,
+    session: boto3.Session | None = None,
+    delay_sec: int = 15,
+    max_attempts: int = 20,
+) -> None:
+    session = session or boto3.Session()
+    ec2_client = session.client("ec2")
+    waiter = ec2_client.get_waiter("instance_status_ok")
+    waiter.wait(
+        InstanceIds=[instance_id],
+        WaiterConfig={
+            "Delay": delay_sec,
+            "MaxAttempts": max_attempts,
+        },  # timeout of 15s x 20 = 5 minutes w/ default values
+    )
 
 
 def update_ssh_config(host: str, reset=False, path="~/.ssh/config", **kwargs) -> None:
