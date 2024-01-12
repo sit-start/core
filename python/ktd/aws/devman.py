@@ -129,6 +129,9 @@ def _cmd_kill(session: boto3.Session, instance_name: str) -> None:
 
 
 def _cmd_list(session: boto3.Session, show_terminated: bool = True) -> None:
+    # FIXME: track stacks w/ specific tag, not instances, since it's
+    # possible for, e.g., stack creation to succeed but instance
+    # creation to fail
     ec2 = session.resource("ec2")
     name_width = 25
     for instance in ec2.instances.all():
@@ -155,7 +158,7 @@ def _cmd_create(session: boto3.Session, instance_name: str, **kwargs) -> None:
     See ktd/aws/cloudformation/templates/dev.yaml for parameters and
     defaults.
     """
-    logger.info("Creating devserver with name {instance_name}")
+    logger.info(f"Creating devserver with name {instance_name}")
     cf_client = session.client("cloudformation")
     cf_client.create_stack(
         StackName=instance_name,
@@ -167,8 +170,8 @@ def _cmd_create(session: boto3.Session, instance_name: str, **kwargs) -> None:
     logger.info(f"Created instance and stack with name {instance_name}")
     _wait_for_stack_with_name(instance_name, session=session)
     _update_hostname_in_ssh_config(instance_name)
-    
-    # FIXME: this tends to result in 'connection refused', so we need ot
+
+    # FIXME: this tends to result in 'connection refused', so we need to
     # add proper return values and retry logic
     _clone_dotfiles_and_repos(instance_name)
 
@@ -184,15 +187,20 @@ def main():
         help="the AWS SSO profile to use for the session",
         default=None,
     )
-    args = parser.parse_args()
+    # TODO: Generate doc for all commands, esp. create, and add to
+    # help. Reference dev.yaml and expected format for kwargs
+
+    args, cmd_args = parser.parse_known_args()
+    cmd_pargs = args.command[1:]
+    cmd_kwargs = {k: v for k, v in [a[2:].split("=") for a in cmd_args]}
 
     if args.profile is not None:
         sso_login(profile_name=args.profile)
 
     session = boto3.Session(profile_name=args.profile)
 
-    fn = _get_command(args.command[0])
-    fn(session, *args.command[1:])
+    cmd = _get_command(args.command[0])
+    cmd(session, *cmd_pargs, **cmd_kwargs)
 
 
 if __name__ == "__main__":

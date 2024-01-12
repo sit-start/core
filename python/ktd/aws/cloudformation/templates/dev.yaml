@@ -48,7 +48,7 @@ Mappings:
     aarch64:
       AMI: ami-0b4d5df05510465c1
     x86-64:
-      AMI: ami-0aea58e2f86048cf7 # TODO: create AMI on top of this
+      AMI: ami-0ba26e8b3af2b7155 # TODO: create AMI on top of this
 Resources:
   Ec2Instance:
     Type: AWS::EC2::Instance
