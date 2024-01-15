@@ -70,8 +70,7 @@ def _get_instance_with_name(instance_name: str) -> Type[ServiceResource]:
 
 def _trunc(s: str, max_len: int = 50) -> str:
     suffix = "..."
-    max_len -= len(suffix)
-    return s if len(s) <= max_len else s[:max_len] + suffix
+    return s if len(s) <= max_len else s[: max_len - len(suffix)] + suffix
 
 
 def _update_hostname_in_ssh_config(instance_name: str) -> None:
@@ -133,14 +132,21 @@ def _cmd_list(session: boto3.Session, show_terminated: bool = True) -> None:
     # possible for, e.g., stack creation to succeed but instance
     # creation to fail
     ec2 = session.resource("ec2")
-    name_width = 25
+    name_width = 8
+    type_width = 11
+    state_width = 7
     for instance in ec2.instances.all():
-        state = instance.state["Name"].strip()
+        state = _trunc(instance.state["Name"].strip(), state_width)
         if state == "terminated" and not show_terminated:
+            print("continuing")
             continue
         dns_name = instance.public_dns_name.strip()
         name = _trunc(str(get_instance_name(instance)), name_width)
-        logger.info(f"{state:13} {instance.id} {name:<{name_width}} {dns_name}")
+        instance_type = _trunc(instance.instance_type.strip(), type_width)
+        logger.info(
+            f"{state:>{state_width}} {name:<{name_width}} "
+            f"{instance_type:<{type_width}} {instance.id} {dns_name}"
+        )
 
 
 def _cmd_refresh(session: boto3.Session) -> None:
@@ -202,6 +208,7 @@ def main():
     args, cmd_args = parser.parse_known_args()
     cmd_pargs = args.command[1:]
     cmd_kwargs = {k: v for k, v in [a[2:].split("=") for a in cmd_args]}
+    # FIXME: don't want to pass all args as strings
 
     if args.profile is not None:
         sso_login(profile_name=args.profile)
