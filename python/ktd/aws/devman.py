@@ -175,8 +175,17 @@ def _cmd_create(session: boto3.Session, instance_name: str, **kwargs) -> None:
     # add proper return values and retry logic
     _clone_dotfiles_and_repos(instance_name)
 
-    # TODO: can optionally open with:
-    # $ code -- --folder-uri vscode-remote://ssh-remote+dev-main/home/ec2-user
+
+def _cmd_code(session: boto3.Session, instance_name: str) -> None:
+    logger.info(f"Opening VS Code on instance {instance_name}")
+    subprocess.call(
+        [
+            "code",
+            "--",
+            "--folder-uri",
+            f"vscode-remote://ssh-remote+{instance_name}/home/ec2-user",
+        ]
+    )
 
 
 def main():
