@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 import argparse
+import inspect
 import subprocess
 import sys
 from pathlib import Path
-from typing import Callable, Type
+from typing import Type
 
 import boto3
 import ktd.logging
@@ -25,8 +26,21 @@ _REPO_ROOT = "git@github.com:kevdale"  # FIXME: hardcoded
 _PROJECTS = ["infra", "study"]  # FIXME: hardcoded
 
 
+_PARAM_HELP = {
+    "profile": "the AWS SSO profile to use for the session",
+    "instance_name": "the instance name",
+    "instance_type": "the instance type",
+    "show_killed": "show killed instances",
+}
+
+_INTERNAL_PARAMS = ["session"]
+
+_CMD_PREFIX = "_cmd_"
+
+
 # TODO: maintain .ssh/config: remove old instances, update new ones
-# TODO: can simplify the code if we always access instances via their stack's unique name
+# TODO: can simplify the code if we always access instances via their
+# stack's unique name
 # TODO: add a tag to the stack and/or instance to make filtering easy
 
 
@@ -97,11 +111,28 @@ def _wait_for_stack_with_name(
     waiter.wait(StackName=stack_name, WaiterConfig=config)
 
 
-def _get_command(name: str) -> Callable:
-    return getattr(sys.modules[__name__], "_cmd_" + name)
+def _add_subparser(subparsers: argparse._SubParsersAction, cmd: str) -> None:
+    func = getattr(sys.modules[__name__], _CMD_PREFIX + cmd)
+    parser = subparsers.add_parser(cmd, help=func.__doc__)
+    for p in inspect.signature(func).parameters.values():
+        if p.name in _INTERNAL_PARAMS:
+            continue
+        args = [p.name if p.default is p.empty else f"--{p.name}"]
+        kwargs = {
+            "default": None if p.default is p.empty else p.default,
+            "help": _PARAM_HELP[p.name],
+        }
+        if p.annotation == bool:
+            kwargs["action"] = "store_true"
+        else:
+            kwargs["type"] = p.annotation
+        parser.add_argument(*args, **kwargs)
+    parser.set_defaults(func=func)
+    return parser
 
 
 def _cmd_start(session: boto3.Session, instance_name: str) -> None:
+    """Start the instance with the given name"""
     logger.info(f"Starting instance {instance_name}")
     instance = _get_instance_with_name(instance_name)
     ec2_client = session.client("ec2")
@@ -111,6 +142,7 @@ def _cmd_start(session: boto3.Session, instance_name: str) -> None:
 
 
 def _cmd_stop(session: boto3.Session, instance_name: str) -> None:
+    """Stop the instance with the given name"""
     logger.info(f"Stopping instance {instance_name}")
     instance = _get_instance_with_name(instance_name)
     ec2_client = session.client("ec2")
@@ -118,6 +150,7 @@ def _cmd_stop(session: boto3.Session, instance_name: str) -> None:
 
 
 def _cmd_kill(session: boto3.Session, instance_name: str) -> None:
+    """Kill/terminate the instance with the given name"""
     logger.info(f"Killing instance {instance_name}")
     # instance = _get_instance_with_name(instance_name)
     # ec2_client = session.client("ec2")
@@ -127,7 +160,8 @@ def _cmd_kill(session: boto3.Session, instance_name: str) -> None:
     cf_client.delete_stack(StackName=instance_name)
 
 
-def _cmd_list(session: boto3.Session, show_terminated: bool = True) -> None:
+def _cmd_list(session: boto3.Session, show_killed: bool = True) -> None:
+    """List instances"""
     # FIXME: track stacks w/ specific tag, not instances, since it's
     # possible for, e.g., stack creation to succeed but instance
     # creation to fail
@@ -137,7 +171,7 @@ def _cmd_list(session: boto3.Session, show_terminated: bool = True) -> None:
     state_width = 7
     for instance in ec2.instances.all():
         state = _trunc(instance.state["Name"].strip(), state_width)
-        if state == "terminated" and not show_terminated:
+        if state == "terminated" and not show_killed:
             print("continuing")
             continue
         dns_name = instance.public_dns_name.strip()
@@ -150,6 +184,7 @@ def _cmd_list(session: boto3.Session, show_terminated: bool = True) -> None:
 
 
 def _cmd_refresh(session: boto3.Session) -> None:
+    """Refresh the SSH config for all named instances"""
     logger.info("Refreshing SSH config for all named instances")
     ec2 = session.resource("ec2")
     for instance in ec2.instances.all():
@@ -158,19 +193,18 @@ def _cmd_refresh(session: boto3.Session) -> None:
 
 
 # TODO: we can't really pass in kwargs given how this is currently invoked
-def _cmd_create(session: boto3.Session, instance_name: str, **kwargs) -> None:
-    """Create a devserver with the given name and arguments
-
-    See ktd/aws/cloudformation/templates/dev.yaml for parameters and
-    defaults.
-    """
+def _cmd_create(
+    session: boto3.Session, instance_name: str, instance_type: str = "g5.2xlarge"
+) -> None:
+    """Create a devserver with the given name and arguments"""
+    # parameters should be kept in sync with ktd/aws/cloudformation/templates/dev.yaml
     logger.info(f"Creating devserver with name {instance_name}")
     cf_client = session.client("cloudformation")
     cf_client.create_stack(
         StackName=instance_name,
         TemplateBody=TEMPLATE_PATH.read_text(),
         Parameters=[
-            {"ParameterKey": k, "ParameterValue": v} for k, v in kwargs.items()
+            {"ParameterKey": "InstanceType", "ParameterValue": instance_type},
         ],
     )
     logger.info(f"Created instance and stack with name {instance_name}")
@@ -183,6 +217,7 @@ def _cmd_create(session: boto3.Session, instance_name: str, **kwargs) -> None:
 
 
 def _cmd_code(session: boto3.Session, instance_name: str) -> None:
+    """Open VS Code on the instance with the given name"""
     logger.info(f"Opening VS Code on instance {instance_name}")
     subprocess.call(
         [
@@ -195,28 +230,27 @@ def _cmd_code(session: boto3.Session, instance_name: str) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("command", help="the command to run", nargs="*")
-    parser.add_argument(
-        "--profile",
-        help="the AWS SSO profile to use for the session",
-        default=None,
-    )
-    # TODO: Generate doc for all commands, esp. create, and add to
-    # help. Reference dev.yaml and expected format for kwargs
+    """Manages devserver instances"""
+    parser = argparse.ArgumentParser(description=main.__doc__)
+    parser.add_argument("--profile", help=_PARAM_HELP["profile"])
+    subparsers = parser.add_subparsers(help="Sub-command help")
 
-    args, cmd_args = parser.parse_known_args()
-    cmd_pargs = args.command[1:]
-    cmd_kwargs = {k: v for k, v in [a[2:].split("=") for a in cmd_args]}
-    # FIXME: don't want to pass all args as strings
+    commands = ["start", "stop", "kill", "list", "refresh", "create", "code"]
+    for cmd in commands:
+        _add_subparser(subparsers, cmd)
 
-    if args.profile is not None:
-        sso_login(profile_name=args.profile)
+    args = parser.parse_args()
 
-    session = boto3.Session(profile_name=args.profile)
+    profile = args.profile
+    delattr(args, "profile")
+    func = args.func
+    delattr(args, "func")
 
-    cmd = _get_command(args.command[0])
-    cmd(session, *cmd_pargs, **cmd_kwargs)
+    if profile is not None:
+        sso_login(profile_name=profile)
+    session = boto3.Session(profile_name=profile)
+
+    func(session, **vars(args))
 
 
 if __name__ == "__main__":
