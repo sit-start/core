@@ -24,6 +24,10 @@ Parameters:
     Description: Security group to assign to the instance
     Type: AWS::EC2::SecurityGroup::Id
     Default: sg-07301ebcb97e0124c
+  DevserverActivityTopic:
+    Description: SNS topic to which activity should be sent
+    Type: String
+    Default: arn:aws:sns:us-west-2:960487471244:DevserverActivity
 Mappings:
   InstanceTypeToArch:
     g5g.2xlarge:
@@ -72,6 +76,24 @@ Resources:
           Ebs:
             VolumeSize: 128
             VolumeType: gp3
+  InactiveAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Join [":", [arn:aws:automate, !Ref AWS::Region, ec2:stop]]
+        - !Ref DevserverActivityTopic
+      AlarmDescription: Fires when the instance is inactive
+      AlarmName: !Join ["-", [!Ref AWS::StackName, InactiveAlarm]]
+      ComparisonOperator: LessThanThreshold
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref Ec2Instance
+      EvaluationPeriods: 60
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Period: 30
+      Statistic: Maximum
+      Threshold: 3
 Outputs:
   InstanceId:
     Description: InstanceId of the newly created EC2 instance
