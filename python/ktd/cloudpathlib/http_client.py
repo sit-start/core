@@ -65,15 +65,15 @@ class HttpClient(Client):
 
     def _download_file(self, cloud_path: HttpPath, local_path: str | PathLike) -> Path:
         local_path = Path(local_path)
-        chunk_size = 1024  # TODO debug
-        with open(local_path, "wb") as f:
-            writer = io.BufferedWriter(f, chunk_size)
-            response = self._session.get(
+        chunk_size = 1024
+        with open(local_path, "wb", buffering=chunk_size) as f:
+            with self._session.get(
                 cloud_path.as_uri(), stream=True, allow_redirects=True
-            )
-            for chunk in response.iter_content(chunk_size=chunk_size):
-                if chunk:  # filter out keep-alive new chunks
-                    writer.write(chunk)
+            ) as response:
+                for chunk in response.iter_content(chunk_size=chunk_size):
+                    if chunk:  # filter out keep-alive new chunks
+                        f.write(chunk)
+                        f.flush()
         return local_path
 
     def _list_dir(
