@@ -68,6 +68,7 @@ Resources:
           - Arch
         - AMI
       KeyName: !Ref KeyName
+      Monitoring: true
       SecurityGroupIds:
         - !Ref SecurityGroup
       Tags:
@@ -90,12 +91,12 @@ Resources:
       Dimensions:
         - Name: InstanceId
           Value: !Ref Ec2Instance
-      EvaluationPeriods: 60
+      EvaluationPeriods: 30
       MetricName: CPUUtilization
       Namespace: AWS/EC2
-      Period: 30
+      Period: 60
       Statistic: Maximum
-      Threshold: 3
+      Threshold: 0.5
 Outputs:
   InstanceId:
     Description: InstanceId of the newly created EC2 instance
