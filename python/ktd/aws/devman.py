@@ -23,21 +23,20 @@ logger = ktd.logging.get_logger(__name__)
 
 TEMPLATE_PATH = Path(__file__).parent / "cloudformation" / "templates" / "dev.yaml"
 PROJECT_PATH = "$HOME/projects"
-
-_REPO_ROOT = "git@github.com:kevdale"  # FIXME: hardcoded
-_PROJECTS = ["infra", "study"]  # FIXME: hardcoded
-
-
 _PARAM_HELP = {
+    # devman
     "profile": "the AWS SSO profile to use for the session",
-    "no_compact": "do not display compact output",
+    # common
     "instance_name": "the instance name",
-    "instance_type": "the instance type",
+    # list
+    "no_compact": "do not display compact output",
     "show_killed": "show killed instances",
+    # create
+    "instance_type": "the instance type",
+    "repos": "comma-separate list of github repos to clone",
+    "yadm_dotfiles_repo": "github repo to clone via yadm",
 }
-
 _INTERNAL_PARAMS = ["session"]
-
 _CMD_PREFIX = "_cmd_"
 
 
@@ -70,8 +69,12 @@ def _github_ssh_keys(use_cached: bool = True) -> list[str]:
     return meta.get("ssh_keys", []) if isinstance(meta, dict) else []
 
 
-def _clone_dotfiles_and_repos(instance_name: str) -> None:
-    # note - yadm and git commands assume identity forwarding is setup in the SSH config
+def _clone_repos(
+    instance_name: str,
+    repos: list[str] | None,
+    yadm_dotfiles_repo: str | None,
+) -> None:
+    # NOTE - yadm and git commands assume identity forwarding is setup in the SSH config
 
     logger.info(f"[{instance_name}] Updating known hosts over initial SSH connection")
     # add github to known hosts, with retries on the initial connection
@@ -88,22 +91,20 @@ def _clone_dotfiles_and_repos(instance_name: str) -> None:
         ]
     )
 
-    logger.info(f"[{instance_name}] Cloning dotfiles and repos")
-    # clone yadm
-    subprocess.call(
-        [
-            "ssh",
-            instance_name,
-            f"yadm clone {_REPO_ROOT}/dotfiles --no-checkout; yadm checkout ~",
-        ]
-    )
+    if yadm_dotfiles_repo:
+        logger.info(f"[{instance_name}] Cloning dotfiles")
+        subprocess.call(
+            [
+                "ssh",
+                instance_name,
+                f"yadm clone git@github.com:{yadm_dotfiles_repo} --no-checkout; "
+                "yadm checkout ~",
+            ]
+        )
 
-    # clone projects
-    # TODO: for this to work on first connection, I had to do
-    # StrictHostChecking no. This might be fine for all aws hosts, but
-    # reconsider
-    if _PROJECTS:
-        clone_cmds = [f"git clone {_REPO_ROOT}/{p}" for p in _PROJECTS]
+    if repos:
+        logger.info(f"[{instance_name}] Cloning repos")
+        clone_cmds = [f"git clone git@github.com:{r}" for r in repos]
         cmd = f"mkdir -p {PROJECT_PATH} && cd $_ && {'; '.join(clone_cmds)}"
         subprocess.call(["ssh", instance_name, cmd])
 
@@ -149,8 +150,19 @@ def _wait_for_stack_with_name(
 
 
 def _add_subparser(subparsers: argparse._SubParsersAction, cmd: str) -> None:
+    """Adds a subparser for the given command.
+
+    Automatically generates the parser based on the function signature
+    and type annotations. The corresponding function must be prefixed
+    with _CMD_PREFIX. Function arguments must be annotated; default
+    values cannot include `None`. Boolean arguments must default to
+    False.
+    """
+
     func = getattr(sys.modules[__name__], _CMD_PREFIX + cmd)
-    parser = subparsers.add_parser(cmd, help=func.__doc__)
+    parser = subparsers.add_parser(
+        cmd, help=func.__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     for p in inspect.signature(func).parameters.values():
         if p.name in _INTERNAL_PARAMS:
             continue
@@ -255,7 +267,11 @@ def _cmd_refresh(session: boto3.Session) -> None:
 
 # TODO: we can't really pass in kwargs given how this is currently invoked
 def _cmd_create(
-    session: boto3.Session, instance_name: str, instance_type: str = "g5.2xlarge"
+    session: boto3.Session,
+    instance_name: str,
+    instance_type: str = "g5.2xlarge",
+    repos: str = "kevdale/infra,kevdale/study",
+    yadm_dotfiles_repo: str = "kevdale/dotfiles",
 ) -> None:
     """Create a devserver with the given name and arguments"""
     # parameters should be kept in sync with ktd/aws/cloudformation/templates/dev.yaml
@@ -271,7 +287,9 @@ def _cmd_create(
     logger.info(f"[{instance_name}] Waiting for instance to be ready")
     _wait_for_stack_with_name(instance_name, session=session)
     _update_hostname_in_ssh_config(instance_name)
-    _clone_dotfiles_and_repos(instance_name)
+    _clone_repos(
+        instance_name, repos=repos.split(","), yadm_dotfiles_repo=yadm_dotfiles_repo
+    )
 
 
 def _cmd_code(session: boto3.Session, instance_name: str) -> None:
@@ -289,7 +307,9 @@ def _cmd_code(session: boto3.Session, instance_name: str) -> None:
 
 def main():
     """Manages devserver instances"""
-    parser = argparse.ArgumentParser(description=main.__doc__)
+    parser = argparse.ArgumentParser(
+        description=main.__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument("--profile", help=_PARAM_HELP["profile"])
     subparsers = parser.add_subparsers(help="Sub-command help")
     subparsers.required = True
