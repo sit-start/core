@@ -28,6 +28,7 @@ _PROJECTS = ["infra", "study"]  # FIXME: hardcoded
 
 _PARAM_HELP = {
     "profile": "the AWS SSO profile to use for the session",
+    "no_compact": "do not display compact output",
     "instance_name": "the instance name",
     "instance_type": "the instance type",
     "show_killed": "show killed instances",
@@ -45,13 +46,23 @@ _CMD_PREFIX = "_cmd_"
 
 
 def _clone_dotfiles_and_repos(instance_name: str) -> None:
-    logger.info(f"Cloning dotfiles and repos on instance {instance_name}")
+    logger.info(f"[{instance_name}] Making initial SSH connection")
     # yadm and git commands assume identity forwarding is setup in the SSH config
+    # FIXME: the ssh-keyscan method is frowned upon.
     _ = subprocess.call(
-        ["ssh", instance_name, "ssh-keyscan -H github.com >> ~/.ssh/known_hosts"],
+        [
+            "ssh",
+            "-o",
+            "ConnectionAttempts 10",
+            "-o",
+            "StrictHostKeyChecking no",
+            instance_name,
+            "ssh-keyscan -H github.com >> ~/.ssh/known_hosts",
+        ],
         stderr=subprocess.DEVNULL,
     )
 
+    logger.info(f"[{instance_name}] Cloning dotfiles and repos")
     # clone yadm
     subprocess.call(
         [
@@ -73,10 +84,10 @@ def _clone_dotfiles_and_repos(instance_name: str) -> None:
 
 def _get_instance_with_name(instance_name: str) -> Type[ServiceResource]:
     instances = get_instances_with_name(instance_name)
-    assert len(instances) > 0, f"No instances found with name {instance_name}"
+    assert len(instances) > 0, f"[{instance_name}] No instances found with this name"
     if len(instances) > 1:
         logger.warning(
-            f"Found multiple instances with name {instance_name}; "
+            f"[{instance_name}] Found multiple instances with this name; "
             "using the first one"
         )
     return instances[0]
@@ -88,9 +99,9 @@ def _trunc(s: str, max_len: int = 50) -> str:
 
 
 def _update_hostname_in_ssh_config(instance_name: str) -> None:
-    logger.info(f"Updating hostname in SSH config for instance {instance_name}")
+    logger.info(f"[{instance_name}] Updating hostname in SSH config")
     instance = _get_instance_with_name(instance_name)
-    assert instance.meta is not None, f"Instance {instance_name} has no metadata"
+    assert instance.meta is not None, f"[{instance_name}] Instance has no metadata"
     host_name = instance.meta.data["PublicDnsName"]
     if not host_name:
         logger.info("No hostname to update in SSH config")
@@ -123,6 +134,9 @@ def _add_subparser(subparsers: argparse._SubParsersAction, cmd: str) -> None:
             "help": _PARAM_HELP[p.name],
         }
         if p.annotation == bool:
+            assert (
+                p.default is p.empty or p.default is False
+            ), "boolean param must be False by default"
             kwargs["action"] = "store_true"
         else:
             kwargs["type"] = p.annotation
@@ -143,7 +157,7 @@ def _cmd_start(session: boto3.Session, instance_name: str) -> None:
 
 def _cmd_stop(session: boto3.Session, instance_name: str) -> None:
     """Stop the instance with the given name"""
-    logger.info(f"Stopping instance {instance_name}")
+    logger.info(f"[{instance_name}] Stopping instance")
     instance = _get_instance_with_name(instance_name)
     ec2_client = session.client("ec2")
     ec2_client.stop_instances(InstanceIds=[instance.id])  # type: ignore
@@ -151,7 +165,7 @@ def _cmd_stop(session: boto3.Session, instance_name: str) -> None:
 
 def _cmd_kill(session: boto3.Session, instance_name: str) -> None:
     """Kill/terminate the instance with the given name"""
-    logger.info(f"Killing instance {instance_name}")
+    logger.info(f"[{instance_name}] Killing instance")
     # instance = _get_instance_with_name(instance_name)
     # ec2_client = session.client("ec2")
     # ec2_client.terminate_instances(InstanceIds=[instance.id])  # type: ignore
@@ -159,27 +173,48 @@ def _cmd_kill(session: boto3.Session, instance_name: str) -> None:
     cf_client = session.client("cloudformation")
     cf_client.delete_stack(StackName=instance_name)
 
+    # TODO: cleanup SSH config
 
-def _cmd_list(session: boto3.Session, show_killed: bool = True) -> None:
+
+def _cmd_list(
+    session: boto3.Session, show_killed: bool = False, no_compact: bool = False
+) -> None:
     """List instances"""
     # FIXME: track stacks w/ specific tag, not instances, since it's
     # possible for, e.g., stack creation to succeed but instance
     # creation to fail
-    ec2 = session.resource("ec2")
-    name_width = 8
-    type_width = 11
-    state_width = 7
-    for instance in ec2.instances.all():
-        state = _trunc(instance.state["Name"].strip(), state_width)
-        if state == "terminated" and not show_killed:
-            print("continuing")
+    instance_info = {}
+    for instance in session.resource("ec2").instances.all():
+        info = {
+            "state": instance.state["Name"].strip(),
+            "dns_name": instance.public_dns_name.strip(),
+            "name": str(get_instance_name(instance)),
+            "instance_type": instance.instance_type.strip(),
+        }
+        if show_killed or info["state"] != "terminated":
+            instance_info[instance.id] = info
+
+    name_width = max([len(i["name"]) for i in instance_info.values()])
+    type_width = max([len(i["instance_type"]) for i in instance_info.values()])
+    state_width = max([len(i["state"]) for i in instance_info.values()])
+
+    if not no_compact:
+        name_width = min(name_width, 8)
+        type_width = min(type_width, 11)
+        state_width = min(state_width, 7)
+
+    for id, info in instance_info.items():
+        if info["state"] == "terminated" and not show_killed:
             continue
-        dns_name = instance.public_dns_name.strip()
-        name = _trunc(str(get_instance_name(instance)), name_width)
-        instance_type = _trunc(instance.instance_type.strip(), type_width)
+
+        if not no_compact:
+            info["state"] = _trunc(info["state"], state_width)
+            info["instance_type"] = _trunc(info["instance_type"], type_width)
+            info["name"] = _trunc(info["name"], name_width)
+
         logger.info(
-            f"{state:>{state_width}} {name:<{name_width}} "
-            f"{instance_type:<{type_width}} {instance.id} {dns_name}"
+            f"{info['state']:>{state_width}} {info['name']:<{name_width}} "
+            f"{info['instance_type']:<{type_width}} {id} {info['dns_name']}"
         )
 
 
@@ -198,7 +233,7 @@ def _cmd_create(
 ) -> None:
     """Create a devserver with the given name and arguments"""
     # parameters should be kept in sync with ktd/aws/cloudformation/templates/dev.yaml
-    logger.info(f"Creating devserver with name {instance_name}")
+    logger.info(f"[{instance_name}] Creating devserver")
     cf_client = session.client("cloudformation")
     cf_client.create_stack(
         StackName=instance_name,
@@ -207,18 +242,15 @@ def _cmd_create(
             {"ParameterKey": "InstanceType", "ParameterValue": instance_type},
         ],
     )
-    logger.info(f"Created instance and stack with name {instance_name}")
+    logger.info(f"[{instance_name}] Waiting for instance to be ready")
     _wait_for_stack_with_name(instance_name, session=session)
     _update_hostname_in_ssh_config(instance_name)
-
-    # FIXME: this tends to result in 'connection refused', so we need to
-    # add proper return values and retry logic
     _clone_dotfiles_and_repos(instance_name)
 
 
 def _cmd_code(session: boto3.Session, instance_name: str) -> None:
     """Open VS Code on the instance with the given name"""
-    logger.info(f"Opening VS Code on instance {instance_name}")
+    logger.info(f"[{instance_name}] Opening VS Code on instance")
     subprocess.call(
         [
             "code",
@@ -234,6 +266,7 @@ def main():
     parser = argparse.ArgumentParser(description=main.__doc__)
     parser.add_argument("--profile", help=_PARAM_HELP["profile"])
     subparsers = parser.add_subparsers(help="Sub-command help")
+    subparsers.required = True
 
     commands = ["start", "stop", "kill", "list", "refresh", "create", "code"]
     for cmd in commands:
