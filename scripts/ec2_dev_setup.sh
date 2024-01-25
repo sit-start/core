@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 
-set -v
-
 readonly USER=ec2-user # for Amazon Linux 2023-4
 readonly USER_HOME=$(eval echo ~$USER)
 readonly PYTHON_VER=python3.11
 readonly MAIN_VENV_PATH="$USER_HOME/.virtualenvs/main"
 readonly ARCH=$(uname -m)
 readonly CUDA_HOME=/usr/local/cuda
+readonly PYTHON_PACKAGES="ipykernel ipympl matplotlib jupyterthemes mplcursors h5py scipy tensorboard grpcio-tools torch-tb-profiler imageio imageio-ffmpeg torch-tb-profiler hydra-core jupyter jupyterlab_widgets Pillow pandas numpy urllib3 ffmpeg scikit-learn tqdm boto3 regex pytest determined typing-extensions sympy filelock fsspec networkx pyyaml"
 
 ### Tools for installing packages on Amazon Linux 2023 ###
 
@@ -26,8 +25,9 @@ function install_core_packages() {
 
   # Install Python 3.11; -devel is necessary for some package installations, e.g., psutil
   yum -y install python3-devel "$PYTHON_VER" "$PYTHON_VER-devel" "$PYTHON_VER-pip"
+}
 
-  # Install yadm
+function install_yadm() {
   curl -fLo /usr/local/bin/yadm https://github.com/TheLocehiliosan/yadm/raw/master/yadm && chmod a+x /usr/local/bin/yadm
 }
 
@@ -40,7 +40,7 @@ function install_gflags_from_source() {
   tar -xzf v$version.tar.gz
   cd gflags-$version
   mkdir build && cd build
-  cmake ..
+  cmake3 .. -DBUILD_SHARED_LIBS=ON
   make install
   popd
 }
@@ -54,7 +54,7 @@ function install_glog_from_source() {
   tar -xzf v$version.tar.gz
   cd glog-$version
   mkdir build && cd build
-  cmake ..
+  cmake3 .. -DBUILD_SHARED_LIBS=ON
   make install
   popd
 }
@@ -89,7 +89,7 @@ function install_python() {
 
   # Install Python packages
   pip3 install --upgrade pip
-  pip3 install ipykernel ipympl matplotlib jupyterthemes mplcursors h5py scipy tensorboard grpcio-tools torch-tb-profiler imageio imageio-ffmpeg torch-tb-profiler hydra-core jupyter jupyterlab_widgets Pillow pandas numpy urllib3 ffmpeg scikit-learn tqdm boto3 regex pytest determined typing-extensions sympy filelock fsspec networkx pyyaml cloudpathlib[all]
+  pip3 install $PYTHON_PACKAGES
 }
 
 function install_docker() {
@@ -176,22 +176,25 @@ function install_pytorch_from_source() {
   LD_LIBRARY_PATH="$CUDA_HOME/lib64/:$LD_LIBRARY_PATH"
   PATH="$CUDA_HOME/bin:$PATH"
   CMAKE_CUDA_COMPILER=$(which nvcc)
-  
+
   pip3 install -r requirements.txt
   python3 setup.py install
-  
+
   popd
 
   # Refresh the dynamic linker run-time bindings
   ldconfig
 }
 
-function main() {
+function g5g_setup() {
+  set -v
+
   # use the larger root volume for temp files during script exection
   mkdir -p "$USER_HOME/tmp"
   pushd "$USER_HOME/tmp"
 
   install_core_packages
+  install_yadm
   install_gflags_from_source
   install_glog_from_source
   install_ffmpeg
@@ -201,6 +204,29 @@ function main() {
   install_pytorch_from_source
 
   popd
+
+  set +v
 }
 
-main "${@}"
+function g5_setup() {
+  # a much simpler setup; NVIDIA drivers are already installed, and
+  # pytorch and other python packages are installed via conda.
+  mkdir -p "$USER_HOME/tmp"
+  pushd "$USER_HOME/tmp"
+
+  install_ffmpeg
+
+  # install for parity with the g5g setup, although not required
+  yum -y update
+  yum -y install ninja-build cmake3
+  install_yadm
+  install_gflags_from_source
+  install_glog_from_source
+
+  # install python packages
+  source activate pytorch
+  pip3 install --upgrade pip
+  pip3 install $PYTHON_PACKAGES
+
+  popd
+}

@@ -50,9 +50,11 @@ Mappings:
       Arch: x86-64
   ArchToAMI:
     aarch64:
+      # base ami-08a800e4b5aa90bb8, setup via scripts/ec2_dev_setup.sh:g5g_setup()
       AMI: ami-0b4d5df05510465c1
     x86-64:
-      AMI: ami-0ba26e8b3af2b7155 # TODO: create AMI on top of this
+      # base ami-0ba26e8b3af2b7155, setup via scripts/ec2_dev_setup.sh:g5_setup()
+      AMI: ami-063bfbce544bc9377
 Resources:
   Ec2Instance:
     Type: AWS::EC2::Instance
