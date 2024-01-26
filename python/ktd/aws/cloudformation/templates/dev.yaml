@@ -54,7 +54,7 @@ Mappings:
       AMI: ami-0b4d5df05510465c1
     x86-64:
       # base ami-0ba26e8b3af2b7155, setup via scripts/ec2_dev_setup.sh:g5_setup()
-      AMI: ami-063bfbce544bc9377
+      AMI: ami-03c22e640e258e9b5
 Resources:
   Ec2Instance:
     Type: AWS::EC2::Instance
