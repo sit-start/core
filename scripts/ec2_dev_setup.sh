@@ -2,11 +2,11 @@
 
 readonly USER=ec2-user # for Amazon Linux 2023-4
 readonly USER_HOME=$(eval echo ~$USER)
-readonly PYTHON_VER=python3.11
+readonly PYTHON_VER=python3.10
 readonly MAIN_VENV_PATH="$USER_HOME/.virtualenvs/main"
 readonly ARCH=$(uname -m)
 readonly CUDA_HOME=/usr/local/cuda
-readonly PYTHON_PACKAGES="ipykernel ipympl matplotlib jupyterthemes mplcursors h5py scipy tensorboard grpcio-tools torch-tb-profiler imageio imageio-ffmpeg torch-tb-profiler hydra-core jupyter jupyterlab_widgets Pillow pandas numpy urllib3 ffmpeg scikit-learn tqdm boto3 regex pytest determined typing-extensions sympy filelock fsspec networkx pyyaml"
+readonly PYTHON_PACKAGES="ipykernel ipympl matplotlib jupyterthemes mplcursors h5py scipy tensorboard grpcio-tools torch-tb-profiler imageio imageio-ffmpeg torch-tb-profiler hydra-core jupyter jupyterlab_widgets Pillow pandas numpy urllib3 ffmpeg scikit-learn tqdm boto3 regex pytest determined typing-extensions sympy filelock fsspec networkx pyyaml sshconf cloudpathlib pipreqs"
 
 ### Tools for installing packages on Amazon Linux 2023 ###
 
@@ -21,14 +21,22 @@ function install_core_packages() {
   yum -y groupinstall "Development tools"
 
   # Install any remaining tools
-  yum -y install emacs cmake ninja-build protobuf
-
-  # Install Python 3.11; -devel is necessary for some package installations, e.g., psutil
-  yum -y install python3-devel "$PYTHON_VER" "$PYTHON_VER-devel" "$PYTHON_VER-pip"
+  yum -y install emacs cmake cmake3 ninja-build protobuf
 }
 
 function install_yadm() {
   curl -fLo /usr/local/bin/yadm https://github.com/TheLocehiliosan/yadm/raw/master/yadm && chmod a+x /usr/local/bin/yadm
+}
+
+function install_awscli() {
+  yum -y remove awscli
+  mkdir awscli
+  pushd awscli
+  curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+  unzip awscliv2.zip
+  ./aws/install
+  hash aws
+  popd
 }
 
 function install_gflags_from_source() {
@@ -83,6 +91,11 @@ function install_ffmpeg() {
 
 function install_python() {
   echo "Installing Python and Python packages"
+  # Install Python 3.11; -devel is necessary for some package installations, e.g., psutil
+  yum -y install python3-devel "$PYTHON_VER" "$PYTHON_VER-devel" "$PYTHON_VER-pip"
+}
+
+function install_python_packages() {
   # Create and activate a default Python virtual environment
   "$PYTHON_VER" -m venv "$MAIN_VENV_PATH"
   source "$MAIN_VENV_PATH/bin/activate"
@@ -153,6 +166,12 @@ EOF
   chmod a+r "$CUDA_HOME/lib64/*"
 }
 
+function install_pytorch() {
+  echo "Installing Pytorch"
+  source "$MAIN_VENV_PATH/bin/activate"
+  pip3 install torch torchvision torchaudio
+}
+
 function install_pytorch_from_source() {
   echo "Installing Pytorch from source"
   # Download and install ccache for faster compilation
@@ -186,47 +205,26 @@ function install_pytorch_from_source() {
   ldconfig
 }
 
-function g5g_setup() {
+function install() {
   set -v
-
   # use the larger root volume for temp files during script exection
   mkdir -p "$USER_HOME/tmp"
   pushd "$USER_HOME/tmp"
 
-  install_core_packages
-  install_yadm
-  install_gflags_from_source
-  install_glog_from_source
-  install_ffmpeg
-  install_python
-  install_nvidia
-  install_docker
-  install_pytorch_from_source
+  for req in "${@}"; do
+    "install_$req"
+  done
 
   popd
-
   set +v
 }
 
-function g5_setup() {
-  # a much simpler setup; NVIDIA drivers are already installed, and
-  # pytorch and other python packages are installed via conda.
-  mkdir -p "$USER_HOME/tmp"
-  pushd "$USER_HOME/tmp"
+function install_g5g() {
+  install core_packages yadm gflags_from_source glog_from_source ffmpeg \
+    python python_packages nvidia docker pytorch_from_source
+}
 
-  install_ffmpeg
-
-  # install for parity with the g5g setup, although not required
-  yum -y update
-  yum -y install ninja-build cmake3
-  install_yadm
-  install_gflags_from_source
-  install_glog_from_source
-
-  # install python packages
-  source activate pytorch
-  pip3 install --upgrade pip
-  pip3 install $PYTHON_PACKAGES
-
-  popd
+function install_g5() {
+  install core_packages yadm awscli gflags_from_source glog_from_source ffmpeg \
+    python_packages pytorch
 }
