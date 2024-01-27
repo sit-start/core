@@ -21,7 +21,7 @@ function install_core_packages() {
   yum -y groupinstall "Development tools"
 
   # Install any remaining tools
-  yum -y install emacs cmake cmake3 ninja-build protobuf
+  yum -y install emacs cmake cmake3 ninja-build protobuf amazon-efs-utils
 }
 
 function install_yadm() {
