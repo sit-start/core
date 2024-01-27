@@ -35,6 +35,9 @@ _PARAM_HELP = {
     "instance_type": "the instance type",
     "repos": "comma-separate list of github repos to clone",
     "yadm_dotfiles_repo": "github repo to clone via yadm",
+    # code
+    "target": "target type to open in VS Code; one of 'file', 'folder'",
+    "path": "absolute path to open in VS Code",
 }
 _INTERNAL_PARAMS = ["session"]
 _CMD_PREFIX = "_cmd_"
@@ -292,15 +295,20 @@ def _cmd_create(
     )
 
 
-def _cmd_code(session: boto3.Session, instance_name: str) -> None:
+def _cmd_code(
+    session: boto3.Session,
+    instance_name: str,
+    target: str = "file",
+    path: str = "/home/ec2-user/projects/study/study.code-workspace",
+) -> None:
     """Open VS Code on the instance with the given name"""
     logger.info(f"[{instance_name}] Opening VS Code on instance")
     subprocess.call(
         [
             "code",
             "--",
-            "--folder-uri",
-            f"vscode-remote://ssh-remote+{instance_name}/home/ec2-user",
+            f"--{target}-uri",
+            f"vscode-remote://ssh-remote+{instance_name}{path}",
         ]
     )
 
