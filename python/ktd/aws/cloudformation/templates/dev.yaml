@@ -91,7 +91,7 @@ Resources:
       Dimensions:
         - Name: InstanceId
           Value: !Ref Ec2Instance
-      EvaluationPeriods: 30
+      EvaluationPeriods: 90
       MetricName: CPUUtilization
       Namespace: AWS/EC2
       Period: 60
