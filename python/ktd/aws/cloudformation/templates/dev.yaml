@@ -20,10 +20,10 @@ Parameters:
       - g5.xlarge
       - g5.2xlarge
       - p3.2xlarge
-  SecurityGroup:
-    Description: Security group to assign to the instance
-    Type: AWS::EC2::SecurityGroup::Id
-    Default: sg-07301ebcb97e0124c
+  SecurityGroups:
+    Description: Security groups to assign to the instance
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Default: sg-07301ebcb97e0124c,sg-0d1d2e94171ec41c1
   DevserverActivityTopic:
     Description: SNS topic to which activity should be sent
     Type: String
@@ -69,8 +69,7 @@ Resources:
         - AMI
       KeyName: !Ref KeyName
       Monitoring: true
-      SecurityGroupIds:
-        - !Ref SecurityGroup
+      SecurityGroupIds: !Ref SecurityGroups
       Tags:
         - Key: Name
           Value: !Sub ${AWS::StackName}
@@ -79,6 +78,14 @@ Resources:
           Ebs:
             VolumeSize: 128
             VolumeType: gp3
+      UserData:
+        # TODO: move (some) into ec2_dev_setup.sh and create AMI
+        # TODO: update /etc/fstab instead of mounting here
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          sudo yum -y install amazon-efs-utils
+          sudo mkdir -p /mnt/efs/data-1
+          sudo mount -t efs -o tls fs-02f937b821a97637c:/ /mnt/efs/data-1
   InactiveAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:

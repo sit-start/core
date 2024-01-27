@@ -235,6 +235,10 @@ def _cmd_list(
         if show_killed or info["state"] != "terminated":
             instance_info[instance.id] = info
 
+    if len(instance_info) == 0:
+        logger.info("No instances found")
+        return
+
     name_width = max([len(i["name"]) for i in instance_info.values()])
     type_width = max([len(i["instance_type"]) for i in instance_info.values()])
     state_width = max([len(i["state"]) for i in instance_info.values()])
