@@ -80,12 +80,12 @@ Resources:
             VolumeType: gp3
       UserData:
         # TODO: move (some) into ec2_dev_setup.sh and create AMI
-        # TODO: update /etc/fstab instead of mounting here
         Fn::Base64: !Sub |
-          #!/bin/bash -xe
-          sudo yum -y install amazon-efs-utils
-          sudo mkdir -p /mnt/efs/data-1
-          sudo mount -t efs -o tls fs-02f937b821a97637c:/ /mnt/efs/data-1
+          #!/bin/bash -xe        
+          yum -y install amazon-efs-utils
+          mkdir -p /mnt/efs/data-1
+          mount -t efs -o tls fs-02f937b821a97637c:/ /mnt/efs/data-1
+          echo "fs-02f937b821a97637c:/ /mnt/efs/data-1 efs tls,_netdev" | tee -a /etc/fstab
   InactiveAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
