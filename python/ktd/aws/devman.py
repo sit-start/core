@@ -112,9 +112,12 @@ def _clone_repos(
         subprocess.call(["ssh", instance_name, cmd])
 
 
-def _get_instance_with_name(instance_name: str) -> Type[ServiceResource]:
-    instances = get_instances_with_name(instance_name)
-    assert len(instances) > 0, f"[{instance_name}] No instances found with this name"
+def _get_instance_with_name(
+    instance_name: str, states: list[str] | None = None
+) -> Type[ServiceResource] | None:
+    instances = get_instances_with_name(instance_name, states=states)
+    if not instances:
+        return None
     if len(instances) > 1:
         logger.warning(
             f"[{instance_name}] Found multiple instances with this name; "
@@ -130,7 +133,13 @@ def _trunc(s: str, max_len: int = 50) -> str:
 
 def _update_hostname_in_ssh_config(instance_name: str) -> None:
     logger.info(f"[{instance_name}] Updating hostname in SSH config")
-    instance = _get_instance_with_name(instance_name)
+
+    states = ["running"]
+    instance = _get_instance_with_name(instance_name, states=states)
+    if not instance:
+        logger.info(f"[{instance_name}] Instance in {'/'.join(states)} state not found")
+        return
+
     assert instance.meta is not None, f"[{instance_name}] Instance has no metadata"
     host_name = instance.meta.data["PublicDnsName"]
     if not host_name:
@@ -188,8 +197,14 @@ def _add_subparser(subparsers: argparse._SubParsersAction, cmd: str) -> None:
 
 def _cmd_start(session: boto3.Session, instance_name: str) -> None:
     """Start the instance with the given name"""
-    logger.info(f"Starting instance {instance_name}")
-    instance = _get_instance_with_name(instance_name)
+    logger.info(f"[{instance_name}] Starting instance")
+
+    states = ["stopping", "stopped"]
+    instance = _get_instance_with_name(instance_name, states=states)
+    if not instance:
+        logger.info(f"[{instance_name}] Instance in {'/'.join(states)} state not found")
+        return
+
     ec2_client = session.client("ec2")
     ec2_client.start_instances(InstanceIds=[instance.id])  # type: ignore
     wait_for_instance_with_id(instance.id, session=session)  # type: ignore
@@ -199,7 +214,13 @@ def _cmd_start(session: boto3.Session, instance_name: str) -> None:
 def _cmd_stop(session: boto3.Session, instance_name: str) -> None:
     """Stop the instance with the given name"""
     logger.info(f"[{instance_name}] Stopping instance")
-    instance = _get_instance_with_name(instance_name)
+
+    states = ["pending", "running"]
+    instance = _get_instance_with_name(instance_name, states=states)
+    if not instance:
+        logger.info(f"[{instance_name}] Instance in {'/'.join(states)} state not found")
+        return
+
     ec2_client = session.client("ec2")
     ec2_client.stop_instances(InstanceIds=[instance.id])  # type: ignore
 
@@ -283,6 +304,12 @@ def _cmd_create(
     """Create a devserver with the given name and arguments"""
     # parameters should be kept in sync with ktd/aws/cloudformation/templates/dev.yaml
     logger.info(f"[{instance_name}] Creating devserver")
+
+    states = ["pending", "running", "stopping", "stopped"]
+    if _get_instance_with_name(instance_name, states=states):
+        logger.info(f"[{instance_name}] Instance name in use. Aborting.")
+        return
+
     cf_client = session.client("cloudformation")
     cf_client.create_stack(
         StackName=instance_name,

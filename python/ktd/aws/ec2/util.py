@@ -14,11 +14,16 @@ def get_instance_name(instance: Type[ServiceResource]) -> str | None:
 
 
 def get_instances_with_name(
-    name: str, session: boto3.Session | None = None
+    name: str,
+    session: boto3.Session | None = None,
+    states: list[str] | None = None,
 ) -> list[Type[ServiceResource]]:
     session = session or boto3.Session()
     ec2 = session.resource("ec2")
-    return list(ec2.instances.filter(Filters=[{"Name": "tag:Name", "Values": [name]}]))
+    filters = [{"Name": "tag:Name", "Values": [name]}]
+    if states is not None:
+        filters.append({"Name": "instance-state-name", "Values": states})
+    return list(ec2.instances.filter(Filters=filters))
 
 
 def wait_for_instance_with_id(
