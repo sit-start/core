@@ -205,6 +205,29 @@ function install_pytorch_from_source() {
   ldconfig
 }
 
+function install_torchvision_from_source() {
+  source "$MAIN_VENV_PATH/bin/activate"
+  LD_LIBRARY_PATH="$CUDA_HOME/lib64/:$LD_LIBRARY_PATH"
+  PATH="$CUDA_HOME/bin:$PATH"
+  CMAKE_CUDA_COMPILER=$(which nvcc)
+
+  echo "Installing libjpeg-turbo and libpng"
+  yum -y install libjpeg-turbo-devel libpng-devel
+
+  echo "Installing nvJPEG2000"
+  wget https://developer.download.nvidia.com/compute/nvjpeg2000/0.7.5/local_installers/nvjpeg2000-local-repo-rhel9-0.7.5-1.0-1.${ARCH}.rpm
+  rpm -i nvjpeg2000-local-repo-rhel9-0.7.5-1.0-1.aarch64.rpm
+  dnf clean all
+  dnf -y install nvjpeg2k
+
+  echo "Installing torchvision from source"
+  wget https://github.com/pytorch/vision/archive/refs/tags/v0.17.0.tar.gz
+  tar -xf v0.17.0.tar.gz
+  pushd vision-0.17.0
+  python3 setup.py install
+  popd
+}
+
 function install() {
   set -v
   # use the larger root volume for temp files during script exection
@@ -220,8 +243,8 @@ function install() {
 }
 
 function install_g5g() {
-  install core_packages yadm gflags_from_source glog_from_source ffmpeg \
-    python python_packages nvidia docker pytorch_from_source
+  install core_packages yadm gflags_from_source glog_from_source ffmpeg python \
+    python_packages nvidia docker pytorch_from_source torchvision_from_source
 }
 
 function install_g5() {
