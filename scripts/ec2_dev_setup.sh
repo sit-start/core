@@ -1,27 +1,29 @@
 #!/usr/bin/env bash
 
+### Install utilities for Amazon Linux 2023 ###
+
 readonly USER=ec2-user # for Amazon Linux 2023-4
 readonly USER_HOME=$(eval echo ~$USER)
-readonly PYTHON_VER=python3.10
 readonly MAIN_VENV_PATH="$USER_HOME/.virtualenvs/main"
 readonly ARCH=$(uname -m)
+if [ "$ARCH" == "aarch64" ]; then
+  readonly PYTHON_VER=python3.11
+else
+  readonly PYTHON_VER=python3.10
+fi
 readonly CUDA_HOME=/usr/local/cuda
 readonly PYTHON_PACKAGES="ipykernel ipympl matplotlib jupyterthemes mplcursors h5py scipy tensorboard grpcio-tools torch-tb-profiler imageio imageio-ffmpeg torch-tb-profiler hydra-core jupyter jupyterlab_widgets Pillow pandas numpy urllib3 ffmpeg scikit-learn tqdm boto3 regex pytest determined typing-extensions sympy filelock fsspec networkx pyyaml sshconf cloudpathlib pipreqs"
-
-### Tools for installing packages on Amazon Linux 2023 ###
 
 function install_core_packages() {
   echo "Installing core packages"
   # Update all system packages to their latest versions
-  # TODO: consider upgrading
-  # yum -y upgrade --releasever=2023.3.20240108
   yum -y update
 
   # Install development tools first
   yum -y groupinstall "Development tools"
 
   # Install any remaining tools
-  yum -y install emacs cmake cmake3 ninja-build protobuf amazon-efs-utils
+  yum -y install emacs cmake cmake3 ninja-build protobuf amazon-efs-utils clang clang-tools-extra
 }
 
 function install_yadm() {
@@ -32,7 +34,7 @@ function install_awscli() {
   yum -y remove awscli
   mkdir awscli
   pushd awscli
-  curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+  curl "https://awscli.amazonaws.com/awscli-exe-linux-$ARCH.zip" -o "awscliv2.zip"
   unzip awscliv2.zip
   ./aws/install
   hash aws
@@ -91,7 +93,7 @@ function install_ffmpeg() {
 
 function install_python() {
   echo "Installing Python and Python packages"
-  # Install Python 3.11; -devel is necessary for some package installations, e.g., psutil
+  # Install python; -devel is necessary for some package installations, e.g., psutil
   yum -y install python3-devel "$PYTHON_VER" "$PYTHON_VER-devel" "$PYTHON_VER-pip"
 }
 
@@ -107,37 +109,27 @@ function install_python_packages() {
 
 function install_docker() {
   echo "Installing Docker and the NVIDIA container toolkit"
-  # Install/setup docker; requires a reboot for group settings to take effect and for docker to start
-  yum install docker
+  # Install/setup docker; requires a reboot for group settings to take
+  # effect and for docker to start
+  yum -y install docker
   usermod -aG docker $USER
   systemctl enable docker.service
   systemctl enable containerd.service
 
   # NVIDIA container toolkit. Used by determined-ai
-  #
-  # NOTE: nvidia-docker is deprecated; using nvidia-container-toolkit
-  # instead, which may require some tweaking to play nicely with
-  # determined-ai
   curl -s -L https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo |
     tee /etc/yum.repos.d/nvidia-container-toolkit.repo
-  yum install -y nvidia-container-toolkit
+  yum -y install nvidia-container-toolkit
 }
 
 function install_nvidia() {
   echo "Installing NVIDIA driver, CUDA, and cuDNN"
-  # based on this: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html
-  # NOTE: this fails on amazon linux 2023, but it works on ami-08a800e4b5aa90bb8,
-  # which is based on amazon linux 2023. so we can continue to use the new AMI
-  # and just update the drivers here on top of what's already installed in the AMI.
-  # TODO: appending to blacklist.conf was required on Ubuntu; not sure
-  # it's necessary here
-  cat <<EOF | sudo tee --append /etc/modprobe.d/blacklist.conf
-blacklist vga16fb
-blacklist nouveau
-blacklist rivafb
-blacklist nvidiafb
-blacklist rivatv
-EOF
+  # based on this:
+  # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html
+  # NOTE: this fails on amazon linux 2023, but it works on
+  # ami-08a800e4b5aa90bb8, which is based on amazon linux 2023. so we
+  # can continue to use the new AMI and just update the drivers here on
+  # top of what's already installed in the AMI.
   wget -nv "https://us.download.nvidia.com/tesla/535.129.03/NVIDIA-Linux-${ARCH}-535.129.03.run"
   sh "NVIDIA-Linux-${ARCH}-535.129.03.run" --silent --disable-nouveau --tmpdir="$USER_HOME/tmp"
 
@@ -183,14 +175,13 @@ function install_pytorch_from_source() {
   make install
   popd
 
-  # Clone PyTorch repository and install from source
+  # Install release from source
   # NOTE: this may OOM with < 16GB RAM; this can be mitigated by setting
   #       CMAKE_BUILD_PARALLEL_LEVEL to a lower value
-  # NOTE: it's probably better to use the latest release, e.g.,
-  #        wget -nv https://github.com/pytorch/pytorch/archive/refs/tags/v2.1.2.tar.gz
-  #        tar -xzf v2.1.2.tar.gz
-  #        pushd pytorch-2.1.2
   git clone --recursive https://github.com/pytorch/pytorch.git
+  pushd pytorch
+  # git checkout v2.2.0 # TODO: use a release, not main
+
   source "$MAIN_VENV_PATH/bin/activate"
   LD_LIBRARY_PATH="$CUDA_HOME/lib64/:$LD_LIBRARY_PATH"
   PATH="$CUDA_HOME/bin:$PATH"
@@ -228,6 +219,10 @@ function install_torchvision_from_source() {
   popd
 }
 
+function install_python_cleanup() {
+  chown -R $USER $MAIN_VENV_PATH
+}
+
 function install() {
   set -v
   # use the larger root volume for temp files during script exection
@@ -244,10 +239,11 @@ function install() {
 
 function install_g5g() {
   install core_packages yadm gflags_from_source glog_from_source ffmpeg python \
-    python_packages nvidia docker pytorch_from_source torchvision_from_source
+    python_packages nvidia docker pytorch_from_source torchvision_from_source \
+    python_cleanup
 }
 
 function install_g5() {
   install core_packages yadm awscli gflags_from_source glog_from_source ffmpeg \
-    python_packages pytorch
+    python_packages pytorch python_cleanup
 }
