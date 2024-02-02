@@ -50,10 +50,10 @@ Mappings:
       Arch: x86-64
   ArchToAMI:
     aarch64:
-      # base ami-08a800e4b5aa90bb8, setup via scripts/ec2_dev_setup.sh:g5g_setup()
-      AMI: ami-0b4d5df05510465c1
+      # base ami-08a800e4b5aa90bb8, setup via scripts/ec2_dev_setup.sh:install_g5g()
+      AMI: ami-0daaed623bb5cd9bf
     x86-64:
-      # base ami-0ba26e8b3af2b7155, setup via scripts/ec2_dev_setup.sh:g5_setup()
+      # base ami-0ba26e8b3af2b7155, setup via scripts/ec2_dev_setup.sh:install_g5()
       AMI: ami-03c22e640e258e9b5
 Resources:
   Ec2Instance:
@@ -82,7 +82,6 @@ Resources:
         # TODO: move (some) into ec2_dev_setup.sh and create AMI
         Fn::Base64: !Sub |
           #!/bin/bash -xe        
-          yum -y install amazon-efs-utils
           mkdir -p /mnt/efs/data-1
           mount -t efs -o tls fs-02f937b821a97637c:/ /mnt/efs/data-1
           echo "fs-02f937b821a97637c:/ /mnt/efs/data-1 efs tls,_netdev" | tee -a /etc/fstab
