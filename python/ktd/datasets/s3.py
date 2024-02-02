@@ -16,7 +16,17 @@ logger = get_logger(__name__)
 
 
 class DatasetFolderS3(VisionDataset):
-    """An S3-backed dataset, see torchvision.datasets.DatasetFolder"""
+    """
+    An S3-backed dataset; see torchvision.datasets.DatasetFolder
+    
+    Parameters
+    ----------
+    ...
+        See torchvision.datasets.DatasetFolder.__init__
+    force_use_cached : bool
+        If a sample has already been downloaded, use the cached version without
+        checking for modifications on S3.
+    """
 
     def __init__(
         self,
@@ -27,6 +37,7 @@ class DatasetFolderS3(VisionDataset):
         transform: Callable | None = None,
         target_transform: Callable | None = None,
         is_valid_file: Callable[[str], bool] | None = None,
+        force_use_cached: bool = False,
     ) -> None:
         super().__init__(
             s3_root, transform=transform, target_transform=target_transform
@@ -43,6 +54,8 @@ class DatasetFolderS3(VisionDataset):
         self.class_to_idx = class_to_idx
         self.samples = samples
         self.targets = [s[1] for s in samples]
+
+        self._remote_to_local_path = {} if force_use_cached else None
 
     @staticmethod
     def make_dataset(
@@ -63,8 +76,16 @@ class DatasetFolderS3(VisionDataset):
     def __getitem__(self, index: int) -> tuple[Any, Any]:
         path, target = self.samples[index]
 
-        # resolving `fspath` will download the file if needed
-        local_path = self.client.CloudPath(path).fspath
+        # accessing `CloudPath.fspath` downloads the file if there is no local
+        # copy or if the local copy is outdated
+        if self._remote_to_local_path is not None:
+            if path in self._remote_to_local_path:
+                local_path = self._remote_to_local_path[path]
+            else:
+                local_path = self.client.CloudPath(path).fspath
+                self._remote_to_local_path[path] = local_path
+        else:
+            local_path = self.client.CloudPath(path).fspath
 
         sample = self.loader(local_path)
         if self.transform is not None:
@@ -175,6 +196,7 @@ class ImageFolderS3(DatasetFolderS3):
         target_transform: Callable | None = None,
         loader: Callable[[str], Any] = default_loader,
         is_valid_file: Callable[[str], bool] | None = None,
+        force_use_cached: bool = False,
     ):
         # adapted from torchvision.datasets.ImageFolder
         super().__init__(
@@ -185,5 +207,6 @@ class ImageFolderS3(DatasetFolderS3):
             transform=transform,
             target_transform=target_transform,
             is_valid_file=is_valid_file,
+            force_use_cached=force_use_cached,
         )
         self.imgs = self.samples
