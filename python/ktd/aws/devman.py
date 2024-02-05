@@ -161,7 +161,9 @@ def _wait_for_stack_with_name(
     waiter.wait(StackName=stack_name, WaiterConfig=config)
 
 
-def _add_subparser(subparsers: argparse._SubParsersAction, cmd: str) -> None:
+def _add_subparser(
+    subparsers: argparse._SubParsersAction, cmd: str, aliases: list[str] | None = None
+) -> None:
     """Adds a subparser for the given command.
 
     Automatically generates the parser based on the function signature
@@ -173,7 +175,10 @@ def _add_subparser(subparsers: argparse._SubParsersAction, cmd: str) -> None:
 
     func = getattr(sys.modules[__name__], _CMD_PREFIX + cmd)
     parser = subparsers.add_parser(
-        cmd, help=func.__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        cmd,
+        help=func.__doc__,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        aliases=aliases or [],
     )
     for p in inspect.signature(func).parameters.values():
         if p.name in _INTERNAL_PARAMS:
@@ -326,7 +331,7 @@ def _cmd_create(
     )
 
 
-def _cmd_code(
+def _cmd_open(
     session: boto3.Session,
     instance_name: str,
     target: str = "file",
@@ -353,9 +358,17 @@ def main():
     subparsers = parser.add_subparsers(help="Sub-command help")
     subparsers.required = True
 
-    commands = ["start", "stop", "kill", "list", "refresh", "create", "code"]
-    for cmd in commands:
-        _add_subparser(subparsers, cmd)
+    commands = {
+        "start": ["s"],
+        "stop": ["h"],
+        "kill": ["k"],
+        "list": ["ls"],
+        "refresh": ["r"],
+        "create": ["c"],
+        "open": ["o"],
+    }
+    for cmd, aliases in commands.items():
+        _add_subparser(subparsers, cmd, aliases)
 
     args = parser.parse_args()
 
