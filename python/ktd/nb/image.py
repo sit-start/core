@@ -4,6 +4,7 @@ from typing import cast
 from IPython.display import display
 
 import imageio
+import imageio_ffmpeg  # noqa: F401
 import matplotlib.pyplot as plt
 import numpy as np
 import tqdm
