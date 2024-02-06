@@ -12,7 +12,7 @@ else
   readonly PYTHON_VER=python3.10
 fi
 readonly CUDA_HOME=/usr/local/cuda
-readonly PYTHON_PACKAGES="ipykernel ipympl matplotlib jupyterthemes mplcursors h5py scipy tensorboard grpcio-tools torch-tb-profiler imageio imageio-ffmpeg torch-tb-profiler hydra-core jupyter jupyterlab_widgets Pillow pandas numpy urllib3 ffmpeg scikit-learn tqdm boto3 regex pytest determined typing-extensions sympy filelock fsspec networkx pyyaml sshconf cloudpathlib pipreqs"
+readonly PYTHON_PACKAGES="ipykernel ipympl matplotlib jupyterthemes mplcursors h5py scipy tensorboard grpcio-tools torch-tb-profiler imageio imageio-ffmpeg torch-tb-profiler hydra-core jupyter jupyterlab_widgets Pillow pandas numpy urllib3 ffmpeg scikit-learn tqdm boto3 regex pytest determined typing-extensions sympy filelock fsspec networkx pyyaml sshconf cloudpathlib pigar ray[default]"
 
 function install_core_packages() {
   echo "Installing core packages"
@@ -23,7 +23,7 @@ function install_core_packages() {
   yum -y groupinstall "Development tools"
 
   # Install any remaining tools
-  yum -y install emacs cmake cmake3 ninja-build protobuf amazon-efs-utils clang clang-tools-extra
+  yum -y install emacs cmake cmake3 ninja-build protobuf amazon-efs-utils clang clang-tools-extra amazon-cloudwatch-agent
 }
 
 function install_yadm() {
