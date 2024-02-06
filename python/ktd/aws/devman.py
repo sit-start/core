@@ -302,8 +302,8 @@ def _cmd_refresh(session: boto3.Session) -> None:
 def _cmd_create(
     session: boto3.Session,
     instance_name: str,
-    instance_type: str = "g5.2xlarge",
-    repos: str = "kevdale/infra,kevdale/study",
+    instance_type: str = "g5g.2xlarge",
+    repos: str = "kevdale/core,kevdale/study",
     yadm_dotfiles_repo: str = "kevdale/dotfiles",
 ) -> None:
     """Create a devserver with the given name and arguments"""
@@ -377,8 +377,7 @@ def main():
     func = args.func
     delattr(args, "func")
 
-    if profile is not None:
-        sso_login(profile_name=profile)
+    sso_login(profile_name=profile)
     session = boto3.Session(profile_name=profile)
 
     func(session, **vars(args))
