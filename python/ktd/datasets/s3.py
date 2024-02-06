@@ -9,7 +9,7 @@ from torchvision.datasets.folder import (
     default_loader,
     has_file_allowed_extension,
 )
-from ktd.utilities.decorators import timer
+from ktd.util.decorators import timer
 from ktd.logging import get_logger
 
 logger = get_logger(__name__)
