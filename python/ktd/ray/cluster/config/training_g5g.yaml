@@ -1,0 +1,69 @@
+cluster_name: training-cluster-g5g
+max_workers: 3
+upscaling_speed: 1.0
+idle_timeout_minutes: 5
+provider:
+  type: aws
+  region: us-west-2
+  availability_zone: us-west-2a,us-west-2b,us-west-2c
+auth:
+  ssh_user: ec2-user
+  ssh_private_key: ~/.ssh/rsa.pem
+available_node_types:
+  ray.head.default:
+    max_workers: 0
+    resources: { "CPU": 2, "GPU": 0 }
+    node_config:
+      InstanceType: m6g.large
+      ImageId: ami-0725f59b966a1cee2
+      KeyName: rsa
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 256
+            VolumeType: gp3
+  ray.worker.default:
+    min_workers: 0
+    max_workers: 3
+    resources: { "CPU": 8, "GPU": 1 }
+    node_config:
+      InstanceType: g5g.2xlarge
+      ImageId: ami-0725f59b966a1cee2
+      KeyName: rsa
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 256
+            VolumeType: gp3
+head_node_type: ray.head.default
+file_mounts: {
+    "~ec2-user/projects/core": "~/Developer/projects/core",
+    "~ec2-user/.ssh/github_keys": "~/.ssh/github_keys",
+    # "~ec2-user/.ssh/core_deploy_ed25519": "~/.ssh/core_deploy_ed25519",
+  }
+file_mounts_sync_continuously: False
+rsync_exclude:
+  - "**/.git"
+  - "**/.git/**"
+rsync_filter:
+  - ".gitignore"
+initialization_commands: []
+setup_commands:
+  - echo "source ~/.virtualenvs/main/bin/activate" >> ~/.bashrc
+  - echo "export PYTHONPATH=~/projects/core:$PYTHONPATH" >> ~/.bashrc
+  - cat ~/.ssh/github_keys >> ~/.ssh/known_hosts
+head_setup_commands: []
+worker_setup_commands:
+  []
+  # Alternatively, clone the repo and checkout a specific commit
+  # - cd ~/projects
+  # - GIT_SSH_COMMAND="ssh -i ~/.ssh/core_deploy_ed25519" git clone git@github.com:kevdale/core
+  # - git checkout {{target_git_commit}}
+# from example-cloudwatch.yaml
+head_start_ray_commands:
+  - ray stop
+  - ray start --head --port=6379 --object-manager-port=8076 --autoscaling-config=~/ray_bootstrap_config.yaml --dashboard-host=0.0.0.0
+# from example-cloudwatch.yaml
+worker_start_ray_commands:
+  - ray stop
+  - ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076
