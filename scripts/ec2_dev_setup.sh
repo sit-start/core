@@ -12,7 +12,7 @@ else
   readonly PYTHON_VER=python3.10
 fi
 readonly CUDA_HOME=/usr/local/cuda
-readonly PYTHON_PACKAGES="ipykernel ipympl matplotlib jupyterthemes mplcursors h5py scipy tensorboard grpcio-tools torch-tb-profiler imageio imageio-ffmpeg torch-tb-profiler hydra-core jupyter jupyterlab_widgets Pillow pandas numpy urllib3 ffmpeg scikit-learn tqdm boto3 regex pytest determined typing-extensions sympy filelock fsspec networkx pyyaml sshconf cloudpathlib pigar ray[default]"
+readonly PYTHON_PACKAGES="ipykernel ipympl matplotlib jupyterthemes mplcursors h5py scipy tensorboard grpcio-tools torch-tb-profiler imageio imageio-ffmpeg torch-tb-profiler hydra-core jupyter jupyterlab_widgets Pillow pandas numpy urllib3 ffmpeg scikit-learn tqdm boto3 regex pytest determined typing-extensions sympy filelock fsspec networkx pyyaml sshconf cloudpathlib pigar ray[default,data,train,tune,client] wandb"
 
 function install_core_packages() {
   echo "Installing core packages"
@@ -23,7 +23,7 @@ function install_core_packages() {
   yum -y groupinstall "Development tools"
 
   # Install any remaining tools
-  yum -y install emacs cmake cmake3 ninja-build protobuf amazon-efs-utils clang clang-tools-extra amazon-cloudwatch-agent
+  yum -y install emacs cmake cmake3 ninja-build protobuf amazon-efs-utils clang clang-tools-extra amazon-cloudwatch-agent htop
 }
 
 function install_yadm() {
@@ -225,7 +225,7 @@ function install_python_cleanup() {
 
 function install() {
   set -v
-  # use the larger root volume for temp files during script exection
+  # use the larger root volume for temp files during script execution
   mkdir -p "$USER_HOME/tmp"
   pushd "$USER_HOME/tmp"
 
