@@ -6,22 +6,24 @@ import sys
 from pathlib import Path
 from typing import Type
 
-import json5
-from ktd.cloudpathlib import CloudPath
 import boto3
+import json5
 import ktd.logging
 from boto3.resources.base import ServiceResource
 from ktd.aws.ec2.util import (
     get_instance_name,
     get_instances_with_name,
+    remove_from_ssh_config,
     update_ssh_config,
     wait_for_instance_with_id,
 )
 from ktd.aws.util import sso_login
+from ktd.cloudpathlib import CloudPath
 
 logger = ktd.logging.get_logger(__name__)
 
 TEMPLATE_PATH = Path(__file__).parent / "cloudformation" / "templates" / "dev.yaml"
+RAY_CONFIG_ROOT = Path(__file__).parent.parent / "ray" / "cluster" / "config"
 PROJECT_PATH = "$HOME/projects"
 _PARAM_HELP = {
     # devman
@@ -38,6 +40,17 @@ _PARAM_HELP = {
     # code
     "target": "target type to open in VS Code; one of 'file', 'folder'",
     "path": "absolute path to open in VS Code",
+    # ray_up
+    "config": f"the Ray cluster config in {RAY_CONFIG_ROOT}",
+    "min_workers": "minimum number of workers; overrides the config",
+    "max_workers": "maximum number of workers; overrides the config",
+    "no_restart": "do not restart Ray services during the update",
+    "restart_only": "skip running setup commands and only restart Ray",
+    "prompt": "prompt for confirmation",
+    "verbose": "display verbose output",
+    # ray_down
+    "workers_only": "only destroy workers",
+    "keep_min_workers": "retain the minimal amount of workers specified in the config",
 }
 _INTERNAL_PARAMS = ["session"]
 _CMD_PREFIX = "_cmd_"
@@ -49,27 +62,16 @@ _CMD_PREFIX = "_cmd_"
 # TODO: add a tag to the stack and/or instance to make filtering easy
 
 
-def _github_ssh_keys(use_cached: bool = True) -> list[str]:
-    if use_cached:
-        return [
-            "ssh-ed25519 "
-            "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl",
-            "ecdsa-sha2-nistp256 "
-            "AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7op"
-            "KgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=",
-            "ssh-rsa "
-            "AAAAB3NzaC1yc2EAAAADAQABAAABgQCj7ndNxQowgcQnjshcLrqPEiiphnt+VTTvDP6mHBL9j1"
-            "aNUkY4Ue1gvwnGLVlOhGeYrnZaMgRK6+PKCUXaDbC7qtbW8gIkhL7aGCsOr/C56SJMy/BCZfxd"
-            "1nWzAOxSDPgVsmerOBYfNqltV9/hWCqBywINIR+5dIg6JTJ72pcEpEjcYgXkE2YEFXV1JHnsKg"
-            "bLWNlhScqb2UmyRkQyytRLtL+38TGxkxCflmO+5Z8CSSNY7GidjMIZ7Q4zMjA2n1nGrlTDkzwD"
-            "Csw+wqFPGQA179cnfGWOWRVruj16z6XyvxvjJwbz0wQZ75XK5tKSb7FNyeIEs4TT4jk+S4dhPe"
-            "AUC5y+bDYirYgM4GC7uEnztnZyaVWQ7B381AK4Qdrwt51ZqExKbQpTUNn+EjqoTwvqNj4kqx5Q"
-            "UCI0ThS/YkOxJCXmPUWZbhjpCg56i+2aB6CmK2JGhn57K5mj0MNdBXA4/WnwH6XoPWJzK5Nyu2"
-            "zB3nAZp+S5hpQs+p1vN1/wsjk=",
-        ]
+def _github_ssh_keys(use_cached: bool = False) -> str:
+    github_keys_path = Path(os.environ["HOME"]) / ".ssh" / "github_keys"
+    if use_cached and github_keys_path.exists():
+        return github_keys_path.read_text()
+
     path = CloudPath("https://api.github.com/meta")
     meta = json5.loads(path.read_text())
-    return meta.get("ssh_keys", []) if isinstance(meta, dict) else []
+    if not isinstance(meta, dict) or "ssh_keys" not in meta:
+        raise RuntimeError("Failed to fetch GitHub SSH keys")
+    return "\n".join(f"github.com {v}" for v in meta["ssh_keys"])
 
 
 def _clone_repos(
@@ -81,7 +83,7 @@ def _clone_repos(
 
     logger.info(f"[{instance_name}] Updating known hosts over initial SSH connection")
     # add github to known hosts, with retries on the initial connection
-    github_known_hosts = "\n".join(f"github.com {v}" for v in _github_ssh_keys())
+    github_keys = _github_ssh_keys()
     subprocess.call(
         [
             "ssh",
@@ -90,7 +92,7 @@ def _clone_repos(
             "-o",
             "StrictHostKeyChecking no",
             instance_name,
-            f"echo '{github_known_hosts}' >> ~/.ssh/known_hosts",
+            f"echo '{github_keys}' >> ~/.ssh/known_hosts",
         ]
     )
 
@@ -146,6 +148,16 @@ def _update_hostname_in_ssh_config(instance_name: str) -> None:
         logger.info("No hostname to update in SSH config")
         return
     update_ssh_config(instance_name, HostName=host_name)
+
+
+def _remove_from_ssh_config(instance_name: str) -> None:
+    logger.info(f"[{instance_name}] Removing entry in SSH config")
+
+    instance = _get_instance_with_name(instance_name)
+    if not instance:
+        logger.info(f"[{instance_name}] Instance in found")
+        return
+    remove_from_ssh_config(instance_name)
 
 
 def _wait_for_stack_with_name(
@@ -229,6 +241,8 @@ def _cmd_stop(session: boto3.Session, instance_name: str) -> None:
     ec2_client = session.client("ec2")
     ec2_client.stop_instances(InstanceIds=[instance.id])  # type: ignore
 
+    _remove_from_ssh_config(instance_name)
+
 
 def _cmd_kill(session: boto3.Session, instance_name: str) -> None:
     """Kill/terminate the instance with the given name"""
@@ -240,7 +254,7 @@ def _cmd_kill(session: boto3.Session, instance_name: str) -> None:
     cf_client = session.client("cloudformation")
     cf_client.delete_stack(StackName=instance_name)
 
-    # TODO: cleanup SSH config
+    _remove_from_ssh_config(instance_name)
 
 
 def _cmd_list(
@@ -290,12 +304,15 @@ def _cmd_list(
 
 
 def _cmd_refresh(session: boto3.Session) -> None:
-    """Refresh the SSH config for all named instances"""
-    logger.info("Refreshing SSH config for all named instances")
+    """Refresh the SSH config for all running named instances"""
+    logger.info("Refreshing SSH config for all running named instances")
     ec2 = session.resource("ec2")
     for instance in ec2.instances.all():
         if instance_name := get_instance_name(instance):
-            _update_hostname_in_ssh_config(instance_name)
+            if instance.state["Name"].strip() == "running":
+                _update_hostname_in_ssh_config(instance_name)
+            else:
+                _remove_from_ssh_config(instance_name)
 
 
 # TODO: we can't really pass in kwargs given how this is currently invoked
@@ -349,6 +366,63 @@ def _cmd_open(
     )
 
 
+def _cmd_ray_up(
+    session: boto3.Session,
+    config: str = "g5g",
+    min_workers: int = -1,
+    max_workers: int = -1,
+    no_restart: bool = False,
+    restart_only: bool = False,
+    prompt: bool = False,
+    verbose: bool = False,
+) -> None:
+    logger.info(f"[{config}] Creating or updating Ray cluster")
+
+    cmd = ["ray", "up", str(RAY_CONFIG_ROOT / f"{config}.yaml")]
+    if min_workers >= 0:
+        cmd += ["--min-workers", str(min_workers)]
+    if max_workers >= 0:
+        cmd += ["--max-workers", str(max_workers)]
+    if no_restart:
+        cmd.append("--no-restart")
+    if restart_only:
+        cmd.append("--restart-only")
+    if not prompt:
+        cmd.append("--yes")
+    if verbose:
+        cmd.append("--verbose")
+
+    subprocess.call(cmd)
+
+    head_name = f"ray-{config}-head"
+    _update_hostname_in_ssh_config(head_name)
+
+
+def _cmd_ray_down(
+    session: boto3.Session,
+    config: str = "g5g",
+    workers_only: bool = False,
+    keep_min_workers: bool = False,
+    prompt: bool = False,
+    verbose: bool = False,
+) -> None:
+    logger.info(f"[{config}] Tearing down Ray cluster")
+
+    cmd = ["ray", "down", str(RAY_CONFIG_ROOT / f"{config}.yaml")]
+    if workers_only:
+        cmd.append("--workers-only")
+    if keep_min_workers:
+        cmd.append("--keep-min-workers")
+    if not prompt:
+        cmd.append("--yes")
+    if verbose:
+        cmd.append("--verbose")
+
+    subprocess.call(cmd)
+
+    # TODO: kill stopped head/worker nodes if flagged using _cmd_kill?
+
+
 def main():
     """Manages devserver instances"""
     parser = argparse.ArgumentParser(
@@ -366,6 +440,8 @@ def main():
         "refresh": ["r"],
         "create": ["c"],
         "open": ["o"],
+        "ray_up": ["u"],
+        "ray_down": ["d"],
     }
     for cmd, aliases in commands.items():
         _add_subparser(subparsers, cmd, aliases)
