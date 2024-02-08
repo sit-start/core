@@ -41,6 +41,7 @@ file_mounts: {
     "~ec2-user/.ssh/github_keys": "~/.ssh/github_keys",
     # deploy keys with read-only access to core and dotfiles repos
     "~ec2-user/.ssh/core_deploy_ed25519": "~/.ssh/core_deploy_ed25519",
+    "~ec2-user/.ssh/notebooks_deploy_ed25519": "~/.ssh/notebooks_deploy_ed25519",
     "~ec2-user/.ssh/dotfiles_deploy_ed25519": "~/.ssh/dotfiles_deploy_ed25519",
     # can optionally include project source here
     # "~ec2-user/projects/core": "~/Developer/projects/core",
@@ -61,7 +62,9 @@ setup_commands:
   - GIT_SSH_COMMAND="ssh -i ~/.ssh/dotfiles_deploy_ed25519" yadm clone git@github.com:kevdale/dotfiles --no-checkout && yadm checkout ~
 head_setup_commands:
   # clone the core repo to the (synced) ~/projects directory
-  - mkdir -p ~/projects && cd ~/projects && GIT_SSH_COMMAND="ssh -i ~/.ssh/core_deploy_ed25519" git clone git@github.com:kevdale/core
+  - mkdir -p ~/projects
+  - cd ~/projects && GIT_SSH_COMMAND="ssh -i ~/.ssh/core_deploy_ed25519" git clone git@github.com:kevdale/core
+  - cd ~/projects && GIT_SSH_COMMAND="ssh -i ~/.ssh/notebooks_deploy_ed25519" git clone git@github.com:kevdale/notebooks
 worker_setup_commands: []
 # from example-cloudwatch.yaml
 head_start_ray_commands:
