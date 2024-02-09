@@ -43,15 +43,18 @@ def wait_for_instance_with_id(
         },  # timeout of 15s x 20 = 5 minutes w/ default values
     )
 
-def remove_from_ssh_config(host: str, path="~/.ssh/config") -> None:
+
+def remove_from_ssh_config(host: str, path="~/.ssh/config") -> bool:
     """Removes the given host from the SSH config at the given path"""
     conf_path = expanduser(path)
     if not exists(conf_path):
-        return
+        return False
     conf = read_ssh_config(conf_path)
-    if host in conf.hosts():
-        conf.remove(host)
-        conf.write(conf_path)
+    if host not in conf.hosts():
+        return False
+    conf.remove(host)
+    conf.write(conf_path)
+    return True
 
 
 def update_ssh_config(host: str, reset=False, path="~/.ssh/config", **kwargs) -> None:

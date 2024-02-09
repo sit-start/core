@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import argparse
 import inspect
+import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import Type
+from time import sleep
 
 import boto3
 import json5
@@ -151,13 +153,11 @@ def _update_hostname_in_ssh_config(instance_name: str) -> None:
 
 
 def _remove_from_ssh_config(instance_name: str) -> None:
-    logger.info(f"[{instance_name}] Removing entry in SSH config")
-
     instance = _get_instance_with_name(instance_name)
     if not instance:
-        logger.info(f"[{instance_name}] Instance in found")
         return
-    remove_from_ssh_config(instance_name)
+    if remove_from_ssh_config(instance_name):
+        logger.info(f"[{instance_name}] Removing entry in SSH config")
 
 
 def _wait_for_stack_with_name(
@@ -210,6 +210,33 @@ def _add_subparser(
         parser.add_argument(*args, **kwargs)
     parser.set_defaults(func=func)
     return parser
+
+
+def _update_ssh_config(session: boto3.Session, regex: str = ".*") -> None:
+    """Update the SSH config for all running instances that match the given regex"""
+    logger.info(
+        f"Updating the SSH config for all running instances that match {repr(regex)}"
+    )
+
+    ec2 = session.resource("ec2")
+
+    running_instances: list[str] = []
+    other_instances: list[str] = []
+
+    for instance in ec2.instances.all():
+        if (instance_name := get_instance_name(instance)) is None:
+            continue
+        if not re.match(regex, instance_name):
+            continue
+        if instance.state["Name"].strip() == "running":
+            running_instances.append(instance_name)
+        else:
+            other_instances.append(instance_name)
+
+    for instance in other_instances:
+        _remove_from_ssh_config(instance)
+    for instance in running_instances:
+        _update_hostname_in_ssh_config(instance)
 
 
 def _cmd_start(session: boto3.Session, instance_name: str) -> None:
@@ -272,7 +299,9 @@ def _cmd_list(
             "name": str(get_instance_name(instance)),
             "instance_type": instance.instance_type.strip(),
         }
-        if show_killed or info["state"] != "terminated":
+        if show_killed or (
+            info["state"] != "terminated" and info["state"] != "shutting-down"
+        ):
             instance_info[instance.id] = info
 
     if len(instance_info) == 0:
@@ -305,14 +334,7 @@ def _cmd_list(
 
 def _cmd_refresh(session: boto3.Session) -> None:
     """Refresh the SSH config for all running named instances"""
-    logger.info("Refreshing SSH config for all running named instances")
-    ec2 = session.resource("ec2")
-    for instance in ec2.instances.all():
-        if instance_name := get_instance_name(instance):
-            if instance.state["Name"].strip() == "running":
-                _update_hostname_in_ssh_config(instance_name)
-            else:
-                _remove_from_ssh_config(instance_name)
+    _update_ssh_config(session)
 
 
 # TODO: we can't really pass in kwargs given how this is currently invoked
@@ -394,8 +416,14 @@ def _cmd_ray_up(
 
     subprocess.call(cmd)
 
-    head_name = f"ray-{config}-head"
-    _update_hostname_in_ssh_config(head_name)
+    # 5s is usually sufficient for the minimal workers to be in the
+    # running state after the Ray cluster is up
+    sleep(5)
+    _update_ssh_config(session, regex=f"ray-{config}.*")
+    logger.info(
+        f"[{config}] Use `refresh (r)` to update the SSH config for any workers "
+        "not yet running."
+    )
 
 
 def _cmd_ray_down(
@@ -420,7 +448,9 @@ def _cmd_ray_down(
 
     subprocess.call(cmd)
 
-    # TODO: kill stopped head/worker nodes if flagged using _cmd_kill?
+    _update_ssh_config(session, regex=f"ray-{config}.*")
+
+    # TODO: add kill option, based on _get_instances_that_match(regex)
 
 
 def main():
