@@ -58,20 +58,21 @@ initialization_commands: []
 setup_commands:
   # ensure github keys are included in known hosts
   - grep -xqF "$(cat ~/.ssh/github_keys)" ~/.ssh/known_hosts 2>/dev/null || cat ~/.ssh/github_keys  >> ~/.ssh/known_hosts
-  # clone dotfiles repo
-  - yadm rev-parse --is-inside-work-tree >/dev/null 2>&1 || GIT_SSH_COMMAND="ssh -i ~/.ssh/dotfiles_deploy_ed25519" yadm clone git@github.com:kevdale/dotfiles --no-checkout && yadm checkout ~
-  - source ~/.virtualenvs/main/bin/activate && pip3 install "ray[default,client,data,train,tune,serve]" # TODO: add to AMI
+  # clone / sync dotfiles
+  - yadm rev-parse --is-inside-work-tree >/dev/null 2>&1 && GIT_SSH_COMMAND="ssh -i ~/.ssh/dotfiles_deploy_ed25519" yadm pull || GIT_SSH_COMMAND="ssh -i ~/.ssh/dotfiles_deploy_ed25519" yadm clone git@github.com:kevdale/dotfiles --no-checkout && yadm checkout ~
+  # install packages not in the AMI (TODO: add to AMI)
+  - source ~/.virtualenvs/main/bin/activate && pip3 install "ray[default,client,data,train,tune,serve]" wandb
+  # login to wandb
+  - wandb login
 head_setup_commands:
-  # clone the core repo to the (synced) ~/projects directory
+  # clone core and notebooks repos to the (synced) ~/projects directory
   - mkdir -p ~/projects
   - cd ~/projects && (cd core && git rev-parse --is-inside-work-tree) >/dev/null 2>&1 || GIT_SSH_COMMAND="ssh -i ~/.ssh/core_deploy_ed25519" git clone git@github.com:kevdale/core
   - cd ~/projects && (cd notebooks && git rev-parse --is-inside-work-tree) >/dev/null 2>&1 || GIT_SSH_COMMAND="ssh -i ~/.ssh/notebooks_deploy_ed25519" git clone git@github.com:kevdale/notebooks
 worker_setup_commands: []
-# from example-cloudwatch.yaml
 head_start_ray_commands:
   - ray stop
   - ray start --head --port=6379 --object-manager-port=8076 --autoscaling-config=~/ray_bootstrap_config.yaml --dashboard-host=0.0.0.0
-# from example-cloudwatch.yaml
 worker_start_ray_commands:
   - ray stop
   - ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076
