@@ -1,7 +1,7 @@
 cluster_name: g5g
 max_workers: 3
 upscaling_speed: 1.0
-idle_timeout_minutes: 5
+idle_timeout_minutes: 10
 provider:
   type: aws
   region: us-west-2
@@ -14,7 +14,7 @@ available_node_types:
     max_workers: 0
     resources: {}
     node_config:
-      InstanceType: m6g.large
+      InstanceType: m6g.xlarge
       ImageId: ami-0725f59b966a1cee2
       KeyName: rsa
       IamInstanceProfile:
@@ -52,6 +52,8 @@ file_mounts: {
   }
 cluster_synced_files:
   - "~ec2-user/projects"
+  - "~ec2-user/.bash_profile"
+  - "~ec2-user/.bashrc"
 file_mounts_sync_continuously: False
 rsync_exclude:
   - "**/.git"
@@ -65,7 +67,7 @@ setup_commands:
   # clone / sync dotfiles
   - yadm rev-parse --is-inside-work-tree >/dev/null 2>&1 && GIT_SSH_COMMAND="ssh -i ~/.ssh/dotfiles_deploy_ed25519" yadm pull || GIT_SSH_COMMAND="ssh -i ~/.ssh/dotfiles_deploy_ed25519" yadm clone git@github.com:kevdale/dotfiles --no-checkout && yadm checkout ~
   # install packages not in the AMI (TODO: add to AMI)
-  - source ~/.virtualenvs/main/bin/activate && pip3 install "ray[default,client,data,train,tune,serve]" wandb
+  - source ~/.virtualenvs/main/bin/activate && pip3 install "ray[default,client,data,train,tune,serve]" wandb pytorch_lightning
   # setup wandb; relies on ~/.bash_profile setting WANDB_DIR=~/.local/share/wandb
   - wandb login
   - mkdir -p ~/.local/share/wandb
