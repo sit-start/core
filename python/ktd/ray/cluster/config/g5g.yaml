@@ -47,11 +47,12 @@ file_mounts: {
     "~ec2-user/.ssh/core_deploy_ed25519": "~/.ssh/core_deploy_ed25519",
     "~ec2-user/.ssh/notebooks_deploy_ed25519": "~/.ssh/notebooks_deploy_ed25519",
     "~ec2-user/.ssh/dotfiles_deploy_ed25519": "~/.ssh/dotfiles_deploy_ed25519",
+    "~ec2-user/.ssh/dev_deploy_ed25519": "~/.ssh/dev_deploy_ed25519",
     # can optionally include project source here
-    # "~ec2-user/projects/core": "~/Developer/projects/core",
+    # "~ec2-user/dev/core": "~/dev/core",
   }
 cluster_synced_files:
-  - "~ec2-user/projects"
+  - "~ec2-user/dev"
   - "~ec2-user/.bash_profile"
   - "~ec2-user/.bashrc"
 file_mounts_sync_continuously: False
@@ -68,14 +69,12 @@ setup_commands:
   - yadm rev-parse --is-inside-work-tree >/dev/null 2>&1 && GIT_SSH_COMMAND="ssh -i ~/.ssh/dotfiles_deploy_ed25519" yadm pull || GIT_SSH_COMMAND="ssh -i ~/.ssh/dotfiles_deploy_ed25519" yadm clone git@github.com:kevdale/dotfiles --no-checkout && yadm checkout ~
   # install packages not in the AMI (TODO: add to AMI)
   - source ~/.virtualenvs/main/bin/activate && pip3 install "ray[default,client,data,train,tune,serve]" wandb pytorch_lightning
-  # setup wandb; relies on ~/.bash_profile setting WANDB_DIR=~/.local/share/wandb
+  # setup wandb
   - wandb login
-  - mkdir -p ~/.local/share/wandb
+  - source ~/.bash_profile && mkdir -p $WANDB_DIR
 head_setup_commands:
-  # clone core and notebooks repos to the (synced) ~/projects directory
-  - mkdir -p ~/projects
-  - cd ~/projects && (cd core && git rev-parse --is-inside-work-tree) >/dev/null 2>&1 || GIT_SSH_COMMAND="ssh -i ~/.ssh/core_deploy_ed25519" git clone git@github.com:kevdale/core
-  - cd ~/projects && (cd notebooks && git rev-parse --is-inside-work-tree) >/dev/null 2>&1 || GIT_SSH_COMMAND="ssh -i ~/.ssh/notebooks_deploy_ed25519" git clone git@github.com:kevdale/notebooks
+  # clone active repos in the dev repo
+  - (cd dev && git rev-parse --is-inside-work-tree) >/dev/null 2>&1 || GIT_SSH_COMMAND="ssh -i ~/.ssh/dev_deploy_ed25519" git clone git@github.com:kevdale/dev --recurse-submodules
 worker_setup_commands: []
 head_start_ray_commands:
   - ray stop

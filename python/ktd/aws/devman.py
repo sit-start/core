@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 import argparse
 import inspect
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Type
 from time import sleep
+from typing import Type
 
 import boto3
 import json5
@@ -26,7 +27,6 @@ logger = ktd.logging.get_logger(__name__)
 
 TEMPLATE_PATH = Path(__file__).parent / "cloudformation" / "templates" / "dev.yaml"
 RAY_CONFIG_ROOT = Path(__file__).parent.parent / "ray" / "cluster" / "config"
-PROJECT_PATH = "$HOME/projects"
 _PARAM_HELP = {
     # devman
     "profile": "the AWS SSO profile to use for the session",
@@ -37,6 +37,7 @@ _PARAM_HELP = {
     "show_killed": "show killed instances",
     # create
     "instance_type": "the instance type",
+    "repo_root": "the root directory for cloning repos",
     "repos": "comma-separate list of github repos to clone",
     "yadm_dotfiles_repo": "github repo to clone via yadm",
     # code
@@ -48,6 +49,7 @@ _PARAM_HELP = {
     "max_workers": "maximum number of workers; overrides the config",
     "no_restart": "do not restart Ray services during the update",
     "restart_only": "skip running setup commands and only restart Ray",
+    "cluster_name": "override the configured cluster name",
     "prompt": "prompt for confirmation",
     "verbose": "display verbose output",
     # ray_down
@@ -58,7 +60,6 @@ _INTERNAL_PARAMS = ["session"]
 _CMD_PREFIX = "_cmd_"
 
 
-# TODO: maintain .ssh/config: remove old instances, update new ones
 # TODO: can simplify the code if we always access instances via their
 # stack's unique name
 # TODO: add a tag to the stack and/or instance to make filtering easy
@@ -78,6 +79,7 @@ def _github_ssh_keys(use_cached: bool = False) -> str:
 
 def _clone_repos(
     instance_name: str,
+    repo_root: str,
     repos: list[str] | None,
     yadm_dotfiles_repo: str | None,
 ) -> None:
@@ -111,8 +113,10 @@ def _clone_repos(
 
     if repos:
         logger.info(f"[{instance_name}] Cloning repos")
-        clone_cmds = [f"git clone git@github.com:{r}" for r in repos]
-        cmd = f"mkdir -p {PROJECT_PATH} && cd $_ && {'; '.join(clone_cmds)}"
+        clone_cmds = [
+            f"git clone git@github.com:{r} --recurse-submodules" for r in repos
+        ]
+        cmd = f"mkdir -p {repo_root} && cd $_ && {'; '.join(clone_cmds)}"
         subprocess.call(["ssh", instance_name, cmd])
 
 
@@ -342,7 +346,8 @@ def _cmd_create(
     session: boto3.Session,
     instance_name: str,
     instance_type: str = "g5g.2xlarge",
-    repos: str = "kevdale/core,kevdale/study",
+    repo_root: str = "/home/ec2-user",
+    repos: str = "kevdale/dev",
     yadm_dotfiles_repo: str = "kevdale/dotfiles",
 ) -> None:
     """Create a devserver with the given name and arguments"""
@@ -366,7 +371,10 @@ def _cmd_create(
     _wait_for_stack_with_name(instance_name, session=session)
     _update_hostname_in_ssh_config(instance_name)
     _clone_repos(
-        instance_name, repos=repos.split(","), yadm_dotfiles_repo=yadm_dotfiles_repo
+        instance_name,
+        repo_root=repo_root,
+        repos=repos.split(","),
+        yadm_dotfiles_repo=yadm_dotfiles_repo,
     )
 
 
@@ -374,7 +382,7 @@ def _cmd_open(
     session: boto3.Session,
     instance_name: str,
     target: str = "file",
-    path: str = "/home/ec2-user/projects/study/study.code-workspace",
+    path: str = "/home/ec2-user/dev/dev.code-workspace",
 ) -> None:
     """Open VS Code on the instance with the given name"""
     logger.info(f"[{instance_name}] Opening VS Code on instance")
@@ -395,6 +403,7 @@ def _cmd_ray_up(
     max_workers: int = -1,
     no_restart: bool = False,
     restart_only: bool = False,
+    cluster_name: str = "",
     prompt: bool = False,
     verbose: bool = False,
 ) -> None:
@@ -409,6 +418,8 @@ def _cmd_ray_up(
         cmd.append("--no-restart")
     if restart_only:
         cmd.append("--restart-only")
+    if cluster_name:
+        cmd += ["--cluster-name", cluster_name]
     if not prompt:
         cmd.append("--yes")
     if verbose:
