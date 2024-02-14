@@ -49,7 +49,7 @@ file_mounts: {
     "~ec2-user/.ssh/dotfiles_deploy_ed25519": "~/.ssh/dotfiles_deploy_ed25519",
     "~ec2-user/.ssh/dev_deploy_ed25519": "~/.ssh/dev_deploy_ed25519",
     # can optionally include project source here
-    # "~ec2-user/dev/core": "~/dev/core",
+    # "~ec2-user/dev": "~/dev",
   }
 cluster_synced_files:
   - "~ec2-user/dev"
@@ -73,8 +73,9 @@ setup_commands:
   - wandb login
   - source ~/.bash_profile && mkdir -p $WANDB_DIR
 head_setup_commands:
-  # clone active repos in the dev repo
-  - (cd dev && git rev-parse --is-inside-work-tree) >/dev/null 2>&1 || GIT_SSH_COMMAND="ssh -i ~/.ssh/dev_deploy_ed25519" git clone git@github.com:kevdale/dev --recurse-submodules
+  # clone the dev repo and its submodules; we can only use one identity
+  # per invocation, so we need to update each submodule individually
+  - (cd dev && git rev-parse --is-inside-work-tree) >/dev/null 2>&1 || GIT_SSH_COMMAND="ssh -i ~/.ssh/dev_deploy_ed25519" git clone git@github.com:kevdale/dev && (cd dev && for repo in */; do GIT_SSH_COMMAND="ssh -i ~/.ssh/${repo%/}_deploy_ed25519" git submodule update --init $repo; done)
 worker_setup_commands: []
 head_start_ray_commands:
   - ray stop
