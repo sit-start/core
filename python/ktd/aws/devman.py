@@ -278,10 +278,12 @@ def _cmd_stop(session: boto3.Session, instance_name: str) -> None:
 def _cmd_kill(session: boto3.Session, instance_name: str) -> None:
     """Kill/terminate the instance with the given name"""
     logger.info(f"[{instance_name}] Killing instance")
-    # instance = _get_instance_with_name(instance_name)
-    # ec2_client = session.client("ec2")
-    # ec2_client.terminate_instances(InstanceIds=[instance.id])  # type: ignore
+    # terminate the instance
+    instance = _get_instance_with_name(instance_name)
+    ec2_client = session.client("ec2")
+    ec2_client.terminate_instances(InstanceIds=[instance.id])  # type: ignore
 
+    # also terminate a stack if it exists, as is the case for devservers
     cf_client = session.client("cloudformation")
     cf_client.delete_stack(StackName=instance_name)
 
