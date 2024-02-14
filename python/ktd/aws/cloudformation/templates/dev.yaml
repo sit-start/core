@@ -76,7 +76,7 @@ Resources:
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:
-            VolumeSize: 128
+            VolumeSize: 256
             VolumeType: gp3
       UserData:
         # TODO: move (some) into ec2_dev_setup.sh and create AMI
