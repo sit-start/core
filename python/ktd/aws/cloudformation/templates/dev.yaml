@@ -51,7 +51,7 @@ Mappings:
   ArchToAMI:
     aarch64:
       # base ami-08a800e4b5aa90bb8, setup via scripts/ec2_dev_setup.sh:install_g5g()
-      AMI: ami-0725f59b966a1cee2
+      AMI: ami-0ea53ebd931cfc9cd
     x86-64:
       # base ami-0ba26e8b3af2b7155, setup via scripts/ec2_dev_setup.sh:install_g5()
       AMI: ami-03c22e640e258e9b5 # TODO: needs pigar, ray[default], amazon cloudwatch agent
@@ -78,13 +78,6 @@ Resources:
           Ebs:
             VolumeSize: 256
             VolumeType: gp3
-      UserData:
-        # TODO: move (some) into ec2_dev_setup.sh and create AMI
-        Fn::Base64: !Sub |
-          #!/bin/bash -xe        
-          mkdir -p /mnt/efs/data-1
-          mount -t efs -o tls fs-02f937b821a97637c:/ /mnt/efs/data-1
-          echo "fs-02f937b821a97637c:/ /mnt/efs/data-1 efs tls,_netdev" | tee -a /etc/fstab
   InactiveAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:

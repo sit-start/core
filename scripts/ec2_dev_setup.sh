@@ -219,8 +219,11 @@ function install_torchvision_from_source() {
   popd
 }
 
-function install_python_cleanup() {
+function install_cleanup() {
+  # ec2-user should own the virtual environment
   chown -R $USER $MAIN_VENV_PATH
+  # TODO: prime large python deps
+  # TODO: update timezone
 }
 
 function install() {
@@ -240,10 +243,10 @@ function install() {
 function install_g5g() {
   install core_packages yadm gflags_from_source glog_from_source ffmpeg python \
     python_packages nvidia docker pytorch_from_source torchvision_from_source \
-    python_cleanup
+    cleanup
 }
 
 function install_g5() {
   install core_packages yadm awscli gflags_from_source glog_from_source ffmpeg \
-    python_packages pytorch python_cleanup
+    python_packages pytorch cleanup
 }

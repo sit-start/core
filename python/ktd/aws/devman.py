@@ -25,7 +25,7 @@ from ktd.cloudpathlib import CloudPath
 
 logger = ktd.logging.get_logger(__name__)
 
-TEMPLATE_PATH = Path(__file__).parent / "cloudformation" / "templates" / "dev.yaml"
+CF_TEMPLATE_PATH = Path(__file__).parent / "cloudformation" / "templates" / "dev.yaml"
 RAY_CONFIG_ROOT = Path(__file__).parent.parent / "ray" / "cluster" / "config"
 _PARAM_HELP = {
     # devman
@@ -37,6 +37,7 @@ _PARAM_HELP = {
     "show_killed": "show killed instances",
     # create
     "instance_type": "the instance type",
+    "no_clone_repos": "skip cloning repos",
     "repo_root": "the root directory for cloning repos",
     "repos": "comma-separate list of github repos to clone",
     "yadm_dotfiles_repo": "github repo to clone via yadm",
@@ -348,6 +349,7 @@ def _cmd_create(
     session: boto3.Session,
     instance_name: str,
     instance_type: str = "g5g.2xlarge",
+    no_clone_repos: bool = False,
     repo_root: str = "/home/ec2-user",
     repos: str = "kevdale/dev",
     yadm_dotfiles_repo: str = "kevdale/dotfiles",
@@ -364,7 +366,7 @@ def _cmd_create(
     cf_client = session.client("cloudformation")
     cf_client.create_stack(
         StackName=instance_name,
-        TemplateBody=TEMPLATE_PATH.read_text(),
+        TemplateBody=CF_TEMPLATE_PATH.read_text(),
         Parameters=[
             {"ParameterKey": "InstanceType", "ParameterValue": instance_type},
         ],
@@ -372,12 +374,13 @@ def _cmd_create(
     logger.info(f"[{instance_name}] Waiting for instance to be ready")
     _wait_for_stack_with_name(instance_name, session=session)
     _update_hostname_in_ssh_config(instance_name)
-    _clone_repos(
-        instance_name,
-        repo_root=repo_root,
-        repos=repos.split(","),
-        yadm_dotfiles_repo=yadm_dotfiles_repo,
-    )
+    if not no_clone_repos:
+        _clone_repos(
+            instance_name,
+            repo_root=repo_root,
+            repos=repos.split(","),
+            yadm_dotfiles_repo=yadm_dotfiles_repo,
+        )
 
 
 def _cmd_open(
