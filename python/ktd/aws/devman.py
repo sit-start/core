@@ -2,12 +2,10 @@
 import argparse
 import inspect
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
 from time import sleep
-from typing import Type
 
 import boto3
 import json5
@@ -15,7 +13,7 @@ import ktd.logging
 from boto3.resources.base import ServiceResource
 from ktd.aws.ec2.util import (
     get_instance_name,
-    get_instances_with_name,
+    get_instances,
     remove_from_ssh_config,
     update_ssh_config,
     wait_for_instance_with_id,
@@ -31,7 +29,7 @@ _PARAM_HELP = {
     # devman
     "profile": "the AWS SSO profile to use for the session",
     # common
-    "instance_name": "the instance name",
+    "instance_name": "the instance name / pattern",
     # list
     "no_compact": "do not display compact output",
     "show_killed": "show killed instances",
@@ -121,32 +119,15 @@ def _clone_repos(
         subprocess.call(["ssh", instance_name, cmd])
 
 
-def _get_instance_with_name(
-    instance_name: str, states: list[str] | None = None
-) -> Type[ServiceResource] | None:
-    instances = get_instances_with_name(instance_name, states=states)
-    if not instances:
-        return None
-    if len(instances) > 1:
-        logger.warning(
-            f"[{instance_name}] Found multiple instances with this name; "
-            "using the first one"
-        )
-    return instances[0]
-
-
 def _trunc(s: str, max_len: int = 50) -> str:
     suffix = "..."
     return s if len(s) <= max_len else s[: max_len - len(suffix)] + suffix
 
 
-def _update_hostname_in_ssh_config(instance_name: str) -> None:
-    logger.info(f"[{instance_name}] Updating hostname in SSH config")
-
-    states = ["running"]
-    instance = _get_instance_with_name(instance_name, states=states)
-    if not instance:
-        logger.info(f"[{instance_name}] Instance in {'/'.join(states)} state not found")
+def _update_hostname_in_ssh_config(instance: ServiceResource) -> None:
+    instance_name = get_instance_name(instance)
+    if instance_name is None:
+        logger.warning(f"Instance has no name: {instance.id}")  # type: ignore
         return
 
     assert instance.meta is not None, f"[{instance_name}] Instance has no metadata"
@@ -155,14 +136,6 @@ def _update_hostname_in_ssh_config(instance_name: str) -> None:
         logger.info("No hostname to update in SSH config")
         return
     update_ssh_config(instance_name, HostName=host_name)
-
-
-def _remove_from_ssh_config(instance_name: str) -> None:
-    instance = _get_instance_with_name(instance_name)
-    if not instance:
-        return
-    if remove_from_ssh_config(instance_name):
-        logger.info(f"[{instance_name}] Removing entry in SSH config")
 
 
 def _wait_for_stack_with_name(
@@ -217,78 +190,82 @@ def _add_subparser(
     return parser
 
 
-def _update_ssh_config(session: boto3.Session, regex: str = ".*") -> None:
-    """Update the SSH config for all running instances that match the given regex"""
-    logger.info(
-        f"Updating the SSH config for all running instances that match {repr(regex)}"
-    )
+def _update_ssh_config(session: boto3.Session, instance_name: str = "?*") -> None:
+    """Update the SSH config for all running instances with the given name"""
+    logger.info(f"[{instance_name} Updating SSH config")
 
-    ec2 = session.resource("ec2")
+    running_instances: list[ServiceResource] = []
+    other_instance_names: list[str] = []
 
-    running_instances: list[str] = []
-    other_instances: list[str] = []
-
-    for instance in ec2.instances.all():
-        if (instance_name := get_instance_name(instance)) is None:
+    for instance in get_instances(instance_name):
+        if (this_instance_name := get_instance_name(instance)) is None:
             continue
-        if not re.match(regex, instance_name):
-            continue
-        if instance.state["Name"].strip() == "running":
-            running_instances.append(instance_name)
+        if instance.state["Name"].strip() == "running":  # type: ignore
+            running_instances.append(instance)
         else:
-            other_instances.append(instance_name)
+            other_instance_names.append(this_instance_name)
 
-    for instance in other_instances:
-        _remove_from_ssh_config(instance)
+    for this_instance_name in set(other_instance_names):
+        remove_from_ssh_config(this_instance_name)
     for instance in running_instances:
         _update_hostname_in_ssh_config(instance)
 
 
 def _cmd_start(session: boto3.Session, instance_name: str) -> None:
-    """Start the instance with the given name"""
-    logger.info(f"[{instance_name}] Starting instance")
+    """Start instances with the given name"""
+    logger.info(f"[{instance_name}] Starting instances")
 
     states = ["stopping", "stopped"]
-    instance = _get_instance_with_name(instance_name, states=states)
-    if not instance:
+    instances = get_instances(instance_name, session, states=states)
+    if not instances:
         logger.info(f"[{instance_name}] Instance in {'/'.join(states)} state not found")
         return
 
-    ec2_client = session.client("ec2")
-    ec2_client.start_instances(InstanceIds=[instance.id])  # type: ignore
-    wait_for_instance_with_id(instance.id, session=session)  # type: ignore
-    _update_hostname_in_ssh_config(instance_name)
+    for instance in instances:
+        ec2_client = session.client("ec2")
+        ec2_client.start_instances(InstanceIds=[instance.id])  # type: ignore
+        wait_for_instance_with_id(instance.id, session=session)  # type: ignore
+        _update_hostname_in_ssh_config(instance)
 
 
 def _cmd_stop(session: boto3.Session, instance_name: str) -> None:
-    """Stop the instance with the given name"""
-    logger.info(f"[{instance_name}] Stopping instance")
+    """Stop instances with the given name"""
+    logger.info(f"[{instance_name}] Stopping instances")
 
     states = ["pending", "running"]
-    instance = _get_instance_with_name(instance_name, states=states)
-    if not instance:
+    instances = get_instances(instance_name, session, states=states)
+    if not instances:
         logger.info(f"[{instance_name}] Instance in {'/'.join(states)} state not found")
         return
 
+    instance_ids = [instance.id for instance in instances]  # type: ignore
     ec2_client = session.client("ec2")
-    ec2_client.stop_instances(InstanceIds=[instance.id])  # type: ignore
+    ec2_client.stop_instances(InstanceIds=instance_ids)
 
-    _remove_from_ssh_config(instance_name)
+    for instance in instances:
+        if this_instance_name := get_instance_name(instance):
+            remove_from_ssh_config(this_instance_name)
 
 
 def _cmd_kill(session: boto3.Session, instance_name: str) -> None:
-    """Kill/terminate the instance with the given name"""
-    logger.info(f"[{instance_name}] Killing instance")
-    # terminate the instance
-    instance = _get_instance_with_name(instance_name)
+    """Kill/terminate instances with the given name"""
+    logger.info(f"[{instance_name}] Killing instances")
+    instances = get_instances(instance_name, session)
+    if not instances:
+        logger.info(f"[{instance_name}] Instance not found")
+        return
+
+    instance_ids = [instance.id for instance in instances]  # type: ignore
     ec2_client = session.client("ec2")
-    ec2_client.terminate_instances(InstanceIds=[instance.id])  # type: ignore
+    ec2_client.terminate_instances(InstanceIds=instance_ids)
 
-    # also terminate a stack if it exists, as is the case for devservers
+    # also terminate a stack if it exists, as is the case for
+    # devservers, and remove from the SSH config
     cf_client = session.client("cloudformation")
-    cf_client.delete_stack(StackName=instance_name)
-
-    _remove_from_ssh_config(instance_name)
+    for instance in instances:
+        if this_instance_name := get_instance_name(instance):
+            cf_client.delete_stack(StackName=this_instance_name)
+            remove_from_ssh_config(this_instance_name)
 
 
 def _cmd_list(
@@ -341,7 +318,7 @@ def _cmd_list(
 
 def _cmd_refresh(session: boto3.Session) -> None:
     """Refresh the SSH config for all running named instances"""
-    _update_ssh_config(session)
+    _update_ssh_config(session, instance_name="?*")
 
 
 # TODO: we can't really pass in kwargs given how this is currently invoked
@@ -359,7 +336,7 @@ def _cmd_create(
     logger.info(f"[{instance_name}] Creating devserver")
 
     states = ["pending", "running", "stopping", "stopped"]
-    if _get_instance_with_name(instance_name, states=states):
+    if get_instances(instance_name, states=states):
         logger.info(f"[{instance_name}] Instance name in use. Aborting.")
         return
 
@@ -373,7 +350,12 @@ def _cmd_create(
     )
     logger.info(f"[{instance_name}] Waiting for instance to be ready")
     _wait_for_stack_with_name(instance_name, session=session)
-    _update_hostname_in_ssh_config(instance_name)
+
+    # the devserver stack creates an instance with the same name
+    instances = get_instances(instance_name)
+    assert instances is not None and len(instances) == 1
+
+    _update_hostname_in_ssh_config(instances[0])
     if not no_clone_repos:
         _clone_repos(
             instance_name,
@@ -435,7 +417,7 @@ def _cmd_ray_up(
     # 5s is usually sufficient for the minimal workers to be in the
     # running state after the Ray cluster is up
     sleep(5)
-    _update_ssh_config(session, regex=f"ray-{config}.*")
+    _update_ssh_config(session, instance_name=f"ray-{config}-*")
     logger.info(
         f"[{config}] Use `refresh (r)` to update the SSH config for any workers "
         "not yet running."
@@ -464,7 +446,7 @@ def _cmd_ray_down(
 
     subprocess.call(cmd)
 
-    _update_ssh_config(session, regex=f"ray-{config}.*")
+    _update_ssh_config(session, instance_name=f"ray-{config}-*")
 
     # TODO: add kill option, based on _get_instances_that_match(regex)
 

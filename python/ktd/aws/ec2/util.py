@@ -1,26 +1,34 @@
 from os.path import exists, expanduser
-from typing import Type
 
 import boto3
 from boto3.resources.base import ServiceResource
+from ktd.logging import get_logger
 from sshconf import empty_ssh_config_file, read_ssh_config
 
+logger = get_logger(__name__)
 
-def get_instance_name(instance: Type[ServiceResource]) -> str | None:
+
+def get_instance_name(instance: ServiceResource) -> str | None:
     if instance.meta is None:
         return None
     tags = instance.meta.data.get("Tags", {})
     return next((el["Value"] for el in tags if el["Key"] == "Name"), None)
 
 
-def get_instances_with_name(
-    name: str,
+def get_instances(
+    name: str | None = None,
     session: boto3.Session | None = None,
     states: list[str] | None = None,
-) -> list[Type[ServiceResource]]:
+) -> list[ServiceResource]:
+    """Returns a list of EC2 instances with the given name and state(s)
+
+    Supports the same wildcards as the AWS CLI, e.g. "web*" or "web-1?".
+    """
     session = session or boto3.Session()
     ec2 = session.resource("ec2")
-    filters = [{"Name": "tag:Name", "Values": [name]}]
+    filters = []
+    if name is not None:
+        filters.append({"Name": "tag:Name", "Values": [name]})
     if states is not None:
         filters.append({"Name": "instance-state-name", "Values": states})
     return list(ec2.instances.filter(Filters=filters))
@@ -52,6 +60,7 @@ def remove_from_ssh_config(host: str, path="~/.ssh/config") -> bool:
     conf = read_ssh_config(conf_path)
     if host not in conf.hosts():
         return False
+    logger.info(f"Removing host '{host}' from SSH config")
     conf.remove(host)
     conf.write(conf_path)
     return True
@@ -59,6 +68,7 @@ def remove_from_ssh_config(host: str, path="~/.ssh/config") -> bool:
 
 def update_ssh_config(host: str, reset=False, path="~/.ssh/config", **kwargs) -> None:
     """Updates the SSH config for the given host"""
+    logger.info(f"Updating SSH config for host '{host}'")
     conf_path = expanduser(path)
     conf = read_ssh_config(conf_path) if exists(conf_path) else empty_ssh_config_file()
 
