@@ -54,6 +54,7 @@ _PARAM_HELP = {
     # ray_down
     "workers_only": "only destroy workers",
     "keep_min_workers": "retain the minimal amount of workers specified in the config",
+    "kill": "terminate all instances",
 }
 _INTERNAL_PARAMS = ["session"]
 _CMD_PREFIX = "_cmd_"
@@ -151,6 +152,34 @@ def _wait_for_stack_with_name(
     waiter.wait(StackName=stack_name, WaiterConfig=config)
 
 
+def _kill_instances(
+    session: boto3.Session,
+    instances: list[ServiceResource],
+    update_ssh_config: bool = True,
+    kill_stacks: bool = False,
+) -> None:
+    assert instances, "No instances to kill"
+    instance_ids = [instance.id for instance in instances]  # type: ignore
+    ec2_client = session.client("ec2")
+    ec2_client.terminate_instances(InstanceIds=instance_ids)  # type: ignore
+
+    instance_names = [get_instance_name(instance) for instance in instances]
+
+    # also terminate a stack if it exists, as is the case for
+    # devservers, and remove from the SSH config
+    if kill_stacks:
+        cf_client = session.client("cloudformation")
+        for name in instance_names:
+            if name:
+                logger.info(f"[{name}] Killing stack")
+                cf_client.delete_stack(StackName=name)  # type: ignore
+
+    if update_ssh_config:
+        for name in instance_names:
+            if name:
+                remove_from_ssh_config(name)
+
+
 def _add_subparser(
     subparsers: argparse._SubParsersAction, cmd: str, aliases: list[str] | None = None
 ) -> None:
@@ -240,7 +269,7 @@ def _cmd_stop(session: boto3.Session, instance_name: str) -> None:
 
     instance_ids = [instance.id for instance in instances]  # type: ignore
     ec2_client = session.client("ec2")
-    ec2_client.stop_instances(InstanceIds=instance_ids)
+    ec2_client.stop_instances(InstanceIds=instance_ids)  # type: ignore
 
     for instance in instances:
         if this_instance_name := get_instance_name(instance):
@@ -251,21 +280,7 @@ def _cmd_kill(session: boto3.Session, instance_name: str) -> None:
     """Kill/terminate instances with the given name"""
     logger.info(f"[{instance_name}] Killing instances")
     instances = get_instances(instance_name, session)
-    if not instances:
-        logger.info(f"[{instance_name}] Instance not found")
-        return
-
-    instance_ids = [instance.id for instance in instances]  # type: ignore
-    ec2_client = session.client("ec2")
-    ec2_client.terminate_instances(InstanceIds=instance_ids)
-
-    # also terminate a stack if it exists, as is the case for
-    # devservers, and remove from the SSH config
-    cf_client = session.client("cloudformation")
-    for instance in instances:
-        if this_instance_name := get_instance_name(instance):
-            cf_client.delete_stack(StackName=this_instance_name)
-            remove_from_ssh_config(this_instance_name)
+    _kill_instances(session, instances, kill_stacks=True)
 
 
 def _cmd_list(
@@ -341,7 +356,7 @@ def _cmd_create(
         return
 
     cf_client = session.client("cloudformation")
-    cf_client.create_stack(
+    cf_client.create_stack(  # type: ignore
         StackName=instance_name,
         TemplateBody=CF_TEMPLATE_PATH.read_text(),
         Parameters=[
@@ -431,6 +446,7 @@ def _cmd_ray_down(
     keep_min_workers: bool = False,
     prompt: bool = False,
     verbose: bool = False,
+    kill: bool = False,
 ) -> None:
     logger.info(f"[{config}] Tearing down Ray cluster")
 
@@ -446,9 +462,17 @@ def _cmd_ray_down(
 
     subprocess.call(cmd)
 
-    _update_ssh_config(session, instance_name=f"ray-{config}-*")
+    cluster_names = f"ray-{config}-*"
+    worker_names = f"ray-{config}-workers"
 
-    # TODO: add kill option, based on _get_instances_that_match(regex)
+    if kill and keep_min_workers:
+        logger.warning("Killing instances with keep_min_workers is not implemented")
+    elif kill:
+        instance_name = worker_names if workers_only else cluster_names
+        logger.info(f"[{instance_name}] Killing instances")
+        _kill_instances(session, get_instances(instance_name), update_ssh_config=False)
+
+    _update_ssh_config(session, instance_name=cluster_names)
 
 
 def main():
