@@ -58,11 +58,14 @@ _PARAM_HELP = {
 }
 _INTERNAL_PARAMS = ["session"]
 _CMD_PREFIX = "_cmd_"
-
-
-# TODO: can simplify the code if we always access instances via their
-# stack's unique name
-# TODO: add a tag to the stack and/or instance to make filtering easy
+_ALL_INSTANCE_STATES = [
+    "pending",
+    "running",
+    "stopping",
+    "stopped",
+    "shutting-down",
+    "terminated",
+]
 
 
 def _github_ssh_keys(use_cached: bool = True) -> str:
@@ -158,7 +161,9 @@ def _kill_instances(
     update_ssh_config: bool = True,
     kill_stacks: bool = False,
 ) -> None:
-    assert instances, "No instances to kill"
+    if not instances:
+        logger.warning("No instances to kill")
+        return
     instance_ids = [instance.id for instance in instances]  # type: ignore
     ec2_client = session.client("ec2")
     ec2_client.terminate_instances(InstanceIds=instance_ids)  # type: ignore
@@ -178,6 +183,20 @@ def _kill_instances(
         for name in instance_names:
             if name:
                 remove_from_ssh_config(name)
+
+
+def _kill_instances_by_name(
+    session: boto3.Session,
+    instance_name: str,
+    states: list[str] | None = None,
+    update_ssh_config: bool = True,
+    kill_stacks: bool = False,
+) -> None:
+    states = states or list(set(_ALL_INSTANCE_STATES).difference(["terminated"]))
+    instances = get_instances(instance_name, session, states)
+    _kill_instances(
+        session, instances, update_ssh_config=update_ssh_config, kill_stacks=kill_stacks
+    )
 
 
 def _add_subparser(
@@ -279,8 +298,7 @@ def _cmd_stop(session: boto3.Session, instance_name: str) -> None:
 def _cmd_kill(session: boto3.Session, instance_name: str) -> None:
     """Kill/terminate instances with the given name"""
     logger.info(f"[{instance_name}] Killing instances")
-    instances = get_instances(instance_name, session)
-    _kill_instances(session, instances, kill_stacks=True)
+    _kill_instances_by_name(session, instance_name, kill_stacks=True)
 
 
 def _cmd_list(
@@ -336,7 +354,6 @@ def _cmd_refresh(session: boto3.Session) -> None:
     _update_ssh_config(session, instance_name="?*")
 
 
-# TODO: we can't really pass in kwargs given how this is currently invoked
 def _cmd_create(
     session: boto3.Session,
     instance_name: str,
@@ -471,7 +488,7 @@ def _cmd_ray_down(
     elif kill:
         instance_name = worker_names if workers_only else cluster_names
         logger.info(f"[{instance_name}] Killing instances")
-        _kill_instances(session, get_instances(instance_name), update_ssh_config=False)
+        _kill_instances_by_name(session, instance_name, update_ssh_config=False)
 
     _update_ssh_config(session, instance_name=cluster_names)
 
