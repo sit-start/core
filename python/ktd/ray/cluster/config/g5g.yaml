@@ -73,7 +73,7 @@ setup_commands:
 head_setup_commands:
   # clone the dev repo and its submodules; we can only use one identity
   # per invocation, so we need to update each submodule individually
-  - (cd dev && git rev-parse --is-inside-work-tree) >/dev/null 2>&1 || GIT_SSH_COMMAND="ssh -i ~/.ssh/dev_deploy_ed25519" git clone git@github.com:kevdale/dev && (cd dev && for repo in */; do GIT_SSH_COMMAND="ssh -i ~/.ssh/${repo%/}_deploy_ed25519" git submodule update --init --remote $repo; done)
+  - (cd dev && git rev-parse --is-inside-work-tree) >/dev/null 2>&1 || GIT_SSH_COMMAND="ssh -i ~/.ssh/dev_deploy_ed25519" git clone git@github.com:kevdale/dev && (cd dev && for repo in */; do GIT_SSH_COMMAND="ssh -i ~/.ssh/${repo%/}_deploy_ed25519" git submodule update --init --remote $repo && (cd $repo && git checkout $(git config -f ../.gitmodules --get submodule.${repo%/}.branch)); done)
 worker_setup_commands: []
 head_start_ray_commands:
   - ray stop
