@@ -30,6 +30,7 @@ _PARAM_HELP = {
     "profile": "the AWS SSO profile to use for the session",
     # common
     "instance_name": "the instance name / pattern",
+    "open_vscode": "open VS Code to the `open` command's default target/path",
     # list
     "no_compact": "do not display compact output",
     "show_killed": "show killed instances",
@@ -78,6 +79,23 @@ def _github_ssh_keys(use_cached: bool = True) -> str:
     if not isinstance(meta, dict) or "ssh_keys" not in meta:
         raise RuntimeError("Failed to fetch GitHub SSH keys")
     return "\n".join(f"github.com {v}" for v in meta["ssh_keys"])
+
+
+def _open_vscode(
+    session: boto3.Session,
+    instance_name: str,
+    target: str = "file",
+    path: str = "/home/ec2-user/dev/dev.code-workspace",
+) -> None:
+    logger.info(f"[{instance_name}] Opening VS Code on instance")
+    subprocess.call(
+        [
+            "code",
+            "--",
+            f"--{target}-uri",
+            f"vscode-remote://ssh-remote+{instance_name}{path}",
+        ]
+    )
 
 
 def _clone_repos(
@@ -362,6 +380,7 @@ def _cmd_create(
     repo_root: str = "/home/ec2-user",
     repos: str = "kevdale/dev",
     yadm_dotfiles_repo: str = "kevdale/dotfiles",
+    open_vscode: bool = False,
 ) -> None:
     """Create a devserver with the given name and arguments"""
     # parameters should be kept in sync with ktd/aws/cloudformation/templates/dev.yaml
@@ -396,6 +415,9 @@ def _cmd_create(
             yadm_dotfiles_repo=yadm_dotfiles_repo,
         )
 
+    if open_vscode:
+        _open_vscode(session, instance_name)
+
 
 def _cmd_open(
     session: boto3.Session,
@@ -404,15 +426,7 @@ def _cmd_open(
     path: str = "/home/ec2-user/dev/dev.code-workspace",
 ) -> None:
     """Open VS Code on the instance with the given name"""
-    logger.info(f"[{instance_name}] Opening VS Code on instance")
-    subprocess.call(
-        [
-            "code",
-            "--",
-            f"--{target}-uri",
-            f"vscode-remote://ssh-remote+{instance_name}{path}",
-        ]
-    )
+    _open_vscode(session, instance_name, target, path)
 
 
 def _cmd_ray_up(
@@ -425,6 +439,7 @@ def _cmd_ray_up(
     cluster_name: str = "",
     prompt: bool = False,
     verbose: bool = False,
+    open_vscode: bool = False,
 ) -> None:
     cmd = ["ray", "up", str(RAY_CONFIG_ROOT / f"{config}.yaml")]
     if min_workers >= 0:
@@ -455,6 +470,9 @@ def _cmd_ray_up(
         f"[{cluster_name}] Use `refresh (r)` to update the SSH config for any workers "
         "not yet running."
     )
+
+    if open_vscode:
+        _open_vscode(session, f"ray-{cluster_name}-head")
 
 
 def _cmd_ray_down(
