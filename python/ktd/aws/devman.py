@@ -409,8 +409,6 @@ def _cmd_ray_up(
     prompt: bool = False,
     verbose: bool = False,
 ) -> None:
-    logger.info(f"[{config}] Creating or updating Ray cluster")
-
     cmd = ["ray", "up", str(RAY_CONFIG_ROOT / f"{config}.yaml")]
     if min_workers >= 0:
         cmd += ["--min-workers", str(min_workers)]
@@ -429,6 +427,7 @@ def _cmd_ray_up(
     if verbose:
         cmd.append("--verbose")
 
+    logger.info(f"[{cluster_name}] Creating or updating Ray cluster")
     subprocess.call(cmd)
 
     # 5s is usually sufficient for the minimal workers to be in the
@@ -436,7 +435,7 @@ def _cmd_ray_up(
     sleep(5)
     _update_ssh_config(session, instance_name=f"ray-{cluster_name}-*")
     logger.info(
-        f"[{config}] Use `refresh (r)` to update the SSH config for any workers "
+        f"[{cluster_name}] Use `refresh (r)` to update the SSH config for any workers "
         "not yet running."
     )
 
