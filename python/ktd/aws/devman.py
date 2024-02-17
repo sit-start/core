@@ -65,7 +65,7 @@ _CMD_PREFIX = "_cmd_"
 # TODO: add a tag to the stack and/or instance to make filtering easy
 
 
-def _github_ssh_keys(use_cached: bool = False) -> str:
+def _github_ssh_keys(use_cached: bool = True) -> str:
     github_keys_path = Path(os.environ["HOME"]) / ".ssh" / "github_keys"
     if use_cached and github_keys_path.exists():
         return github_keys_path.read_text()
@@ -422,6 +422,8 @@ def _cmd_ray_up(
         cmd.append("--restart-only")
     if cluster_name:
         cmd += ["--cluster-name", cluster_name]
+    else:
+        cluster_name = config
     if not prompt:
         cmd.append("--yes")
     if verbose:
@@ -432,7 +434,7 @@ def _cmd_ray_up(
     # 5s is usually sufficient for the minimal workers to be in the
     # running state after the Ray cluster is up
     sleep(5)
-    _update_ssh_config(session, instance_name=f"ray-{config}-*")
+    _update_ssh_config(session, instance_name=f"ray-{cluster_name}-*")
     logger.info(
         f"[{config}] Use `refresh (r)` to update the SSH config for any workers "
         "not yet running."
@@ -441,16 +443,16 @@ def _cmd_ray_up(
 
 def _cmd_ray_down(
     session: boto3.Session,
-    config: str = "g5g",
+    cluster_name: str = "g5g",
     workers_only: bool = False,
     keep_min_workers: bool = False,
     prompt: bool = False,
     verbose: bool = False,
     kill: bool = False,
 ) -> None:
-    logger.info(f"[{config}] Tearing down Ray cluster")
+    logger.info(f"[{cluster_name}] Tearing down Ray cluster")
 
-    cmd = ["ray", "down", str(RAY_CONFIG_ROOT / f"{config}.yaml")]
+    cmd = ["ray", "down", str(RAY_CONFIG_ROOT / f"{cluster_name}.yaml")]
     if workers_only:
         cmd.append("--workers-only")
     if keep_min_workers:
@@ -462,8 +464,8 @@ def _cmd_ray_down(
 
     subprocess.call(cmd)
 
-    cluster_names = f"ray-{config}-*"
-    worker_names = f"ray-{config}-workers"
+    cluster_names = f"ray-{cluster_name}-*"
+    worker_names = f"ray-{cluster_name}-workers"
 
     if kill and keep_min_workers:
         logger.warning("Killing instances with keep_min_workers is not implemented")
