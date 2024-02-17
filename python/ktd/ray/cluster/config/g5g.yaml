@@ -65,15 +65,15 @@ initialization_commands: []
 setup_commands:
   # ensure github keys are included in known hosts
   - grep -xqF "$(cat ~/.ssh/github_keys)" ~/.ssh/known_hosts 2>/dev/null || cat ~/.ssh/github_keys  >> ~/.ssh/known_hosts
-  # clone / sync dotfiles
+  # clone / sync dotfiles; requires dotfiles deploy key
   - yadm rev-parse --is-inside-work-tree >/dev/null 2>&1 && GIT_SSH_COMMAND="ssh -i ~/.ssh/dotfiles_deploy_ed25519" yadm pull || GIT_SSH_COMMAND="ssh -i ~/.ssh/dotfiles_deploy_ed25519" yadm clone git@github.com:kevdale/dotfiles --no-checkout && yadm checkout ~
   # setup wandb
   - wandb login
   - source ~/.bash_profile && mkdir -p $WANDB_DIR
 head_setup_commands:
-  # clone the dev repo and its submodules; we can only use one identity
-  # per invocation, so we need to update each submodule individually
-  - (cd dev && git rev-parse --is-inside-work-tree) >/dev/null 2>&1 || GIT_SSH_COMMAND="ssh -i ~/.ssh/dev_deploy_ed25519" git clone git@github.com:kevdale/dev && (cd dev && for repo in */; do GIT_SSH_COMMAND="ssh -i ~/.ssh/${repo%/}_deploy_ed25519" git submodule update --init --remote $repo && (cd $repo && git checkout $(git config -f ../.gitmodules --get submodule.${repo%/}.branch)); done)
+  # clone the dev repo; requires `deploy_dev` function from the dotfiles yadm
+  # clone above and deploy keys for dev and its submodules
+  - deploy_repo dev
 worker_setup_commands: []
 head_start_ray_commands:
   - ray stop
