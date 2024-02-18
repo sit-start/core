@@ -9,12 +9,14 @@ class Format(Enum):
     BARE = "bare"
 
 
-FORMATS = {
-    Format.GLOG: "%(levelname).1s%(asctime)s.%(msecs)d %(process)d %(filename)s:%(lineno)d] %(message)s",
-    Format.SIMPLE: "%(levelname).1s %(filename)s:%(lineno)d] %(message)s",
+MSG_FORMATS = {
+    Format.GLOG: "%(levelname).1s%(asctime)s %(process)d %(filename)s:%(lineno)d] %(message)s",
+    Format.SIMPLE: "%(levelname).1s%(asctime)s %(filename)s:%(lineno)d] %(message)s",
     Format.BARE: "%(message)s",
 }
-DATE_FORMAT = "%m%d %H:%M:%S"
+DATE_FORMATS = {
+    Format.SIMPLE: "%H:%M:%S",
+}
 
 
 def get_logger(
@@ -27,12 +29,15 @@ def get_logger(
     # reset with, e.g., logging.basicConfig(force=True)
     if isinstance(format, str):
         try:
-            format_str = FORMATS[Format(format)]
+            msg_fmt = MSG_FORMATS[Format(format)]
+            date_fmt = DATE_FORMATS.get(Format(format), None)
         except ValueError:
-            format_str = format
+            msg_fmt = format
+            date_fmt = None
     else:
-        format_str = FORMATS[format]
-    logging.basicConfig(format=format_str, force=True, datefmt=DATE_FORMAT, level=level)
+        msg_fmt = MSG_FORMATS[format]
+        date_fmt = DATE_FORMATS.get(format, None)
+    logging.basicConfig(format=msg_fmt, force=True, datefmt=date_fmt, level=level)
     logger = logging.getLogger(name)
     logger.setLevel(level)
     return logger
