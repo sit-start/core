@@ -4,6 +4,7 @@ import inspect
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from time import sleep
 
@@ -20,6 +21,7 @@ from ktd.aws.ec2.util import (
 )
 from ktd.aws.util import sso_login
 from ktd.cloudpathlib import CloudPath
+from ktd.util.text import strip_ansi_codes
 
 logger = ktd.logging.get_logger(__name__)
 
@@ -52,6 +54,7 @@ _PARAM_HELP = {
     "cluster_name": "override the configured cluster name",
     "prompt": "prompt for confirmation",
     "verbose": "display verbose output",
+    "show_output": "display output from the Ray command",
     # ray_down
     "workers_only": "only destroy workers",
     "keep_min_workers": "retain the minimal amount of workers specified in the config",
@@ -440,6 +443,7 @@ def _cmd_ray_up(
     prompt: bool = False,
     verbose: bool = False,
     open_vscode: bool = False,
+    show_output: bool = False,
 ) -> None:
     cmd = ["ray", "up", str(RAY_CONFIG_ROOT / f"{config}.yaml")]
     if min_workers >= 0:
@@ -460,7 +464,17 @@ def _cmd_ray_up(
         cmd.append("--verbose")
 
     logger.info(f"[{cluster_name}] Creating or updating Ray cluster")
-    subprocess.call(cmd)
+    if show_output:
+        subprocess.call(cmd)
+    else:
+        log_path = Path(tempfile.mkdtemp()) / f"ray_up_{cluster_name}.log"
+        logger.info(f"[{cluster_name}] Ray output written to {log_path}")
+        cmd += ["--log-color", "false"]
+        with open(log_path, "w") as f:
+            subprocess.call(cmd, stdout=f, stderr=subprocess.STDOUT)
+        # even with --log-color false, the log still contains ANSI codes, so
+        # strip them
+        log_path.write_text(strip_ansi_codes(log_path.read_text()))
 
     # 5s is usually sufficient for the minimal workers to be in the
     # running state after the Ray cluster is up
@@ -483,6 +497,7 @@ def _cmd_ray_down(
     prompt: bool = False,
     verbose: bool = False,
     kill: bool = False,
+    show_output: bool = False,
 ) -> None:
     logger.info(f"[{cluster_name}] Tearing down Ray cluster")
 
@@ -496,7 +511,17 @@ def _cmd_ray_down(
     if verbose:
         cmd.append("--verbose")
 
-    subprocess.call(cmd)
+    if show_output:
+        subprocess.call(cmd)
+    else:
+        log_path = Path(tempfile.mkdtemp()) / f"ray_down_{cluster_name}.log"
+        logger.info(f"[{cluster_name}] Ray output written to {log_path}")
+        cmd.append("--log-color false")
+        with open(log_path, "w") as f:
+            subprocess.call(cmd, stdout=f, stderr=subprocess.STDOUT)
+        # even with --log-color false, the log still contains ANSI codes, so
+        # strip them
+        log_path.write_text(strip_ansi_codes(log_path.read_text()))
 
     cluster_names = f"ray-{cluster_name}-*"
     worker_names = f"ray-{cluster_name}-workers"
