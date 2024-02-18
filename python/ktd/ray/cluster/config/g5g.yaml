@@ -55,7 +55,7 @@ cluster_synced_files:
   - "~ec2-user/dev"
   - "~ec2-user/.bash_profile"
   - "~ec2-user/.bashrc"
-file_mounts_sync_continuously: False
+file_mounts_sync_continuously: True
 rsync_exclude:
   - "**/.git"
   - "**/.git/**"
