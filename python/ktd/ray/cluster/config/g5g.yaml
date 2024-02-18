@@ -1,5 +1,5 @@
 cluster_name: g5g
-max_workers: 3
+max_workers: 4
 upscaling_speed: 1.0
 idle_timeout_minutes: 10
 provider:
@@ -26,7 +26,7 @@ available_node_types:
             VolumeType: gp3
   ray.worker.default:
     min_workers: 0
-    max_workers: 3
+    max_workers: 4
     resources: {}
     node_config:
       InstanceType: g5g.2xlarge
