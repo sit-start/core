@@ -403,7 +403,7 @@ def _cmd_create(
     _wait_for_stack_with_name(instance_name, session=session)
 
     # the devserver stack creates an instance with the same name
-    instances = get_instances(instance_name)
+    instances = get_instances(instance_name, states=["running"])
     assert instances is not None and len(instances) == 1
 
     _update_hostname_in_ssh_config(instances[0])
