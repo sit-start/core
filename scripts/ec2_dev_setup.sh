@@ -178,9 +178,9 @@ function install_pytorch_from_source() {
   # Install release from source
   # NOTE: this may OOM with < 16GB RAM; this can be mitigated by setting
   #       CMAKE_BUILD_PARALLEL_LEVEL to a lower value
-  git clone --recursive https://github.com/pytorch/pytorch.git
+  version=v2.2.0
+  git clone --depth 1 --branch $version --recursive https://github.com/pytorch/pytorch.git
   pushd pytorch
-  # git checkout v2.2.0 # TODO: use a release, not main
 
   source "$MAIN_VENV_PATH/bin/activate"
   LD_LIBRARY_PATH="$CUDA_HOME/lib64/:$LD_LIBRARY_PATH"
@@ -222,8 +222,6 @@ function install_torchvision_from_source() {
 function install_cleanup() {
   # ec2-user should own the virtual environment
   chown -R $USER $MAIN_VENV_PATH
-  # TODO: prime large python deps
-  # TODO: update timezone
 }
 
 function install() {
