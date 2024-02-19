@@ -17,8 +17,9 @@ def get_instance_name(instance: ServiceResource) -> str | None:
 
 def get_instances(
     name: str | None = None,
-    session: boto3.Session | None = None,
+    ids: list[str] = [],
     states: list[str] | None = None,
+    session: boto3.Session | None = None,
 ) -> list[ServiceResource]:
     """Returns a list of EC2 instances with the given name and state(s)
 
@@ -31,7 +32,7 @@ def get_instances(
         filters.append({"Name": "tag:Name", "Values": [name]})
     if states is not None:
         filters.append({"Name": "instance-state-name", "Values": states})
-    return list(ec2.instances.filter(Filters=filters))
+    return list(ec2.instances.filter(InstanceIds=ids, Filters=filters))
 
 
 def wait_for_instance_with_id(

@@ -217,7 +217,7 @@ def _kill_instances_by_name(
     kill_stacks: bool = False,
 ) -> None:
     states = states or list(set(_ALL_INSTANCE_STATES).difference(["terminated"]))
-    instances = get_instances(instance_name, session, states)
+    instances = get_instances(name=instance_name, states=states, session=session)
     _kill_instances(
         session, instances, update_ssh_config=update_ssh_config, kill_stacks=kill_stacks
     )
@@ -271,7 +271,7 @@ def _update_hostnames_in_ssh_config(
     running_instances: list[ServiceResource] = []
     other_instance_names: list[str] = []
 
-    for instance in get_instances(instance_name):
+    for instance in get_instances(name=instance_name, session=session):
         this_instance_name = _get_instance_name_for_ssh_config(instance)
         if instance.state["Name"].strip() == "running":  # type: ignore
             running_instances.append(instance)
@@ -289,7 +289,7 @@ def _cmd_start(session: boto3.Session, instance_name: str) -> None:
     logger.info(f"[{instance_name}] Starting instances")
 
     states = ["stopping", "stopped"]
-    instances = get_instances(instance_name, session, states=states)
+    instances = get_instances(name=instance_name, states=states, session=session)
     if not instances:
         logger.info(f"[{instance_name}] Instance in {'/'.join(states)} state not found")
         return
@@ -306,7 +306,7 @@ def _cmd_stop(session: boto3.Session, instance_name: str) -> None:
     logger.info(f"[{instance_name}] Stopping instances")
 
     states = ["pending", "running"]
-    instances = get_instances(instance_name, session, states=states)
+    instances = get_instances(name=instance_name, states=states, session=session)
     if not instances:
         logger.info(f"[{instance_name}] Instance in {'/'.join(states)} state not found")
         return
@@ -395,7 +395,7 @@ def _cmd_create(
     logger.info(f"[{instance_name}] Creating devserver")
 
     states = ["pending", "running", "stopping", "stopped"]
-    if get_instances(instance_name, states=states):
+    if get_instances(name=instance_name, states=states, session=session):
         logger.info(f"[{instance_name}] Instance name in use. Aborting.")
         return
 
@@ -411,7 +411,7 @@ def _cmd_create(
     _wait_for_stack_with_name(instance_name, session=session)
 
     # the devserver stack creates an instance with the same name
-    instances = get_instances(instance_name, states=["running"])
+    instances = get_instances(name=instance_name, states=["running"], session=session)
     assert instances is not None and len(instances) == 1
 
     _update_hostname_in_ssh_config(instances[0])
