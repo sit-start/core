@@ -66,9 +66,13 @@ def remove_from_ssh_config(host: str, path="~/.ssh/config") -> bool:
     return True
 
 
-def update_ssh_config(host: str, reset=False, path="~/.ssh/config", **kwargs) -> None:
+def update_ssh_config(
+    host: str, reset=False, no_overwrite: bool = False, path="~/.ssh/config", **kwargs
+) -> None:
     """Updates the SSH config for the given host"""
     logger.info(f"Updating SSH config for host '{host}'")
+    assert not (reset and no_overwrite), "Cannot use reset and no_overwrite together"
+
     conf_path = expanduser(path)
     conf = read_ssh_config(conf_path) if exists(conf_path) else empty_ssh_config_file()
 
@@ -76,6 +80,16 @@ def update_ssh_config(host: str, reset=False, path="~/.ssh/config", **kwargs) ->
         if reset:
             # TODO: fix issue with spacing in the SSH config file for reset=True
             conf.remove(host)
+        elif no_overwrite:
+            i = 1
+            while (alt_host := f"{host}-{i}") in conf.hosts():
+                i += 1
+            logger.warning(
+                f"Host '{host}' already exists in SSH config, "
+                f"using alternative name {repr(alt_host)}",
+            )
+            conf.add(alt_host, **conf.host(host))
+            conf.set(alt_host, **kwargs)
         else:
             conf.set(host, **kwargs)
 
