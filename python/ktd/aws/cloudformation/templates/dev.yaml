@@ -27,7 +27,7 @@ Parameters:
   DevserverActivityTopic:
     Description: SNS topic to which activity should be sent
     Type: String
-    Default: arn:aws:sns:us-west-2:960487471244:DevserverActivity
+    Default: arn:aws:sns:us-west-2:960487471244:DevserverActivityTopic
 Mappings:
   InstanceTypeToArch:
     g5g.2xlarge:
