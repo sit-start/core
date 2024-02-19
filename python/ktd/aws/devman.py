@@ -473,7 +473,7 @@ def _cmd_ray_up(
     if show_output:
         subprocess.call(cmd)
     else:
-        log_path = Path(tempfile.mkdtemp()) / f"ray_up_{cluster_name}.log"
+        log_path = Path(tempfile.mkdtemp(prefix="/tmp/")) / f"ray_up_{cluster_name}.log"
         logger.info(f"[{cluster_name}] Ray output written to {log_path}")
         cmd += ["--log-color", "false"]
         with open(log_path, "w") as f:
@@ -525,7 +525,7 @@ def _cmd_ray_down(
     if show_output:
         subprocess.call(cmd)
     else:
-        log_path = Path(tempfile.mkdtemp()) / f"ray_down_{cluster_name}.log"
+        log_path = Path(tempfile.mkdtemp(prefix="/tmp/")) / f"ray_down_{cluster_name}.log"
         logger.info(f"[{cluster_name}] Ray output written to {log_path}")
         cmd.append("--log-color false")
         with open(log_path, "w") as f:
