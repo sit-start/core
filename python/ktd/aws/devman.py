@@ -21,7 +21,7 @@ from ktd.aws.ec2.util import (
 )
 from ktd.aws.util import sso_login
 from ktd.cloudpathlib import CloudPath
-from ktd.util.text import strip_ansi_codes
+from ktd.util.text import strip_ansi_codes, truncate
 
 logger = ktd.logging.get_logger(__name__, format="simple")
 
@@ -142,11 +142,6 @@ def _clone_repos(
         ]
         cmd = f"mkdir -p {repo_root} && cd $_ && {'; '.join(clone_cmds)}"
         subprocess.call(["ssh", instance_name, cmd])
-
-
-def _trunc(s: str, max_len: int = 50) -> str:
-    suffix = "..."
-    return s if len(s) <= max_len else s[: max_len - len(suffix)] + suffix
 
 
 def _update_hostname_in_ssh_config(instance: ServiceResource) -> None:
@@ -362,9 +357,9 @@ def _cmd_list(
             continue
 
         if not no_compact:
-            info["state"] = _trunc(info["state"], state_width)
-            info["instance_type"] = _trunc(info["instance_type"], type_width)
-            info["name"] = _trunc(info["name"], name_width)
+            info["state"] = truncate(info["state"], state_width)
+            info["instance_type"] = truncate(info["instance_type"], type_width)
+            info["name"] = truncate(info["name"], name_width)
 
         logger.info(
             f"{info['state']:>{state_width}} {info['name']:<{name_width}} "
