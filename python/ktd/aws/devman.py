@@ -23,7 +23,7 @@ from ktd.aws.util import sso_login
 from ktd.cloudpathlib import CloudPath
 from ktd.util.text import strip_ansi_codes
 
-logger = ktd.logging.get_logger(__name__)
+logger = ktd.logging.get_logger(__name__, format="simple")
 
 CF_TEMPLATE_PATH = Path(__file__).parent / "cloudformation" / "templates" / "dev.yaml"
 RAY_CONFIG_ROOT = Path(__file__).parent.parent / "ray" / "cluster" / "config"
@@ -259,9 +259,11 @@ def _add_subparser(
     return parser
 
 
-def _update_ssh_config(session: boto3.Session, instance_name: str = "?*") -> None:
+def _update_hostnames_in_ssh_config(
+    session: boto3.Session, instance_name: str = "?*"
+) -> None:
     """Update the SSH config for all running instances with the given name"""
-    logger.info(f"[{instance_name} Updating SSH config")
+    logger.info(f"[{instance_name}] Updating hostnames in SSH config")
 
     running_instances: list[ServiceResource] = []
     other_instance_names: list[str] = []
@@ -371,8 +373,8 @@ def _cmd_list(
 
 
 def _cmd_refresh(session: boto3.Session) -> None:
-    """Refresh the SSH config for all running named instances"""
-    _update_ssh_config(session, instance_name="?*")
+    """Refresh hostnames in the SSH config for all running named instances"""
+    _update_hostnames_in_ssh_config(session, instance_name="?*")
 
 
 def _cmd_create(
@@ -479,14 +481,18 @@ def _cmd_ray_up(
     # 5s is usually sufficient for the minimal workers to be in the
     # running state after the Ray cluster is up
     sleep(5)
-    _update_ssh_config(session, instance_name=f"ray-{cluster_name}-*")
+    _update_hostnames_in_ssh_config(session, instance_name=f"ray-{cluster_name}-*")
+
+    cluster_head_name = f"ray-{cluster_name}-head"
+    port = 8265
     logger.info(
-        f"[{cluster_name}] Use `refresh (r)` to update the SSH config for any workers "
-        "not yet running."
+        f"[{cluster_head_name}] Enabling local forwarding of port {port} "
+        "for Ray dashboard"
     )
+    update_ssh_config(cluster_head_name, LocalForward="127.0.0.1:8265 127.0.0.1:8265")
 
     if open_vscode:
-        _open_vscode(session, f"ray-{cluster_name}-head")
+        _open_vscode(session, cluster_head_name)
 
 
 def _cmd_ray_down(
@@ -533,7 +539,7 @@ def _cmd_ray_down(
         logger.info(f"[{instance_name}] Killing instances")
         _kill_instances_by_name(session, instance_name, update_ssh_config=False)
 
-    _update_ssh_config(session, instance_name=cluster_names)
+    _update_hostnames_in_ssh_config(session, instance_name=cluster_names)
 
 
 def main():
