@@ -2,6 +2,7 @@
 import argparse
 import inspect
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -34,7 +35,7 @@ _PARAM_HELP = {
     "instance_name": "the instance name / pattern",
     "open_vscode": "open VS Code to the `open` command's default target/path",
     # list
-    "no_compact": "do not display compact output",
+    "compact": "display compact output",
     "show_killed": "show killed instances",
     # create
     "instance_type": "the instance type",
@@ -144,12 +145,22 @@ def _clone_repos(
         subprocess.call(["ssh", instance_name, cmd])
 
 
-def _update_hostname_in_ssh_config(instance: ServiceResource) -> None:
-    instance_name = get_instance_name(instance)
-    if instance_name is None:
-        logger.warning(f"Instance has no name: {instance.id}")  # type: ignore
-        return
+def _get_instance_name_for_ssh_config(instance: ServiceResource) -> str:
+    """Attempts to return a unique name for the given instance"""
+    name = get_instance_name(instance)
+    id = instance.id  # type: ignore
+    if name is None:
+        logger.warning(f"Instance has no name; using instance ID {id}")
+        return id
+    expected_duplicate_patterns = ["^ray-.*-worker$"]
+    for pattern in expected_duplicate_patterns:
+        if re.match(pattern, name):
+            return f"{name}-{id}"
+    return name
 
+
+def _update_hostname_in_ssh_config(instance: ServiceResource) -> None:
+    instance_name = _get_instance_name_for_ssh_config(instance)
     assert instance.meta is not None, f"[{instance_name}] Instance has no metadata"
     host_name = instance.meta.data["PublicDnsName"]
     if not host_name:
@@ -184,21 +195,18 @@ def _kill_instances(
     ec2_client = session.client("ec2")
     ec2_client.terminate_instances(InstanceIds=instance_ids)  # type: ignore
 
-    instance_names = [get_instance_name(instance) for instance in instances]
-
     # also terminate a stack if it exists, as is the case for
     # devservers, and remove from the SSH config
     if kill_stacks:
         cf_client = session.client("cloudformation")
-        for name in instance_names:
-            if name:
+        for instance in instances:
+            if name := get_instance_name(instance):
                 logger.info(f"[{name}] Killing stack")
                 cf_client.delete_stack(StackName=name)  # type: ignore
 
     if update_ssh_config:
-        for name in instance_names:
-            if name:
-                remove_from_ssh_config(name)
+        for instance in instances:
+            remove_from_ssh_config(_get_instance_name_for_ssh_config(instance))
 
 
 def _kill_instances_by_name(
@@ -264,8 +272,7 @@ def _update_hostnames_in_ssh_config(
     other_instance_names: list[str] = []
 
     for instance in get_instances(instance_name):
-        if (this_instance_name := get_instance_name(instance)) is None:
-            continue
+        this_instance_name = _get_instance_name_for_ssh_config(instance)
         if instance.state["Name"].strip() == "running":  # type: ignore
             running_instances.append(instance)
         else:
@@ -309,8 +316,7 @@ def _cmd_stop(session: boto3.Session, instance_name: str) -> None:
     ec2_client.stop_instances(InstanceIds=instance_ids)  # type: ignore
 
     for instance in instances:
-        if this_instance_name := get_instance_name(instance):
-            remove_from_ssh_config(this_instance_name)
+        remove_from_ssh_config(_get_instance_name_for_ssh_config(instance))
 
 
 def _cmd_kill(session: boto3.Session, instance_name: str) -> None:
@@ -320,7 +326,9 @@ def _cmd_kill(session: boto3.Session, instance_name: str) -> None:
 
 
 def _cmd_list(
-    session: boto3.Session, show_killed: bool = False, no_compact: bool = False
+    session: boto3.Session,
+    show_killed: bool = False,
+    compact: bool = False,
 ) -> None:
     """List instances"""
     # FIXME: track stacks w/ specific tag, not instances, since it's
@@ -330,7 +338,7 @@ def _cmd_list(
     for instance in session.resource("ec2").instances.all():
         info = {
             "state": instance.state["Name"].strip(),
-            "dns_name": instance.public_dns_name.strip(),
+            "ip": (instance.public_ip_address or "").strip(),
             "name": str(get_instance_name(instance)),
             "instance_type": instance.instance_type.strip(),
         }
@@ -347,7 +355,7 @@ def _cmd_list(
     type_width = max([len(i["instance_type"]) for i in instance_info.values()])
     state_width = max([len(i["state"]) for i in instance_info.values()])
 
-    if not no_compact:
+    if compact:
         name_width = min(name_width, 8)
         type_width = min(type_width, 11)
         state_width = min(state_width, 7)
@@ -356,14 +364,14 @@ def _cmd_list(
         if info["state"] == "terminated" and not show_killed:
             continue
 
-        if not no_compact:
+        if compact:
             info["state"] = truncate(info["state"], state_width)
             info["instance_type"] = truncate(info["instance_type"], type_width)
             info["name"] = truncate(info["name"], name_width)
 
         logger.info(
             f"{info['state']:>{state_width}} {info['name']:<{name_width}} "
-            f"{info['instance_type']:<{type_width}} {id} {info['dns_name']}"
+            f"{info['instance_type']:<{type_width}} {id} {info['ip']}"
         )
 
 
