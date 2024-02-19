@@ -447,6 +447,7 @@ def _cmd_ray_up(
     open_vscode: bool = False,
     show_output: bool = False,
 ) -> None:
+    """Create or update a ray cluster"""
     cmd = ["ray", "up", str(RAY_CONFIG_ROOT / f"{config}.yaml")]
     if min_workers >= 0:
         cmd += ["--min-workers", str(min_workers)]
@@ -505,6 +506,7 @@ def _cmd_ray_down(
     kill: bool = False,
     show_output: bool = False,
 ) -> None:
+    """Tear down a Ray cluster"""
     logger.info(f"[{cluster_name}] Tearing down Ray cluster")
 
     cmd = ["ray", "down", str(RAY_CONFIG_ROOT / f"{cluster_name}.yaml")]
@@ -542,8 +544,22 @@ def _cmd_ray_down(
     _update_hostnames_in_ssh_config(session, instance_name=cluster_names)
 
 
+def _cmd_ray_monitor(session: boto3.Session, cluster_name: str = "g5g") -> None:
+    """Monitor autoscaling for a Ray cluster"""
+    log_path = "/tmp/ray/session_latest/logs/monitor*"
+    cmd = [
+        "ray",
+        "exec",
+        str(RAY_CONFIG_ROOT / f"{cluster_name}.yaml"),
+        "--",
+        f"tail -n 100 -f {log_path}",
+    ]
+    logger.info(" ".join(cmd))
+    subprocess.call(cmd)
+
+
 def main():
-    """Manages devserver instances"""
+    """Manages devserver instances and cluster resources"""
     parser = argparse.ArgumentParser(
         description=main.__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
@@ -559,8 +575,9 @@ def main():
         "refresh": ["r"],
         "create": ["c"],
         "open": ["o"],
-        "ray_up": ["u"],
-        "ray_down": ["d"],
+        "ray_up": ["u", "up"],
+        "ray_down": ["d", "down"],
+        "ray_monitor": ["m", "monitor"],
     }
     for cmd, aliases in commands.items():
         _add_subparser(subparsers, cmd, aliases)
