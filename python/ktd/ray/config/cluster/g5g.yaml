@@ -64,20 +64,68 @@ rsync_filter:
 initialization_commands: []
 setup_commands:
   # ensure github keys are included in known hosts
-  - grep -xqF "$(cat ~/.ssh/github_keys)" ~/.ssh/known_hosts 2>/dev/null || cat ~/.ssh/github_keys  >> ~/.ssh/known_hosts
-  # clone / sync dotfiles; requires dotfiles deploy key
-  - yadm rev-parse --is-inside-work-tree >/dev/null 2>&1 && GIT_SSH_COMMAND="ssh -i ~/.ssh/dotfiles_deploy_ed25519" yadm pull || GIT_SSH_COMMAND="ssh -i ~/.ssh/dotfiles_deploy_ed25519" yadm clone git@github.com:kevdale/dotfiles --no-checkout && yadm checkout ~
-  # setup wandb
+  - |
+    grep -xqF "$(cat ~/.ssh/github_keys)" ~/.ssh/known_hosts 2>/dev/null || \
+      cat ~/.ssh/github_keys  >> ~/.ssh/known_hosts
+  # clone and sync dotfiles; this requires dotfiles deploy key
+  - |
+    yadm rev-parse --is-inside-work-tree >/dev/null 2>&1 &&
+      GIT_SSH_COMMAND="ssh -i ~/.ssh/dotfiles_deploy_ed25519" \
+        yadm pull ||
+      GIT_SSH_COMMAND="ssh -i ~/.ssh/dotfiles_deploy_ed25519" \
+        yadm clone git@github.com:kevdale/dotfiles --no-checkout &&
+      yadm checkout ~
+  # login and configure wandb
   - wandb login
   - source ~/.bash_profile && mkdir -p $WANDB_DIR
 head_setup_commands:
   # clone the dev repo; requires `deploy_dev` function from the dotfiles yadm
   # clone above and deploy keys for dev and its submodules
   - deploy_repo dev
-worker_setup_commands: []
+  # create the prometheus service file
+  - |
+    sudo cp "$DEV/core/python/ktd/ray/config/aux/prometheus.service" \
+      /etc/systemd/system/prometheus.service
+  # update the fluent-bit config after deploying dev
+  - |
+    sudo mkdir -p /etc/fluent-bit &&
+      sudo cp "$DEV/core/python/ktd/ray/config/aux/fluent-bit.conf" \
+        /etc/fluent-bit/fluent-bit.conf
+  # update the grafana service file to ensure grafana can acccess Ray
+  # config files in /tmp/ray
+  - |
+    sudo sed -i \
+      's/^PrivateTmp=true/PrivateTmp=false # need to access \/tmp\/ray\//g' \
+      /usr/lib/systemd/system/grafana-server.service
+worker_setup_commands:
+  # update the fluent-bit config; requires $DEV/core to be populated
+  - |
+    sudo cp "$DEV/core/python/ktd/ray/config/aux/fluent-bit.conf" \
+      /etc/fluent-bit/fluent-bit.conf
 head_start_ray_commands:
+  # restart ray
   - ray stop
-  - ray start --head --port=6379 --object-manager-port=8076 --autoscaling-config=~/ray_bootstrap_config.yaml --dashboard-host=0.0.0.0
+  - |
+    ray start --head --port=6379 --object-manager-port=8076 \
+      --autoscaling-config=~/ray_bootstrap_config.yaml \
+      --dashboard-host=0.0.0.0
+  # update the grafana service config; requires that ray has started;
+  # note that replacing CONF_FILE in /etc/sysconfig/grafana-server
+  # doesn't work without additional changes to the grafana service file, e.g.,
+  # specifiying `--homepath=${GRAFANA_HOME}` in the `ExecStart` line,
+  # so we opt the for the simpler approach of replacing the service config
+  - |
+    sudo test -f /etc/grafana/grafana.ini.ray-bak || (
+      sudo cp /etc/grafana/grafana.ini /etc/grafana/grafana.ini.ray-bak &&
+        sudo cp /tmp/ray/session_latest/metrics/grafana/grafana.ini \
+          /etc/grafana/grafana.ini)
+  # start services
+  - sudo systemctl start grafana-server
+  - sudo systemctl start prometheus
+  - sudo systemctl start fluent-bit
 worker_start_ray_commands:
+  # restart ray
   - ray stop
   - ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076
+  # start the fluent-bit service
+  - sudo systemctl start fluent-bit
