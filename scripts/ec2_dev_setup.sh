@@ -30,6 +30,68 @@ function install_yadm() {
   curl -fLo /usr/local/bin/yadm https://github.com/TheLocehiliosan/yadm/raw/master/yadm && chmod a+x /usr/local/bin/yadm
 }
 
+function install_grafana() {
+  echo "Installing Grafana"
+  yum install -y "https://dl.grafana.com/enterprise/release/grafana-enterprise-10.3.3-1.$ARCH.rpm"
+}
+
+function install_fluent_bit() {
+  echo "Installing Fluent Bit"
+  mkdir fluent_bit
+  pushd fluent_bit
+  echo "[fluent-bit]
+name = Fluent Bit
+baseurl = https://packages.fluentbit.io/amazonlinux/2023/
+gpgcheck=1
+gpgkey=https://packages.fluentbit.io/fluentbit.key
+enabled=1" | tee /etc/yum.repos.d/fluent-bit.repo
+  yum -y install fluent-bit
+  popd
+
+}
+
+function install_prometheus() {
+  # https://devopscube.com/install-configure-prometheus-linux/
+  echo "Installing Prometheus"
+
+  if [ "$ARCH" == "aarch64" ]; then
+    arch="arm64"
+  else # x86_64
+    arch="amd64"
+  fi
+
+  mkdir prometheus
+  pushd prometheus
+  version="2.49.1"
+  prometheus="prometheus-$version.linux-$arch"
+  wget -nv https://github.com/prometheus/prometheus/releases/download/v$version/$prometheus.tar.gz
+  tar -xzf $prometheus.tar.gz
+
+  # Create a Prometheus user, required directories, and make Prometheus the
+  # user as the owner of those directories.
+  useradd --no-create-home --shell /bin/false prometheus
+  mkdir /etc/prometheus
+  mkdir /var/lib/prometheus
+  chown prometheus:prometheus /etc/prometheus
+  chown prometheus:prometheus /var/lib/prometheus
+
+  # Copy prometheus and promtool binary from prometheus-files folder to
+  # /usr/local/bin and change the ownership to prometheus user.
+  cp "$prometheus/prometheus" /usr/local/bin/
+  cp "$prometheus/promtool" /usr/local/bin/
+  chown prometheus:prometheus /usr/local/bin/prometheus
+  chown prometheus:prometheus /usr/local/bin/promtool
+
+  # Move the consoles and console_libraries directories from prometheus-files
+  # to /etc/prometheus folder and change the ownership to prometheus user.
+  cp -r $prometheus/consoles /etc/prometheus
+  cp -r $prometheus/console_libraries /etc/prometheus
+  chown -R prometheus:prometheus /etc/prometheus/consoles
+  chown -R prometheus:prometheus /etc/prometheus/console_libraries
+
+  popd
+}
+
 function install_awscli() {
   yum -y remove awscli
   mkdir awscli
@@ -215,6 +277,7 @@ function install_torchvision_from_source() {
   wget https://github.com/pytorch/vision/archive/refs/tags/v0.17.0.tar.gz
   tar -xf v0.17.0.tar.gz
   pushd vision-0.17.0
+  source "$MAIN_VENV_PATH/bin/activate"
   python3 setup.py install
   popd
 }
