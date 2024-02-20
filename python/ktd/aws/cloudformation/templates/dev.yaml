@@ -51,10 +51,10 @@ Mappings:
   ArchToAMI:
     aarch64:
       # base ami-08a800e4b5aa90bb8, setup via scripts/ec2_dev_setup.sh:install_g5g()
-      AMI: ami-00cd3448b7644fcd6
+      AMI: ami-071bc49379107ae95
     x86-64:
       # base ami-0ba26e8b3af2b7155, setup via scripts/ec2_dev_setup.sh:install_g5()
-      AMI: ami-03c22e640e258e9b5 # TODO: needs pigar, ray[default], amazon cloudwatch agent
+      AMI: ami-03c22e640e258e9b5 # TODO: needs a full rebuild
 Resources:
   Ec2Instance:
     Type: AWS::EC2::Instance

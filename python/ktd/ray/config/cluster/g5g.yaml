@@ -15,7 +15,7 @@ available_node_types:
     resources: {}
     node_config:
       InstanceType: m6g.xlarge
-      ImageId: ami-00cd3448b7644fcd6
+      ImageId: ami-071bc49379107ae95
       KeyName: rsa
       IamInstanceProfile:
         Arn: arn:aws:iam::960487471244:instance-profile/ray-head
@@ -30,7 +30,7 @@ available_node_types:
     resources: {}
     node_config:
       InstanceType: g5g.2xlarge
-      ImageId: ami-00cd3448b7644fcd6
+      ImageId: ami-071bc49379107ae95
       KeyName: rsa
       IamInstanceProfile:
         Arn: arn:aws:iam::960487471244:instance-profile/ray-worker
