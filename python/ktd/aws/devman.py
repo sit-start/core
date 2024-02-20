@@ -26,9 +26,11 @@ from ktd.util.text import strip_ansi_codes, truncate
 
 logger = ktd.logging.get_logger(__name__, format="simple")
 
+# TODO: use subprocess.check_call() throughout
+
 SSH_CONFIG_PATH = Path(os.environ["HOME"]) / ".ssh" / "config"
 CF_TEMPLATE_PATH = Path(__file__).parent / "cloudformation" / "templates" / "dev.yaml"
-RAY_CONFIG_ROOT = Path(__file__).parent.parent / "ray" / "cluster" / "config"
+RAY_CONFIG_ROOT = Path(__file__).parent.parent / "ray" / "config" / "cluster"
 _PARAM_HELP = {
     # devman
     "profile": "the AWS SSO profile to use for the session",
@@ -511,8 +513,7 @@ def _cmd_ray_up(
     cluster_head_name = f"ray-{cluster_name}-head"
     ports = [RAY_DASHBOARD_PORT, PROMETHEUS_PORT]
     logger.info(
-        f"[{cluster_head_name}] Enabling local forwarding of ports {ports} "
-        "for Ray dashboard, Prometheus, and Grafana"
+        f"[{cluster_head_name}] Forwarding ports {ports} for dashboard, Prometheus"
     )
     _add_local_forward_to_ssh_config(cluster_head_name, ports)
 
