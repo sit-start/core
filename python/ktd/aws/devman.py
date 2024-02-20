@@ -26,6 +26,7 @@ from ktd.util.text import strip_ansi_codes, truncate
 
 logger = ktd.logging.get_logger(__name__, format="simple")
 
+SSH_CONFIG_PATH = Path(os.environ["HOME"]) / ".ssh" / "config"
 CF_TEMPLATE_PATH = Path(__file__).parent / "cloudformation" / "templates" / "dev.yaml"
 RAY_CONFIG_ROOT = Path(__file__).parent.parent / "ray" / "cluster" / "config"
 _PARAM_HELP = {
@@ -71,6 +72,8 @@ _ALL_INSTANCE_STATES = [
     "shutting-down",
     "terminated",
 ]
+RAY_DASHBOARD_PORT = 8265
+PROMETHEUS_PORT = 9090
 
 
 def _github_ssh_keys(use_cached: bool = True) -> str:
@@ -100,6 +103,24 @@ def _open_vscode(
             f"vscode-remote://ssh-remote+{instance_name}{path}",
         ]
     )
+
+
+def _add_local_forward_to_ssh_config(host: str, ports: list[int]) -> None:
+    """Add multiple LocalForward entries to the SSH config for the given host"""
+    # The sshconf library doesn't support adding more than one of any entry in
+    # a host config; this is a workaround.
+
+    # create a placeholder entry; this removes existing entries if they exist
+    placeholder = "PLACEHOLDER"
+    update_ssh_config(host, LocalForward=placeholder, path=str(SSH_CONFIG_PATH))
+
+    # replace the placeholder with actual entries
+    entries = "\n  ".join(
+        f"LocalForward 127.0.0.1:{port} 127.0.0.1:{port}" for port in ports
+    )
+    config = SSH_CONFIG_PATH.read_text()
+    placeholder_entry = f"LocalForward {placeholder}"
+    SSH_CONFIG_PATH.write_text(config.replace(placeholder_entry, entries))
 
 
 def _clone_repos(
@@ -166,7 +187,7 @@ def _update_hostname_in_ssh_config(instance: ServiceResource) -> None:
     if not host_name:
         logger.info("No hostname to update in SSH config")
         return
-    update_ssh_config(instance_name, HostName=host_name)
+    update_ssh_config(instance_name, HostName=host_name, path=SSH_CONFIG_PATH)
 
 
 def _wait_for_stack_with_name(
@@ -488,12 +509,12 @@ def _cmd_ray_up(
     _update_hostnames_in_ssh_config(session, instance_name=f"ray-{cluster_name}-*")
 
     cluster_head_name = f"ray-{cluster_name}-head"
-    port = 8265
+    ports = [RAY_DASHBOARD_PORT, PROMETHEUS_PORT]
     logger.info(
-        f"[{cluster_head_name}] Enabling local forwarding of port {port} "
-        "for Ray dashboard"
+        f"[{cluster_head_name}] Enabling local forwarding of ports {ports} "
+        "for Ray dashboard, Prometheus, and Grafana"
     )
-    update_ssh_config(cluster_head_name, LocalForward="127.0.0.1:8265 127.0.0.1:8265")
+    _add_local_forward_to_ssh_config(cluster_head_name, ports)
 
     if open_vscode:
         _open_vscode(session, cluster_head_name)
@@ -525,7 +546,9 @@ def _cmd_ray_down(
     if show_output:
         subprocess.call(cmd)
     else:
-        log_path = Path(tempfile.mkdtemp(prefix="/tmp/")) / f"ray_down_{cluster_name}.log"
+        log_path = (
+            Path(tempfile.mkdtemp(prefix="/tmp/")) / f"ray_down_{cluster_name}.log"
+        )
         logger.info(f"[{cluster_name}] Ray output written to {log_path}")
         cmd.append("--log-color false")
         with open(log_path, "w") as f:
