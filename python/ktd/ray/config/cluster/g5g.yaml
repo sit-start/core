@@ -40,17 +40,7 @@ available_node_types:
             VolumeSize: 256
             VolumeType: gp3
 head_node_type: ray.head.default
-file_mounts: {
-    # github keys
-    "~ec2-user/.ssh/github_keys": "~/.ssh/github_keys",
-    # deploy keys with read-only access to core and dotfiles repos
-    "~ec2-user/.ssh/core_deploy_ed25519": "~/.ssh/core_deploy_ed25519",
-    "~ec2-user/.ssh/notebooks_deploy_ed25519": "~/.ssh/notebooks_deploy_ed25519",
-    "~ec2-user/.ssh/dotfiles_deploy_ed25519": "~/.ssh/dotfiles_deploy_ed25519",
-    "~ec2-user/.ssh/dev_deploy_ed25519": "~/.ssh/dev_deploy_ed25519",
-    # local project source; optional
-    # "~ec2-user/dev": "~/dev",
-  }
+file_mounts: {}
 cluster_synced_files:
   - "~ec2-user/dev"
   - "~ec2-user/.bash_profile"
@@ -63,12 +53,26 @@ rsync_filter:
   - ".gitignore"
 initialization_commands: []
 setup_commands:
-  # ensure github keys are included in known hosts
   - |
-    grep -xqF "$(cat ~/.ssh/github_keys)" ~/.ssh/known_hosts 2>/dev/null || \
-      cat ~/.ssh/github_keys  >> ~/.ssh/known_hosts
-  # clone and sync dotfiles; this requires dotfiles deploy key
+    # fetch repo deploy keys
+    repos=(dev core notebooks dotfiles)
+    for repo in "${repos[@]}"; do
+      key_name="${repo}_deploy_ed25519"
+      test -f ~/.ssh/"$key_name" ||
+        (aws secretsmanager get-secret-value --secret-id "$key_name" \
+          --query SecretString --output text |
+          jq --raw-output .private >~/.ssh/"$key_name" &&
+          chmod go-rwx ~/.ssh/"$key_name")
+    done
   - |
+    # add github keys to known hosts
+    github_keys=$(curl -s https://api.github.com/meta | jq -r .ssh_keys[])
+    grep -xqF "$github_keys" ~/.ssh/known_hosts 2>/dev/null ||
+      while IFS= read -r key; do
+        echo "github.com $key" >>~/.ssh/known_hosts
+      done <<<"$github_keys"
+  - |
+    # clone and sync dotfiles
     yadm rev-parse --is-inside-work-tree >/dev/null 2>&1 &&
       GIT_SSH_COMMAND="ssh -i ~/.ssh/dotfiles_deploy_ed25519" \
         yadm pull ||
