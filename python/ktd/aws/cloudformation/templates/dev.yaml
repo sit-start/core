@@ -116,29 +116,7 @@ Resources:
             yadm clone git@github.com:kevdale/dotfiles --no-checkout && \
             yadm checkout ~'
           # clone the main dev repo
-          cd ~ec2-user
-          GIT_SSH_COMMAND="ssh -i ~ec2-user/.ssh/dev_deploy_ed25519" \
-            git clone git@github.com:kevdale/dev
-          # init/update each submodule and checkout the correct branch
-          cd ~ec2-user/dev
-          submodules=($(
-            git config \
-              -f .gitmodules --get-regexp path | awk '{ print $2 }'
-          ))
-          for submodule in "${submodules[@]}"; do
-            GIT_SSH_COMMAND="ssh -i ~ec2-user/.ssh/${submodule}_deploy_ed25519" \
-              git submodule update --init --remote $submodule
-            sub_path=$(
-              git config \
-                -f .gitmodules --get "submodule.$submodule.path"
-            )
-            sub_branch=$(
-              git config \
-                -f .gitmodules --get "submodule.$submodule.branch"
-            )
-            (cd "$sub_path" && git checkout $sub_branch)
-          done
-          chown -R ec2-user:ec2-user ~ec2-user/dev
+          su - ec2-user -c 'deploy_repo dev'
         - !Ref AWS::NoValue
   InactiveAlarm:
     Type: AWS::CloudWatch::Alarm
