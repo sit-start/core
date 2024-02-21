@@ -336,7 +336,8 @@ def _cmd_list(
     for instance in session.resource("ec2").instances.all():
         info = {
             "state": instance.state["Name"].strip(),
-            "ip": (instance.public_ip_address or "").strip(),
+            "dns_name": instance.public_dns_name.strip(),
+            "ip": (instance.private_ip_address or "").strip(),
             "name": str(get_instance_name(instance)),
             "instance_type": instance.instance_type.strip(),
         }
@@ -352,6 +353,8 @@ def _cmd_list(
     name_width = max([len(i["name"]) for i in instance_info.values()])
     type_width = max([len(i["instance_type"]) for i in instance_info.values()])
     state_width = max([len(i["state"]) for i in instance_info.values()])
+    ip_width = max([len(i["ip"]) for i in instance_info.values()])
+    id_width = max([len(i) for i in instance_info.keys()])
 
     if compact:
         name_width = min(name_width, 8)
@@ -369,7 +372,8 @@ def _cmd_list(
 
         logger.info(
             f"{info['state']:>{state_width}} {info['name']:<{name_width}} "
-            f"{info['instance_type']:<{type_width}} {id} {info['ip']}"
+            f"{info['instance_type']:<{type_width}} {id:<{id_width}} "
+            f"{info['ip']:<{ip_width}} {info['dns_name']}"
         )
 
 
