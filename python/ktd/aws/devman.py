@@ -125,47 +125,21 @@ def _add_local_forward_to_ssh_config(host: str, ports: list[int]) -> None:
     SSH_CONFIG_PATH.write_text(config.replace(placeholder_entry, entries))
 
 
-def _clone_repos(
-    instance_name: str,
-    repo_root: str,
-    repos: list[str] | None,
-    yadm_dotfiles_repo: str | None,
-) -> None:
-    # NOTE - yadm and git commands assume identity forwarding is setup in the SSH config
-
-    logger.info(f"[{instance_name}] Updating known hosts over initial SSH connection")
-    # add github to known hosts, with retries on the initial connection
-    github_keys = _github_ssh_keys()
+def _wait_for_ssh(instance_name: str, max_attempts: int = 15) -> None:
+    logger.info(f"[{instance_name}] Waiting for SSH")
     subprocess.call(
         [
             "ssh",
             "-o",
-            "ConnectionAttempts 10",
+            f"ConnectionAttempts {max_attempts}",
+            "-o",
+            "BatchMode yes",
             "-o",
             "StrictHostKeyChecking no",
             instance_name,
-            f"echo '{github_keys}' >> ~/.ssh/known_hosts",
+            "true",
         ]
     )
-
-    if yadm_dotfiles_repo:
-        logger.info(f"[{instance_name}] Cloning dotfiles")
-        subprocess.call(
-            [
-                "ssh",
-                instance_name,
-                f"yadm clone git@github.com:{yadm_dotfiles_repo} --no-checkout; "
-                "yadm checkout ~",
-            ]
-        )
-
-    if repos:
-        logger.info(f"[{instance_name}] Cloning repos")
-        clone_cmds = [
-            f"git clone git@github.com:{r} --recurse-submodules" for r in repos
-        ]
-        cmd = f"mkdir -p {repo_root} && cd $_ && {'; '.join(clone_cmds)}"
-        subprocess.call(["ssh", instance_name, cmd])
 
 
 def _get_instance_name_for_ssh_config(instance: ServiceResource) -> str:
@@ -189,7 +163,7 @@ def _update_hostname_in_ssh_config(instance: ServiceResource) -> None:
     if not host_name:
         logger.info("No hostname to update in SSH config")
         return
-    update_ssh_config(instance_name, HostName=host_name, path=SSH_CONFIG_PATH)
+    update_ssh_config(instance_name, HostName=host_name, path=str(SSH_CONFIG_PATH))
 
 
 def _wait_for_stack_with_name(
@@ -198,6 +172,7 @@ def _wait_for_stack_with_name(
     delay_sec: int = 15,
     max_attempts: int = 20,
 ) -> None:
+    logger.info(f"[{stack_name}] Waiting for stack to be ready")
     session = session or boto3.Session()
     client = session.client("cloudformation")
     waiter = client.get_waiter("stack_create_complete")
@@ -429,9 +404,13 @@ def _cmd_create(
         Capabilities=["CAPABILITY_IAM"],
         Parameters=[
             {"ParameterKey": "InstanceType", "ParameterValue": instance_type},
+            {
+                "ParameterKey": "CloneRepositories",
+                "ParameterValue": "false" if no_clone_repos else "true",
+            },
         ],
     )
-    logger.info(f"[{instance_name}] Waiting for instance to be ready")
+
     _wait_for_stack_with_name(instance_name, session=session)
 
     # the devserver stack creates an instance with the same name
@@ -439,13 +418,8 @@ def _cmd_create(
     assert instances is not None and len(instances) == 1
 
     _update_hostname_in_ssh_config(instances[0])
-    if not no_clone_repos:
-        _clone_repos(
-            instance_name,
-            repo_root=repo_root,
-            repos=repos.split(","),
-            yadm_dotfiles_repo=yadm_dotfiles_repo,
-        )
+
+    _wait_for_ssh(instance_name)
 
     if open_vscode:
         _open_vscode(session, instance_name)
