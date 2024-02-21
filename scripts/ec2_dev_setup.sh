@@ -47,7 +47,25 @@ gpgkey=https://packages.fluentbit.io/fluentbit.key
 enabled=1" | tee /etc/yum.repos.d/fluent-bit.repo
   yum -y install fluent-bit
   popd
+}
 
+function install_loki() {
+  # https://rpm.grafana.com/
+  echo "Installing Loki"
+  mkdir loki
+  pushd loki
+  echo "[grafana]
+name=grafana
+baseurl=https://rpm.grafana.com
+repo_gpgcheck=1
+enabled=1
+gpgcheck=1
+gpgkey=https://rpm.grafana.com/gpg.key
+sslverify=1
+sslcacert=/etc/pki/tls/certs/ca-bundle.crt" |
+    tee /etc/yum.repos.d/grafana.repo
+  yum -y install loki promtail
+  popd
 }
 
 function install_prometheus() {
@@ -287,7 +305,7 @@ function install_cleanup() {
   chown -R $USER $MAIN_VENV_PATH
 }
 
-function install() {
+function install_components() {
   set -v
   # use the larger root volume for temp files during script execution
   mkdir -p "$USER_HOME/tmp"
