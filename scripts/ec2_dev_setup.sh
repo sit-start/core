@@ -322,10 +322,10 @@ function install_components() {
 function install_g5g() {
   install core_packages yadm gflags_from_source glog_from_source ffmpeg python \
     python_packages nvidia docker pytorch_from_source torchvision_from_source \
-    cleanup
+    prometheus grafana fluent_bit loki cleanup
 }
 
 function install_g5() {
   install core_packages yadm awscli gflags_from_source glog_from_source ffmpeg \
-    python_packages pytorch cleanup
+    python_packages pytorch prometheus grafana fluent_bit loki cleanup
 }
