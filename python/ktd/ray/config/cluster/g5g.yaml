@@ -106,11 +106,7 @@ head_setup_commands:
     yum list installed loki >/dev/null 2>&1 || 
       sudo -- bash -c 'source ~ec2-user/dev/core/scripts/ec2_dev_setup.sh; \
         install_components loki'
-worker_setup_commands:
-  # update the fluent-bit config; requires $DEV/core to be populated
-  - |
-    sudo cp "$DEV/core/python/ktd/ray/config/aux/fluent-bit-worker.conf" \
-      /etc/fluent-bit/fluent-bit.conf
+worker_setup_commands: []
 head_start_ray_commands:
   # restart ray
   - ray stop
@@ -141,9 +137,7 @@ worker_start_ray_commands:
   - ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076
   # update the fluent-bit config; requires that ray has started
   - |
-    sudo cp "$DEV/core/python/ktd/ray/config/aux/fluent-bit-worker.conf" \
-      /etc/fluent-bit/fluent-bit.conf
-    head_ip=$(sed -e 's/:.*$//g' /tmp/ray/ray_current_cluster)
-    sudo sed -i "s/HEAD_NODE_IP/$head_ip/g" /etc/fluent-bit/fluent-bit.conf
+    cat "$DEV/core/python/ktd/ray/config/aux/fluent-bit-worker.conf" |
+      envsubst | sudo tee /etc/fluent-bit/fluent-bit.conf
   # restart the fluent-bit service
   - sudo systemctl restart fluent-bit
