@@ -1,3 +1,4 @@
+import logging
 import subprocess
 from typing import Optional
 
@@ -13,12 +14,21 @@ logger = get_logger(__name__)
 def is_logged_in(session: Optional[boto3.Session] = None) -> bool:
     """Check if the given session is logged in"""
     sts = session.client("sts") if session else boto3.client("sts")
+
+    credentials_logger = get_logger("botocore.credentials")
+    credentials_log_level = credentials_logger.level
+    credentials_logger.setLevel(logging.ERROR)
+
     try:
-        # TODO: suppress stdout/err from called native module
-        sts.get_caller_identity()
-        return True
-    except botocore.exceptions.SSOError:
-        return False
+        sts.get_caller_identity()  # type: ignore
+        result = True
+    except botocore.exceptions.SSOError as e:
+        logger.warning(e)
+        result = False
+
+    credentials_logger.setLevel(credentials_log_level)
+
+    return result
 
 
 def sso_login(profile_name=None) -> None:
