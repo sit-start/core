@@ -43,9 +43,9 @@ head_node_type: ray.head.default
 file_mounts: {}
 cluster_synced_files:
   - "~ec2-user/dev"
+  - "~ec2-user/.local/bin/scm-prompt.sh"
   - "~ec2-user/.bash_profile"
   - "~ec2-user/.bashrc"
-  - "~ec2-user/.local/bin/scm-prompt.sh"
 file_mounts_sync_continuously: True
 rsync_exclude:
   - "**/.git"
@@ -113,7 +113,7 @@ head_start_ray_commands:
   - |
     ray start --head --port=6379 --object-manager-port=8076 \
       --autoscaling-config=~/ray_bootstrap_config.yaml \
-      --dashboard-host=0.0.0.0
+      --dashboard-host=0.0.0.0 --ray-debugger-external
   # update the grafana service config; requires that ray has started;
   # note that replacing CONF_FILE in /etc/sysconfig/grafana-server
   # doesn't work without additional changes to the grafana service file, e.g.,
@@ -137,8 +137,10 @@ head_start_ray_commands:
 worker_start_ray_commands:
   # restart ray
   - ray stop
-  - ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076
-  # update the fluent-bit config; requires that ray has started
+  - |
+    ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076 \
+      --ray-debugger-external
+  # update the fluent-bit config with $RAY_HEAD_IP
   - |
     cat "$DEV/core/python/ktd/ray/config/aux/fluent-bit-worker.conf" |
       envsubst | sudo tee /etc/fluent-bit/fluent-bit.conf
