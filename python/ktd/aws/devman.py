@@ -74,8 +74,11 @@ _ALL_INSTANCE_STATES = [
     "shutting-down",
     "terminated",
 ]
-RAY_DASHBOARD_PORT = 8265
-PROMETHEUS_PORT = 9090
+_FORWARDED_PORTS = {
+    "Ray Dashboard": 8265,
+    "Prometheus": 9090,
+    "Grafana": 3000,
+}
 
 
 def _github_ssh_keys(use_cached: bool = True) -> str:
@@ -490,11 +493,11 @@ def _cmd_ray_up(
     _update_hostnames_in_ssh_config(session, instance_name=f"ray-{cluster_name}-*")
 
     cluster_head_name = f"ray-{cluster_name}-head"
-    ports = [RAY_DASHBOARD_PORT, PROMETHEUS_PORT]
     logger.info(
-        f"[{cluster_head_name}] Forwarding ports {ports} for dashboard, Prometheus"
+        f"[{cluster_head_name}] Forwarding ports for "
+        f"{', '.join(_FORWARDED_PORTS.keys())}"
     )
-    _add_local_forward_to_ssh_config(cluster_head_name, ports)
+    _add_local_forward_to_ssh_config(cluster_head_name, list(_FORWARDED_PORTS.values()))
 
     if open_vscode:
         _open_vscode(session, cluster_head_name)
