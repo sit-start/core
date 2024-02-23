@@ -128,6 +128,8 @@ head_start_ray_commands:
       sudo cp /etc/grafana/grafana.ini /etc/grafana/grafana.ini.ray-bak &&
         sudo cp /tmp/ray/session_latest/metrics/grafana/grafana.ini \
           /etc/grafana/grafana.ini)
+    cp "$DEV/core/python/ktd/ray/config/aux/grafana-datasource-loki.yml" \
+      /tmp/ray/session_latest/metrics/grafana/provisioning/datasources
   # restart services
   - sudo systemctl restart grafana-server
   - sudo systemctl restart prometheus
