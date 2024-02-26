@@ -40,13 +40,19 @@ available_node_types:
             VolumeSize: 256
             VolumeType: gp3
 head_node_type: ray.head.default
-file_mounts: {}
-cluster_synced_files:
-  - "~ec2-user/dev"
-  - "~ec2-user/.local/bin/scm-prompt.sh"
-  - "~ec2-user/.bash_profile"
-  - "~ec2-user/.bashrc"
-file_mounts_sync_continuously: True
+file_mounts: {
+    # contents of the dev repo
+    "~/dev": "~/dev",
+    # contents of the dotfiles repo
+    "~/.aws/config": "~/.aws/config",
+    "~/.local/bin/scm-prompt.sh": "~/.local/bin/scm-prompt.sh",
+    "~/.bash_profile": "~/.bash_profile",
+    "~/.bashrc": "~/.bashrc",
+    "~/.ipython/profile_default/ipython_config.py": "~/.ipython/profile_default/ipython_config.py",
+    "~/.ipython/profile_default/ipython_kernel_config.py": "~/.ipython/profile_default/ipython_kernel_config.py",
+  }
+cluster_synced_files: []
+file_mounts_sync_continuously: False
 rsync_exclude:
   - "**/.git"
   - "**/.git/**"
@@ -54,44 +60,15 @@ rsync_filter:
   - ".gitignore"
 initialization_commands: []
 setup_commands:
-  - |
-    # fetch repo deploy keys
-    repos=(dev core notebooks dotfiles)
-    for repo in "${repos[@]}"; do
-      key_name="${repo}_deploy_ed25519"
-      test -f ~/.ssh/"$key_name" ||
-        (aws secretsmanager get-secret-value --secret-id "$key_name" \
-          --query SecretString --output text |
-          jq --raw-output .private >~/.ssh/"$key_name" &&
-          chmod go-rwx ~/.ssh/"$key_name")
-    done
-  - |
-    # add github keys to known hosts
-    github_keys=$(curl -s https://api.github.com/meta | jq -r .ssh_keys[])
-    grep -xqF "$github_keys" ~/.ssh/known_hosts 2>/dev/null ||
-      while IFS= read -r key; do
-        echo "github.com $key" >>~/.ssh/known_hosts
-      done <<<"$github_keys"
-  - |
-    # clone and sync dotfiles
-    yadm rev-parse --is-inside-work-tree >/dev/null 2>&1 &&
-      GIT_SSH_COMMAND="ssh -i ~/.ssh/dotfiles_deploy_ed25519" \
-        yadm pull ||
-      GIT_SSH_COMMAND="ssh -i ~/.ssh/dotfiles_deploy_ed25519" \
-        yadm clone git@github.com:kevdale/dotfiles --no-checkout &&
-      yadm checkout ~
   # login and configure wandb
+  - mkdir -p $WANDB_DIR
   - wandb login
-  - source ~/.bash_profile && mkdir -p $WANDB_DIR
 head_setup_commands:
-  # clone the dev repo; requires `deploy_dev` function from the dotfiles yadm
-  # clone above and deploy keys for dev and its submodules
-  - deploy_repo dev
   # create the prometheus service file
   - |
     sudo cp "$DEV/core/python/ktd/ray/config/aux/prometheus.service" \
       /etc/systemd/system/prometheus.service
-  # update the fluent-bit config after deploying dev
+  # update the fluent-bit config
   - |
     sudo mkdir -p /etc/fluent-bit &&
       sudo cp "$DEV/core/python/ktd/ray/config/aux/fluent-bit-head.conf" \
@@ -114,11 +91,7 @@ head_start_ray_commands:
     ray start --head --port=6379 --object-manager-port=8076 \
       --autoscaling-config=~/ray_bootstrap_config.yaml \
       --dashboard-host=0.0.0.0 --ray-debugger-external
-  # update the grafana service config; requires that ray has started;
-  # note that replacing CONF_FILE in /etc/sysconfig/grafana-server
-  # doesn't work without additional changes to the grafana service file, e.g.,
-  # specifiying `--homepath=${GRAFANA_HOME}` in the `ExecStart` line,
-  # so we opt the for the simpler approach of replacing the service config
+  # update the grafana service config; requires that ray has started
   - |
     sudo test -f /etc/grafana/grafana.ini.ray-bak || (
       sudo cp /etc/grafana/grafana.ini /etc/grafana/grafana.ini.ray-bak &&
@@ -142,7 +115,8 @@ worker_start_ray_commands:
       --ray-debugger-external
   # update the fluent-bit config with $RAY_HEAD_IP
   - |
-    cat "$DEV/core/python/ktd/ray/config/aux/fluent-bit-worker.conf" |
-      envsubst | sudo tee /etc/fluent-bit/fluent-bit.conf
+    sudo mkdir -p /etc/fluent-bit &&
+      cat "$DEV/core/python/ktd/ray/config/aux/fluent-bit-worker.conf" |
+        envsubst | sudo tee /etc/fluent-bit/fluent-bit.conf
   # restart the fluent-bit service
   - sudo systemctl restart fluent-bit
