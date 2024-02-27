@@ -14,8 +14,8 @@ available_node_types:
     max_workers: 0
     resources: {}
     node_config:
-      InstanceType: m6g.xlarge
-      ImageId: ami-071bc49379107ae95
+      InstanceType: m6a.xlarge
+      ImageId: ami-0c38021ff804d9342
       KeyName: rsa
       IamInstanceProfile:
         Arn: arn:aws:iam::960487471244:instance-profile/ray-head
@@ -27,10 +27,10 @@ available_node_types:
   ray.worker.default:
     min_workers: 0
     max_workers: 4
-    resources: {}
+    resources: {"CPU": 8, "GPU": 1}
     node_config:
-      InstanceType: g5g.2xlarge
-      ImageId: ami-071bc49379107ae95
+      InstanceType: g5.2xlarge
+      ImageId: ami-0c38021ff804d9342
       KeyName: rsa
       IamInstanceProfile:
         Arn: arn:aws:iam::960487471244:instance-profile/ray-worker
