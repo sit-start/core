@@ -12,7 +12,7 @@ else
   readonly PYTHON_VER=python3.10
 fi
 readonly CUDA_HOME=/usr/local/cuda
-readonly PYTHON_PACKAGES="ipykernel ipympl matplotlib jupyterthemes mplcursors h5py scipy tensorboard grpcio-tools torch-tb-profiler imageio imageio-ffmpeg torch-tb-profiler hydra-core jupyter jupyterlab_widgets Pillow pandas numpy urllib3 ffmpeg scikit-learn tqdm boto3 regex pytest determined typing-extensions sympy filelock fsspec networkx pyyaml sshconf cloudpathlib pigar ray[default,data,train,tune,client] wandb"
+readonly PYTHON_PACKAGES="ipykernel ipympl matplotlib jupyterthemes mplcursors h5py scipy tensorboard grpcio-tools torch-tb-profiler imageio imageio-ffmpeg torch-tb-profiler hydra-core jupyter jupyterlab_widgets Pillow pandas numpy urllib3 ffmpeg scikit-learn tqdm boto3 regex pytest determined typing-extensions sympy filelock fsspec networkx pyyaml sshconf cloudpathlib pigar ray[default,data,train,tune,client] wandb pytorch-lightning"
 
 function install_core_packages() {
   echo "Installing core packages"
@@ -39,9 +39,23 @@ function install_fluent_bit() {
   echo "Installing Fluent Bit"
   mkdir fluent_bit
   pushd fluent_bit
+
+  glibc_ver_prefix="ldd (GNU libc)"
+  glibc_ver=$(ldd --version |
+    grep "$glibc_ver_prefix" | sed "s/$glibc_ver_prefix \(.*\)$/\1/g")
+
+  if [ "$glibc_ver" == "2.26" ]; then
+    base_url="https://packages.fluentbit.io/amazonlinux/2/"
+  elif [ "$glibc_ver" == "2.34" ]; then
+    base_url="https://packages.fluentbit.io/amazonlinux/2023/"
+  else
+    echo "Unrecognized platform with glibc version $glibc_ver"
+    return
+  fi
+
   echo "[fluent-bit]
 name = Fluent Bit
-baseurl = https://packages.fluentbit.io/amazonlinux/2023/
+baseurl = $base_url
 gpgcheck=1
 gpgkey=https://packages.fluentbit.io/fluentbit.key
 enabled=1" | tee /etc/yum.repos.d/fluent-bit.repo
