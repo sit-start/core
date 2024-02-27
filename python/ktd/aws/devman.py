@@ -11,7 +11,6 @@ from time import sleep
 
 import boto3
 import json5
-import ktd.logging
 from boto3.resources.base import ServiceResource
 from ktd.aws.ec2.util import (
     get_instance_name,
@@ -22,9 +21,10 @@ from ktd.aws.ec2.util import (
 )
 from ktd.aws.util import sso_login
 from ktd.cloudpathlib import CloudPath
+from ktd.logging import get_logger
 from ktd.util.text import strip_ansi_codes, truncate
 
-logger = ktd.logging.get_logger(__name__, format="simple")
+logger = get_logger(__name__, format="simple")
 
 # TODO: use subprocess.check_call() throughout
 
@@ -533,7 +533,7 @@ def _cmd_ray_down(
             Path(tempfile.mkdtemp(prefix="/tmp/")) / f"ray_down_{cluster_name}.log"
         )
         logger.info(f"[{cluster_name}] Ray output written to {log_path}")
-        cmd.append("--log-color false")
+        cmd += ["--log-color", "false"]
         with open(log_path, "w") as f:
             subprocess.call(cmd, stdout=f, stderr=subprocess.STDOUT)
         # even with --log-color false, the log still contains ANSI codes, so

@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import pytorch_lightning as pl
+import torch
 from ktd.logging import get_logger
 from pytorch_lightning.callbacks import Callback
 from pytorch_lightning.loggers import WandbLogger
@@ -12,6 +13,8 @@ from .callbacks import LoggerCallback
 
 TrainingModuleFactory = Callable[[dict[str, Any]], pl.LightningModule]
 DataModuleFactory = Callable[[dict[str, Any]], pl.LightningDataModule]
+
+logger = get_logger(__name__)
 
 
 def train(
@@ -31,8 +34,7 @@ def train(
             prepare_trainer,
         )
 
-    text_logger = get_logger(__name__, format="simple" if with_ray else "glog")
-    text_logger.info(f"{config=}")
+    logger.info(f"{config=}")
 
     # Set NCCL and Torch distributed logging levels for debugging
     # TODO: remove verbose debugging once we track down the NCCL bug
@@ -43,7 +45,7 @@ def train(
         config = config.copy()
         batch_size = config["batch_size"]
         config["batch_size"] //= train_context.get_world_size()
-        text_logger.info(
+        logger.info(
             "Using per-worker and global batch sizes of "
             f"{config['batch_size']}, {batch_size}, resp."
         )
@@ -53,7 +55,7 @@ def train(
 
     strategy: str | Strategy = "auto"
     plugins: list[Any] | None = None
-    logger = None
+    pl_logger = None
     callbacks: list[Callback] = []
     if with_ray:
         strategy = RayDDPStrategy()
@@ -61,12 +63,10 @@ def train(
         callbacks.append(RayTrainReportCallback())
     else:
         # TODO: needs testing
-        callbacks.append(
-            LoggerCallback(text_logger, interval=config["log_every_n_steps"])
-        )
+        callbacks.append(LoggerCallback(logger, interval=config["log_every_n_steps"]))
         if config.get("log_to_wandb", False):
-            logger = WandbLogger(project=config["project"])
-            logger.watch(training_module, log="all")
+            pl_logger = WandbLogger(project=config["project"])
+            pl_logger.watch(training_module, log="all")
 
     # TODO: address warning re: missing tensorboard logging directory
     trainer = pl.Trainer(
@@ -75,7 +75,7 @@ def train(
         strategy=strategy,
         plugins=plugins,
         callbacks=callbacks,
-        logger=logger,
+        logger=pl_logger,
         enable_progress_bar=False,
         max_epochs=config["max_num_epochs"],
         log_every_n_steps=config["log_every_n_steps"],
@@ -107,7 +107,6 @@ def test(
 ) -> None:
     training_module = training_module_factory(config)
     data_module = data_module_factory(config)
-    logger = get_logger(__name__)
 
     trainer = pl.Trainer(
         devices="auto",

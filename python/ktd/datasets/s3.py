@@ -2,15 +2,15 @@ from pathlib import PosixPath
 from typing import Any, Callable
 
 import boto3
-from cloudpathlib import S3Path, S3Client
+from cloudpathlib import S3Client, S3Path
+from ktd.logging import get_logger
+from ktd.util.decorators import timer
 from torchvision.datasets import VisionDataset
 from torchvision.datasets.folder import (
     IMG_EXTENSIONS,
     default_loader,
     has_file_allowed_extension,
 )
-from ktd.util.decorators import timer
-from ktd.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 class DatasetFolderS3(VisionDataset):
     """
     An S3-backed dataset; see torchvision.datasets.DatasetFolder
-    
+
     Parameters
     ----------
     ...

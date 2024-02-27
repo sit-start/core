@@ -8,9 +8,9 @@ from ray.train.torch import TorchTrainer
 from ray.tune import TuneConfig, Tuner
 from ray.tune.schedulers import ASHAScheduler
 
-from .train import train, TrainingModuleFactory, DataModuleFactory
+from .train import DataModuleFactory, TrainingModuleFactory, train
 
-logger = get_logger(__name__, format="simple")
+logger = get_logger(__name__)
 
 
 def _get_ray_trainer(
