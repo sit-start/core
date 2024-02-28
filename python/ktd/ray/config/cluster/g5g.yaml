@@ -78,6 +78,12 @@ head_setup_commands:
   - |
     sudo sed -i 's/^PrivateTmp=true/PrivateTmp=false/g' \
       /usr/lib/systemd/system/grafana-server.service
+  # update the grafana service config
+  - |
+    sudo test -f /etc/grafana/grafana.ini.ray-bak || (
+      sudo cp /etc/grafana/grafana.ini /etc/grafana/grafana.ini.ray-bak &&
+        sudo cp "$DEV/core/python/ktd/ray/config/aux/grafana.ini" \
+          /etc/grafana/grafana.ini)
   # install loki TODO: move to AMI
   - |
     yum list installed loki >/dev/null 2>&1 || 
@@ -91,12 +97,8 @@ head_start_ray_commands:
     ray start --head --port=6379 --object-manager-port=8076 \
       --autoscaling-config=~/ray_bootstrap_config.yaml \
       --dashboard-host=0.0.0.0 --ray-debugger-external
-  # update the grafana service config; requires that ray has started
+  # add loki dashboard and datasource to grafana
   - |
-    sudo test -f /etc/grafana/grafana.ini.ray-bak || (
-      sudo cp /etc/grafana/grafana.ini /etc/grafana/grafana.ini.ray-bak &&
-        sudo cp /tmp/ray/session_latest/metrics/grafana/grafana.ini \
-          /etc/grafana/grafana.ini)
     cp "$DEV/core/python/ktd/ray/config/aux/loki_grafana_datasource.yml" \
       /tmp/ray/session_latest/metrics/grafana/provisioning/datasources
     cp "$DEV/core/python/ktd/ray/config/aux/loki_grafana_dashboard.json" \
