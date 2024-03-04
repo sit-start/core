@@ -17,22 +17,19 @@ def _get_ray_trainer(
     config: dict,
     training_module_factory: TrainingModuleFactory,
     data_module_factory: DataModuleFactory,
-    num_workers: int = 4,
-    use_gpu: bool = True,
+    scaling_config: ScalingConfig | None = None,
 ):
-    scaling_config = ScalingConfig(num_workers=num_workers, use_gpu=use_gpu)
-
     run_config = RunConfig(
         # name=",  # TODO: add useful/descriptive trial name
         checkpoint_config=CheckpointConfig(
             num_to_keep=2,
-            checkpoint_score_attribute="val_loss",  # "val_acc"
-            checkpoint_score_order="min",  # "max"
+            checkpoint_score_attribute="val_loss",
+            checkpoint_score_order="min",
         ),
         storage_path="s3://ktd-ray/runs",
         callbacks=(
             [WandbLoggerCallback(project=config["project"])]
-            if config.get("log_to_wandb", False)
+            if config["log_to_wandb"]
             else []
         ),
         log_to_file=True,  # NOTE: doesn't work in Jupyter notebook
@@ -59,8 +56,10 @@ def train_with_ray(
         config,
         training_module_factory,
         data_module_factory,
-        num_workers=config.get("num_workers", config["num_workers_per_trial"]),
-        use_gpu=config["use_gpu"],
+        scaling_config=ScalingConfig(
+            num_workers=config.get("num_workers", config["num_workers_per_trial"]),
+            use_gpu=config["use_gpu"],
+        ),
     )
     result = trainer.fit()
     print(f"Training result: {result}")
@@ -72,30 +71,37 @@ def tune_with_ray(
     data_module_factory: Callable[[dict], pl.LightningDataModule],
 ) -> None:
     trainer = _get_ray_trainer(
-        config,
-        training_module_factory,
-        data_module_factory,
-        num_workers=config["num_workers_per_trial"],
-        use_gpu=config["use_gpu"],
+        config["train"], training_module_factory, data_module_factory
     )
 
+    max_num_epochs = config["schedule"]["max_num_epochs"]
     scheduler = ASHAScheduler(
-        max_t=config["max_num_epochs"],
-        grace_period=config.get("min_num_epochs", 1),
+        max_t=max_num_epochs,
+        grace_period=config["schedule"]["grace_period"],
         reduction_factor=2,
     )
+
+    logger.info(
+        f"Using {max_num_epochs=} from the scheduling config in the training loop"
+    )
+    _ = config["train"]["max_num_epochs"] = max_num_epochs
 
     tuner = Tuner(
         trainer,
         tune_config=TuneConfig(
             metric="val_loss",  # TODO: val_loss/min or val_acc/max?
             mode="min",
-            num_samples=config["num_hparam_samples"],
+            num_samples=config["tune"]["num_samples"],
             scheduler=scheduler,
+            trial_name_creator=lambda trial: f"trial_{trial.trial_id}",
         ),
         param_space={
-            "train_loop_config": config
-        },  # TODO - we prob want to whittle this down to actual hparams we're varying
+            "scaling_config": ScalingConfig(
+                num_workers=config["scale"]["num_workers"],
+                use_gpu=config["scale"]["use_gpu"],
+            ),
+            "train_loop_config": config["train"],
+        },
     )
 
     results = tuner.fit()
