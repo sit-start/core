@@ -68,7 +68,11 @@ class TrainingModule(pl.LightningModule):
         else:
             raise RuntimeError(f"Optimizer f{self.config['optimizer']} not recognized")
 
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=self.config["max_num_epochs"],
+            eta_min=self.config["min_lr"]
+        )
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
