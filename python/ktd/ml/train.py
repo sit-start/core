@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 from typing import Any, Callable
@@ -34,12 +35,9 @@ def train(
             prepare_trainer,
         )
 
-    logger.info(f"{config=}")
+    logger.info(f"config: {json.dumps(config, indent=2)}")
 
-    # Set NCCL and Torch distributed logging levels for debugging
-    # TODO: remove verbose debugging once we track down the NCCL bug
-    os.environ["NCCL_DEBUG"] = "INFO"
-    os.environ["TORCH_DISTRIBUTED_DEBUG"] = "INFO"
+    torch.set_float32_matmul_precision(config["float32_matmul_precision"])
 
     if with_ray and (train_context := ray.train.get_context()):
         config = config.copy()
@@ -64,7 +62,7 @@ def train(
     else:
         # TODO: needs testing
         callbacks.append(LoggerCallback(logger, interval=config["log_every_n_steps"]))
-        if config.get("log_to_wandb", False):
+        if config["log_to_wandb"]:
             pl_logger = WandbLogger(project=config["project"])
             pl_logger.watch(training_module, log="all")
 
