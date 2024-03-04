@@ -4,6 +4,8 @@ from pathlib import Path
 import pytorch_lightning as pl
 import torchvision
 from filelock import FileLock
+from ktd.logging import get_logger
+from torch.utils.data import DataLoader, Subset, random_split
 from torchvision.transforms import (
     Compose,
     Normalize,
@@ -11,7 +13,8 @@ from torchvision.transforms import (
     RandomHorizontalFlip,
     ToTensor,
 )
-from torch.utils.data import DataLoader, random_split, Subset
+
+logger = get_logger(__name__)
 
 
 class CIFAR10(pl.LightningDataModule):
@@ -22,6 +25,7 @@ class CIFAR10(pl.LightningDataModule):
         batch_size=128,
         data_dir: str | os.PathLike[str] | None = None,
         train_split: float = 0.8,
+        augment: bool = True,
         n_workers: int = 8,
     ):
         super().__init__()
@@ -30,30 +34,33 @@ class CIFAR10(pl.LightningDataModule):
         self.train_split = train_split
         self.n_workers = n_workers
         self.prepare_data_per_node = False
+        self.augment = augment
 
     def setup(self, stage: str | None = None):
-        normalize = Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+        normalization = Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+        augmentation = [RandomCrop(32, padding=4), RandomHorizontalFlip()]
 
+        test_transform = Compose([ToTensor(), normalization])
         train_transform = Compose(
-            [RandomCrop(32, padding=4), RandomHorizontalFlip(), ToTensor(), normalize]
+            (augmentation if self.augment else []) + [ToTensor(), normalization]
         )
-        test_transform = Compose([ToTensor(), normalize])
 
         with FileLock(self.data_dir / "data.lock"):
-            # Load the training dataset twice so that we can specify different
-            # transforms for train and val; _should_ be low overhead but DEBUG
             train = torchvision.datasets.CIFAR10(
                 root=str(self.data_dir),
                 train=True,
                 download=True,
                 transform=train_transform,
             )
-            val = torchvision.datasets.CIFAR10(
-                root=str(self.data_dir),
-                train=True,
-                download=False,
-                transform=test_transform,
-            )
+
+        # Load the training dataset twice so that we can specify different
+        # transforms for train and val
+        val = torchvision.datasets.CIFAR10(
+            root=str(self.data_dir),
+            train=True,
+            download=False,
+            transform=test_transform,
+        )
 
         n_train = int(len(train) * self.train_split)
         self.train, not_train = random_split(train, [n_train, len(train) - n_train])
@@ -62,7 +69,7 @@ class CIFAR10(pl.LightningDataModule):
         self.test = torchvision.datasets.CIFAR10(
             root=str(self.data_dir),
             train=False,
-            download=True,
+            download=False,
             transform=test_transform,
         )
 
