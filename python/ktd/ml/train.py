@@ -1,4 +1,3 @@
-import json
 import os
 from pathlib import Path
 from typing import Any, Callable
@@ -22,20 +21,22 @@ def train(
     config,
     training_module_factory: TrainingModuleFactory,
     data_module_factory: DataModuleFactory,
+    wandb_enabled: bool = False,
     ckpt_path: str | os.PathLike[str] | None = None,
     **kwargs: Any,
 ) -> None:
+    logger.info(f"Training with config: {config}")
+
     with_ray = kwargs.get("with_ray", False)
     if with_ray:
         import ray
+        import ray.train
         from ray.train.lightning import (
             RayDDPStrategy,
             RayLightningEnvironment,
             RayTrainReportCallback,
             prepare_trainer,
         )
-
-    logger.info(f"config: {json.dumps(config, indent=2)}")
 
     torch.set_float32_matmul_precision(config["float32_matmul_precision"])
 
@@ -62,7 +63,7 @@ def train(
     else:
         # TODO: needs testing
         callbacks.append(LoggerCallback(logger, interval=config["log_every_n_steps"]))
-        if config["log_to_wandb"]:
+        if wandb_enabled:
             pl_logger = WandbLogger(project=config["project"])
             pl_logger.watch(training_module, log="all")
 
