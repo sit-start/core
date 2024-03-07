@@ -9,7 +9,7 @@ from ktd.util.git_util import (
     get_short_repo_description,
     is_pristine,
 )
-from ktd.util.text import to_str
+from ktd.util.string import to_str
 from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.train import CheckpointConfig, FailureConfig, RunConfig, ScalingConfig
 from ray.train.torch import TorchTrainer

@@ -28,7 +28,7 @@ from ktd.cloudpathlib import CloudPath
 from ktd.logging import get_logger
 from ktd.util.git_util import create_tag_with_type, get_repo_state, is_pristine
 from ktd.util.identifier import RUN_ID
-from ktd.util.text import strip_ansi_codes, truncate
+from ktd.util.string import strip_ansi_codes, truncate
 
 logger = get_logger(__name__, format="simple")
 
