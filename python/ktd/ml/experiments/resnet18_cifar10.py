@@ -1,5 +1,7 @@
+#!/usr/bin/env python
 import logging
 import os
+import os.path as osp
 from typing import Any
 
 import ray
@@ -102,18 +104,18 @@ def ResNet18(num_classes: int, dropout_p: float):
 def main():
     config = {
         "debug": False,
-        "tune": {
-            "num_samples": 1,
-        },
+        "driver_name": osp.basename(__file__).split(".")[0],
+        "strict_provenance": False,
+        "tune": {"num_samples": 1, "long_trial_names": True},
         "schedule": {
             "max_num_epochs": 15,
             "grace_period": 15,
         },
         "scale": {
-            "num_workers": 4,
+            "num_workers": 1,
             "use_gpu": True,
         },
-        "train": {
+        "train_loop_config": {
             "augment_training_data": False,
             "weight_decay": 5e-4,
             "lr": 1e-2,
@@ -125,10 +127,11 @@ def main():
             "dropout_p": 0.0,
             "float32_matmul_precision": "medium",
             "log_every_n_steps": 100,
-            "log_to_wandb": True,
             "smoke_test": False,
-            "project": "ray_tune_pl_resnet18_cifar10",
             "sync_batchnorm": False,
+        },
+        "wandb": {
+            "enabled": True,
         },
     }
 
