@@ -112,7 +112,7 @@ def main():
             "grace_period": 15,
         },
         "scale": {
-            "num_workers": 1,
+            "num_workers": 4,
             "use_gpu": True,
         },
         "train_loop_config": {
