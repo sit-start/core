@@ -26,6 +26,21 @@ function install_core_packages() {
   yum -y install emacs cmake cmake3 ninja-build protobuf amazon-efs-utils clang clang-tools-extra amazon-cloudwatch-agent htop
 }
 
+function install_github() {
+  if [ "$ARCH" == "aarch64" ]; then
+    arch="arm64"
+  else # x86_64
+    arch="amd64"
+  fi
+  version=2.45.0
+
+  mkdir -p github
+  pushd github
+  wget "https://github.com/cli/cli/releases/download/v${version}/gh_${version}_linux_${arch}.rpm"
+  rpm -i "gh_${version}_linux_${arch}.rpm"
+  popd
+}
+
 function install_yadm() {
   curl -fLo /usr/local/bin/yadm https://github.com/TheLocehiliosan/yadm/raw/master/yadm && chmod a+x /usr/local/bin/yadm
 }
@@ -333,14 +348,14 @@ function install_components() {
   set +v
 }
 
-function install_g5g() {
+function install_all_g5g() {
   install_components core_packages yadm gflags_from_source glog_from_source \
     ffmpeg python python_packages nvidia docker pytorch_from_source \
-    torchvision_from_source prometheus grafana fluent_bit loki cleanup
+    torchvision_from_source prometheus grafana fluent_bit loki github cleanup
 }
 
-function install_g5() {
+function install_all_g5() {
   install_components core_packages yadm awscli gflags_from_source \
     glog_from_source ffmpeg python_packages pytorch prometheus grafana \
-    fluent_bit loki cleanup
+    fluent_bit loki github cleanup
 }

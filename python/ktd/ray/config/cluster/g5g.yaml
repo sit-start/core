@@ -88,6 +88,11 @@ setup_commands:
   # login and configure wandb
   - mkdir -p $WANDB_DIR
   - wandb login
+  # install new components not in the AMI (TODO: update AMI)
+  - |
+    gh >/dev/null 2>&1 ||
+      sudo bash -c "source $DEV/core/scripts/ec2_dev_setup.sh &&
+      install_components github"
 head_setup_commands:
   # create the prometheus service file
   - |
