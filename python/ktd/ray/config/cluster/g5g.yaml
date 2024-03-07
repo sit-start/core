@@ -54,13 +54,37 @@ file_mounts: {
   }
 cluster_synced_files: []
 file_mounts_sync_continuously: False
-rsync_exclude:
-  - "**/.git"
-  - "**/.git/**"
+rsync_exclude: []
 rsync_filter:
   - ".gitignore"
 initialization_commands: []
 setup_commands:
+  # fetch repo deploy keys
+  - |
+    repos=(dev core notebooks dotfiles)
+    for repo in "${repos[@]}"; do
+      key_name="${repo}_deploy_ed25519"
+      test -f ~/.ssh/"$key_name" ||
+        (aws secretsmanager get-secret-value --secret-id "$key_name" \
+          --query SecretString --output text |
+          jq --raw-output .private >~/.ssh/"$key_name" &&
+          chmod go-rwx ~/.ssh/"$key_name")
+    done
+  # add github keys to known hosts
+  - |
+    github_keys=$(curl -s https://api.github.com/meta | jq -r .ssh_keys[])
+    grep -xqF "$github_keys" ~/.ssh/known_hosts 2>/dev/null ||
+      while IFS= read -r key; do
+        echo "github.com $key" >>~/.ssh/known_hosts
+      done <<<"$github_keys"
+  # setup a deploy key for read-only access to the core repository
+  # TODO: support read-only access for all repos via custom clone
+  - |
+    grep -xqF "Host github.com" ~/.ssh/config 2>/dev/null ||
+      echo -e "\nHost github.com\n  IdentityFile ~/.ssh/core_deploy_ed25519" \
+        >>~/.ssh/config && chmod go-rwx ~/.ssh/config
+  # fetch/prune so local tags on nodes don't conflict with new remote tags
+  - git -C $DEV/core fetch --all --prune --prune-tags
   # login and configure wandb
   - mkdir -p $WANDB_DIR
   - wandb login

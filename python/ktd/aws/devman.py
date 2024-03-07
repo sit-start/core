@@ -6,11 +6,15 @@ import re
 import subprocess
 import sys
 import tempfile
+from os.path import expanduser, expandvars, realpath
 from pathlib import Path
 from time import sleep
 
 import boto3
+import git
 import json5
+import ray.job_submission
+import yaml
 from boto3.resources.base import ServiceResource
 from ktd.aws.ec2.util import (
     get_instance_name,
@@ -22,6 +26,8 @@ from ktd.aws.ec2.util import (
 from ktd.aws.util import sso_login
 from ktd.cloudpathlib import CloudPath
 from ktd.logging import get_logger
+from ktd.util.git_util import create_tag_with_type, get_repo_state, is_pristine
+from ktd.util.identifier import RUN_ID
 from ktd.util.text import strip_ansi_codes, truncate
 
 logger = get_logger(__name__, format="simple")
@@ -63,6 +69,11 @@ _PARAM_HELP = {
     "workers_only": "only destroy workers",
     "keep_min_workers": "retain the minimal amount of workers specified in the config",
     "kill": "terminate all instances",
+    # tagged_run
+    "script_name": "name of the script to run, without the .py extension",
+    "script_path": "path to the script; must exist on local and remote filesystems",
+    "no_strict": "do not enforce strict provenance on the local repository",
+    "restart": "restart Ray services; this stops any existing jobs",
 }
 _INTERNAL_PARAMS = ["session"]
 _CMD_PREFIX = "_cmd_"
@@ -79,6 +90,8 @@ _FORWARDED_PORTS = {
     "Prometheus": 9090,
     "Grafana": 3000,
 }
+_SCRIPT_PATH_DEFAULT = "$DEV/core/python/ktd/ml/experiments/{exp_name}.py"
+_RUNNER = "$DEV/core/python/ktd/util/run_from_ref.py"
 
 
 def _github_ssh_keys(use_cached: bool = True) -> str:
@@ -285,6 +298,49 @@ def _update_hostnames_in_ssh_config(
         _update_hostname_in_ssh_config(instance)
 
 
+def _ray_up(
+    config: str = "g5g",
+    min_workers: int = -1,
+    max_workers: int = -1,
+    no_restart: bool = False,
+    restart_only: bool = False,
+    cluster_name: str = "",
+    prompt: bool = False,
+    verbose: bool = False,
+    show_output: bool = False,
+) -> None:
+    cmd = ["ray", "up", str(RAY_CONFIG_ROOT / f"{config}.yaml")]
+    if min_workers >= 0:
+        cmd += ["--min-workers", str(min_workers)]
+    if max_workers >= 0:
+        cmd += ["--max-workers", str(max_workers)]
+    if no_restart:
+        cmd.append("--no-restart")
+    if restart_only:
+        cmd.append("--restart-only")
+    if cluster_name:
+        cmd += ["--cluster-name", cluster_name]
+    else:
+        cluster_name = config
+    if not prompt:
+        cmd.append("--yes")
+    if verbose:
+        cmd.append("--verbose")
+
+    logger.info(f"[{cluster_name}] Creating or updating Ray cluster")
+    if show_output:
+        subprocess.run(cmd, check=True)
+    else:
+        log_path = Path(tempfile.mkdtemp(prefix="/tmp/")) / f"ray_up_{cluster_name}.log"
+        logger.info(f"[{cluster_name}] Ray output written to {log_path}")
+        cmd += ["--log-color", "false"]
+        with open(log_path, "w") as f:
+            subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, check=True)
+        # even with --log-color false, the log still contains ANSI codes, so
+        # strip them
+        log_path.write_text(strip_ansi_codes(log_path.read_text()))
+
+
 def _cmd_start(session: boto3.Session, instance_name: str) -> None:
     """Start instances with the given name"""
     logger.info(f"[{instance_name}] Starting instances")
@@ -456,40 +512,23 @@ def _cmd_ray_up(
     show_output: bool = False,
 ) -> None:
     """Create or update a ray cluster"""
-    cmd = ["ray", "up", str(RAY_CONFIG_ROOT / f"{config}.yaml")]
-    if min_workers >= 0:
-        cmd += ["--min-workers", str(min_workers)]
-    if max_workers >= 0:
-        cmd += ["--max-workers", str(max_workers)]
-    if no_restart:
-        cmd.append("--no-restart")
-    if restart_only:
-        cmd.append("--restart-only")
-    if cluster_name:
-        cmd += ["--cluster-name", cluster_name]
-    else:
-        cluster_name = config
-    if not prompt:
-        cmd.append("--yes")
-    if verbose:
-        cmd.append("--verbose")
-
-    logger.info(f"[{cluster_name}] Creating or updating Ray cluster")
-    if show_output:
-        subprocess.call(cmd)
-    else:
-        log_path = Path(tempfile.mkdtemp(prefix="/tmp/")) / f"ray_up_{cluster_name}.log"
-        logger.info(f"[{cluster_name}] Ray output written to {log_path}")
-        cmd += ["--log-color", "false"]
-        with open(log_path, "w") as f:
-            subprocess.call(cmd, stdout=f, stderr=subprocess.STDOUT)
-        # even with --log-color false, the log still contains ANSI codes, so
-        # strip them
-        log_path.write_text(strip_ansi_codes(log_path.read_text()))
+    # invoke ray up
+    _ray_up(
+        config=config,
+        min_workers=min_workers,
+        max_workers=max_workers,
+        no_restart=no_restart,
+        restart_only=restart_only,
+        cluster_name=cluster_name,
+        prompt=prompt,
+        verbose=verbose,
+        show_output=show_output,
+    )
 
     # 5s is usually sufficient for the minimal workers to be in the
     # running state after the Ray cluster is up
     sleep(5)
+    cluster_name = cluster_name or config
     _update_hostnames_in_ssh_config(session, instance_name=f"ray-{cluster_name}-*")
 
     cluster_head_name = f"ray-{cluster_name}-head"
@@ -567,6 +606,74 @@ def _cmd_ray_monitor(session: boto3.Session, cluster_name: str = "g5g") -> None:
     subprocess.call(cmd)
 
 
+# TODO: control env vars here as well; use ray envs
+# TODO: support additional user-specified repos on local+remote hosts
+def _cmd_tagged_run(
+    session: boto3.Session,
+    script_name: str = "",
+    script_path: str = _SCRIPT_PATH_DEFAULT,
+    no_strict: bool = False,
+    config: str = "g5g",
+    cluster_name: str = "",
+    restart: bool = False,
+) -> None:
+    """Runs an experiment on the cluster"""
+    # get script name
+    if not script_name and script_path == _SCRIPT_PATH_DEFAULT:
+        raise RuntimeError("exp_name or exp_path must be provided")
+    script_path = script_path.format(exp_name=script_name)
+    script_name = Path(script_path).stem
+
+    # get repo
+    try:
+        repo = git.Repo(expandvars(script_path), search_parent_directories=True)
+    except git.InvalidGitRepositoryError:
+        logger.error(f"No git repository found for {script_path!r}; exiting")
+        sys.exit(-1)
+
+    if not is_pristine(repo):
+        msg = f"Repo {repo.working_dir!r} is not pristine"
+        if no_strict:
+            logger.warning(f"{msg}; reproducibility will be compromised")
+        else:
+            logger.error(f"{msg}; exiting")
+            sys.exit(-1)
+
+    # ensure the repo is in cluster config's file mounts, as we'll use that
+    # to sync repo state with head and worker nodes
+    config_path = RAY_CONFIG_ROOT / f"{config}.yaml"
+    config_data = yaml.load(config_path.read_text(), Loader=yaml.FullLoader)
+    file_mounts = [realpath(expanduser(f)) for f in config_data["file_mounts"].values()]
+    repo_path = Path(repo.working_dir).resolve()
+    if not any(repo_path.is_relative_to(f) for f in file_mounts):
+        msg = f"Repo {repo.working_dir!r} not in file_mounts and cannot be synced."
+        raise RuntimeError(msg)
+
+    # create a tag in the remote repo
+    repo_state = get_repo_state(repo)
+    remote = str(repo_state["remote"]) if repo_state["remote"] else None
+    if repo_state["run"]:
+        logger.info(f"Existing run tag found: {repo_state['run']!r}")
+    else:
+        tag = create_tag_with_type(repo, RUN_ID, remote=remote)
+        logger.info(f"Created run tag: {tag.name!r}")
+
+    # invoke ray-up
+    logger.info("Running 'ray up' to sync files and run setup commands")
+    _ray_up(config=config, no_restart=not restart, cluster_name=cluster_name)
+
+    # run a basic job that uses the native environment and existing file(s)
+    client = ray.job_submission.JobSubmissionClient("http://127.0.0.1:8265")
+    entrypoint = f"python {script_path}"
+    try:
+        logger.info(f"Submitting job with entrypoint {entrypoint!r}")
+        sub_id = client.submit_job(entrypoint=entrypoint)
+        logger.info(f"Job {sub_id} submitted")
+    except RuntimeError as e:
+        logger.info(f"Failed to submit job: {e}")
+        sys.exit(-1)
+
+
 def main():
     """Manages devserver instances and cluster resources"""
     parser = argparse.ArgumentParser(
@@ -587,6 +694,7 @@ def main():
         "ray_up": ["u", "up"],
         "ray_down": ["d", "down"],
         "ray_monitor": ["m", "monitor"],
+        "tagged_run": ["tr"],
     }
     for cmd, aliases in commands.items():
         _add_subparser(subparsers, cmd, aliases)
