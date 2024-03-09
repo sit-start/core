@@ -19,6 +19,8 @@ from ray.tune.schedulers import ASHAScheduler
 
 from .train import DataModuleFactory, TrainingModuleFactory, train
 
+CHECKPOINT_STORAGE_PATH = "s3://ktd-ray/runs"
+
 logger = get_logger(__name__)
 
 
@@ -99,6 +101,20 @@ def _get_and_check_repo_state(config) -> dict:
     return get_repo_state(repo)
 
 
+def _get_checkpoint_config(config: dict) -> CheckpointConfig:
+    return CheckpointConfig(
+        num_to_keep=config["checkpoint"]["num_to_keep"],
+        checkpoint_score_attribute=config["checkpoint"]["checkpoint_score_attribute"],
+        checkpoint_score_order=config["checkpoint"]["checkpoint_score_order"],
+    )
+
+
+def _get_callbacks(config: dict) -> list:
+    if config["wandb"]["enabled"]:
+        return [WandbLoggerCallback(project=_get_project_name(config))]
+    return []
+
+
 def _get_ray_trainer(
     config: dict,
     training_module_factory: TrainingModuleFactory,
@@ -107,39 +123,25 @@ def _get_ray_trainer(
 ):
     run_config = RunConfig(
         name=_get_run_and_group_name(config),
-        checkpoint_config=CheckpointConfig(
-            num_to_keep=2,
-            checkpoint_score_attribute="val_loss",
-            checkpoint_score_order="min",
-        ),
-        storage_path="s3://ktd-ray/runs",
-        callbacks=(
-            [
-                WandbLoggerCallback(
-                    project=_get_project_name(config),
-                )
-            ]
-            if config["wandb"]["enabled"]
-            else []
-        ),
+        checkpoint_config=_get_checkpoint_config(config),
+        storage_path=CHECKPOINT_STORAGE_PATH,
+        callbacks=_get_callbacks(config),
         log_to_file=True,  # NOTE: doesn't work in Jupyter notebook
         failure_config=FailureConfig(max_failures=3),
     )
-
-    wandb_enabled = config["wandb"]["enabled"]
 
     def train_loop_per_worker(train_loop_config: dict) -> None:
         train(
             train_loop_config,
             training_module_factory,
             data_module_factory,
-            wandb_enabled=wandb_enabled,
+            wandb_enabled=config["wandb"]["enabled"],
             with_ray=True,
         )
 
     return TorchTrainer(
         train_loop_per_worker=train_loop_per_worker,
-        train_loop_config=config["train_loop_config"],
+        train_loop_config=config["train"],
         run_config=run_config,
         scaling_config=scaling_config,
     )
@@ -168,6 +170,7 @@ def tune_with_ray(
     training_module_factory: Callable[[dict], pl.LightningModule],
     data_module_factory: Callable[[dict], pl.LightningDataModule],
 ) -> None:
+    # TODO: save repo state in the checkpoint dir and wandb run
     config["repo_state"] = _get_and_check_repo_state(config)
     logger.info(f"Tuning with config: {config}")
 
@@ -183,7 +186,7 @@ def tune_with_ray(
     logger.info(
         f"Using {max_num_epochs=} from the scheduling config in the training loop"
     )
-    _ = config["train_loop_config"]["max_num_epochs"] = max_num_epochs
+    _ = config["train"]["max_num_epochs"] = max_num_epochs
 
     tuner = Tuner(
         trainer,
@@ -202,7 +205,7 @@ def tune_with_ray(
                 num_workers=config["scale"]["num_workers"],
                 use_gpu=config["scale"]["use_gpu"],
             ),
-            "train_loop_config": config["train_loop_config"],
+            "train_loop_config": config["train"],
         },
     )
 

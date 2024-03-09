@@ -78,6 +78,7 @@ def train(
         enable_progress_bar=False,
         max_epochs=config["max_num_epochs"],
         log_every_n_steps=config["log_every_n_steps"],
+        enable_checkpointing=not with_ray,
     )
 
     if with_ray:
