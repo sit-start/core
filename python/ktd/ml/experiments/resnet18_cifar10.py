@@ -106,7 +106,10 @@ def main():
         "debug": False,
         "driver_name": osp.basename(__file__).split(".")[0],
         "strict_provenance": False,
-        "tune": {"num_samples": 1, "long_trial_names": True},
+        "tune": {
+            "num_samples": 1,
+            "long_trial_names": True,
+        },
         "schedule": {
             "max_num_epochs": 15,
             "grace_period": 15,
@@ -115,7 +118,12 @@ def main():
             "num_workers": 4,
             "use_gpu": True,
         },
-        "train_loop_config": {
+        "checkpoint": {
+            "num_to_keep": 2,
+            "checkpoint_score_attribute": "val_loss",
+            "checkpoint_score_order": "min",
+        },
+        "train": {
             "augment_training_data": False,
             "weight_decay": 5e-4,
             "lr": 1e-2,
