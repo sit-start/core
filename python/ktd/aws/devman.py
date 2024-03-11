@@ -22,7 +22,12 @@ from ktd.cloudpathlib import CloudPath
 from ktd.logging import get_logger
 from ktd.util.git_util import create_tag_with_type, get_repo_state, is_pristine
 from ktd.util.identifier import RUN_ID
-from ktd.util.ssh import remove_from_ssh_config, update_ssh_config
+from ktd.util.ssh import (
+    close_ssh_connection,
+    open_ssh_tunnel,
+    remove_from_ssh_config,
+    update_ssh_config,
+)
 from ktd.util.string import strip_ansi_codes, truncate
 
 logger = get_logger(__name__, format="simple")
@@ -116,24 +121,6 @@ def _open_vscode(
             f"vscode-remote://ssh-remote+{instance_name}{path}",
         ]
     )
-
-
-def _add_local_forward_to_ssh_config(host: str, ports: list[int]) -> None:
-    """Add multiple LocalForward entries to the SSH config for the given host"""
-    # The sshconf library doesn't support adding more than one of any entry in
-    # a host config; this is a workaround.
-
-    # create a placeholder entry; this removes existing entries if they exist
-    placeholder = "PLACEHOLDER"
-    update_ssh_config(host, LocalForward=placeholder, path=str(SSH_CONFIG_PATH))
-
-    # replace the placeholder with actual entries
-    entries = "\n  ".join(
-        f"LocalForward 127.0.0.1:{port} 127.0.0.1:{port}" for port in ports
-    )
-    config = SSH_CONFIG_PATH.read_text()
-    placeholder_entry = f"LocalForward {placeholder}"
-    SSH_CONFIG_PATH.write_text(config.replace(placeholder_entry, entries))
 
 
 def _wait_for_ssh(instance_name: str, max_attempts: int = 15) -> None:
@@ -531,7 +518,8 @@ def _cmd_ray_up(
         f"[{cluster_head_name}] Forwarding ports for "
         f"{', '.join(_FORWARDED_PORTS.keys())}"
     )
-    _add_local_forward_to_ssh_config(cluster_head_name, list(_FORWARDED_PORTS.values()))
+    for port in _FORWARDED_PORTS.values():
+        open_ssh_tunnel(cluster_head_name, port)
 
     if open_vscode:
         _open_vscode(session, cluster_head_name)
@@ -574,8 +562,15 @@ def _cmd_ray_down(
         # strip them
         log_path.write_text(strip_ansi_codes(log_path.read_text()))
 
+    cluster_head_name = f"ray-{cluster_name}-head"
     cluster_names = f"ray-{cluster_name}-*"
     worker_names = f"ray-{cluster_name}-workers"
+
+    logger.info(f"Closing SSH connections to {cluster_head_name}")
+    try:
+        close_ssh_connection(cluster_head_name)
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to close SSH connections: {e}")
 
     if kill and keep_min_workers:
         logger.warning("Killing instances with keep_min_workers is not implemented")

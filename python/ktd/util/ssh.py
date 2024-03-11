@@ -1,3 +1,5 @@
+import subprocess
+from os import makedirs
 from os.path import exists, expanduser
 
 from ktd.logging import get_logger
@@ -51,3 +53,70 @@ def update_ssh_config(
         conf.add(host, **kwargs)
 
     conf.write(conf_path)
+
+
+def _get_control_path() -> str:
+    socket_dir = expanduser("~/.ssh/sockets")
+    makedirs(socket_dir, exist_ok=True)
+    return f"{socket_dir}/%C"
+
+
+def _run_cmd(cmd: list[str], quiet: bool = True) -> None:
+    if quiet:
+        stdout = stderr = subprocess.PIPE
+        try:
+            subprocess.run(cmd, stdout=stdout, stderr=stderr, check=True)
+        except subprocess.CalledProcessError as e:
+            logger.error(f"{e}\nstdout:\n{e.stdout}\nstderr:\n{e.stderr}")
+            raise e
+    else:
+        subprocess.run(cmd, check=True)
+
+
+def open_ssh_tunnel(
+    dest: str,
+    port: int,
+    bind_address: str | None = None,
+    host: str = "localhost",
+    host_port: int | None = None,  # defaults to `port`
+    local: bool = True,
+    quiet: bool = True,
+) -> None:
+    if host_port is None:
+        host_port = port
+    connection_str = f"{port}:{host}:{host_port}"
+    if bind_address:
+        connection_str = f"{bind_address}:{connection_str}"
+
+    # Note - this should be reentrant
+    cmd = [
+        "ssh",
+        # ControlMaster=auto: use the existing connection if it exists
+        "-o ControlMaster=auto",
+        # ControlPath: path to the control socket
+        f"-o ControlPath={_get_control_path()}",
+        # ExitOnForwardFailure=yes: terminate the connection if the forwarding fails
+        "-o ExitOnForwardFailure=yes",
+        # -f: run in background
+        # -N: don't execute a remote command
+        "-fN",
+        # -L: local port forwarding
+        # -R: remote port forwarding
+        "-L" if local else "-R",
+        connection_str,
+        dest,
+    ]
+    _run_cmd(cmd, quiet)
+
+
+def close_ssh_connection(dest: str, quiet: bool = True) -> None:
+    cmd = [
+        "ssh",
+        # ControlPath: path to the control socket
+        f"-o ControlPath={_get_control_path()}",
+        # Control an active connection with the given command
+        "-O",
+        "exit",
+        dest,
+    ]
+    _run_cmd(cmd, quiet)
