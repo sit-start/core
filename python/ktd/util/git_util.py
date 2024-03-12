@@ -1,3 +1,5 @@
+from tempfile import NamedTemporaryFile
+
 import git
 from git import Repo
 from git.remote import Remote
@@ -114,14 +116,36 @@ def get_repo_state(repo: str | Repo) -> dict[str, str | list[str] | None]:
         "branch": local_branch.name if local_branch else None,
         "commit": commit.hexsha,
         "tags": tags or None,
-        "untracked": repo.untracked_files or None,
         "run": run.name if run else None,
         "remote": remote,
         "remote_branch": remote_branch.name if remote_branch else None,
         "remote_commit": remote_branch.commit.hexsha if remote_branch else None,
         "status": repo.git.status("--porcelain") or None,
-        "diff": repo.git.diff() or None,
+        "diff": diff_vs_commit(repo, include_untracked=True) or None,
     }
+
+
+def diff_vs_commit(
+    repo: str | Repo,
+    ref: str = "HEAD",
+    include_untracked: bool = False,
+    *args,
+    **kwargs,
+) -> str:
+    repo = repo if isinstance(repo, Repo) else get_repo(repo)
+    """Returns the diff between the working dir and the given ref
+    
+    The result is as if the staging area had been restored prior to
+    calling diff.
+    """
+    # use a temporary index file to avoid modifying the actual index and
+    # add all files, including untracked files
+    # https://git.vger.kernel.narkive.com/yH88SS4R/diff-new-files-without-using-index
+    with NamedTemporaryFile(prefix="/tmp/") as temp_index_file:
+        temp_index_file.close()
+        env = {"GIT_INDEX_FILE": temp_index_file.name}
+        repo.git.add("--all" if include_untracked else "--update", env=env)
+        return repo.git.diff("--cached", ref, *args, **kwargs, env=env)
 
 
 def get_short_repo_description(
