@@ -53,7 +53,7 @@ file_mounts: {
     "~/.vscode-server/data/Machine/settings.json": "~/.vscode-server/data/Machine/settings.json",
   }
 cluster_synced_files: []
-file_mounts_sync_continuously: False
+file_mounts_sync_continuously: True
 rsync_exclude: []
 rsync_filter:
   - ".gitignore"
