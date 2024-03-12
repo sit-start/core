@@ -19,16 +19,16 @@ logger = get_logger(format="bare", level=logging.INFO)
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, dropout_p, stride=1):
+    def __init__(self, in_planes, planes, dropout_p, with_batchnorm=True, stride=1):
         super(BasicBlock, self).__init__()
         self.conv1 = nn.Conv2d(
             in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False
         )
-        self.bn1 = nn.BatchNorm2d(planes)
+        self.bn1 = nn.BatchNorm2d(planes) if with_batchnorm else nn.Identity()
         self.conv2 = nn.Conv2d(
             planes, planes, kernel_size=3, stride=1, padding=1, bias=False
         )
-        self.bn2 = nn.BatchNorm2d(planes)
+        self.bn2 = nn.BatchNorm2d(planes) if with_batchnorm else nn.Identity()
 
         self.dropout = nn.Dropout2d(p=dropout_p)
 
@@ -42,7 +42,11 @@ class BasicBlock(nn.Module):
                     stride=stride,
                     bias=False,
                 ),
-                nn.BatchNorm2d(self.expansion * planes),
+                (
+                    nn.BatchNorm2d(self.expansion * planes)
+                    if with_batchnorm
+                    else nn.Identity()
+                ),
             )
 
     def forward(self, x):
@@ -55,13 +59,14 @@ class BasicBlock(nn.Module):
 
 
 class ResNet(nn.Module):
-    def __init__(self, block, num_blocks, num_classes, dropout_p):
+    def __init__(self, block, num_blocks, num_classes, dropout_p, with_batchnorm=True):
         super(ResNet, self).__init__()
         self.in_planes = 64
         self.dropout_p = dropout_p
+        self.with_batchnorm = with_batchnorm
 
         self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(64)
+        self.bn1 = nn.BatchNorm2d(64) if with_batchnorm else nn.Identity()
         self.layer1 = self._make_layer(block, 64, num_blocks[0], stride=1)
         self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
@@ -78,6 +83,7 @@ class ResNet(nn.Module):
                     planes=planes,
                     stride=stride,
                     dropout_p=self.dropout_p,
+                    with_batchnorm=self.with_batchnorm,
                 )
             )
             self.in_planes = planes * block.expansion
@@ -95,9 +101,13 @@ class ResNet(nn.Module):
         return out
 
 
-def ResNet18(num_classes: int, dropout_p: float):
+def ResNet18(num_classes: int, dropout_p: float, with_batchnorm: bool = True):
     return ResNet(
-        BasicBlock, [2, 2, 2, 2], num_classes=num_classes, dropout_p=dropout_p
+        BasicBlock,
+        [2, 2, 2, 2],
+        num_classes=num_classes,
+        dropout_p=dropout_p,
+        with_batchnorm=with_batchnorm,
     )
 
 
@@ -138,6 +148,7 @@ def main():
             "log_every_n_steps": 100,
             "smoke_test": False,
             "sync_batchnorm": False,
+            "with_batchnorm": True,
         },
         "wandb": {
             "enabled": True,
@@ -145,7 +156,11 @@ def main():
     }
 
     def training_module_factory(config: dict[str, Any]) -> LightningModule:
-        model = ResNet18(num_classes=CIFAR10.NUM_CLASSES, dropout_p=config["dropout_p"])
+        model = ResNet18(
+            num_classes=CIFAR10.NUM_CLASSES,
+            dropout_p=config["dropout_p"],
+            with_batchnorm=config["with_batchnorm"],
+        )
         if config["sync_batchnorm"]:
             model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
         return TrainingModule(config, model=model)
