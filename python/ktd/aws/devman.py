@@ -659,6 +659,8 @@ def _cmd_tagged_run(
         logger.info(f"Submitting job with entrypoint {entrypoint!r}")
         sub_id = client.submit_job(entrypoint=entrypoint)
         logger.info(f"Job {sub_id} submitted")
+        logger.info("See logs at http://localhost:3000/d/ray_logs_dashboard")
+        logger.info("See Ray dashboard at http://localhost:8265")
     except RuntimeError as e:
         logger.info(f"Failed to submit job: {e}")
         sys.exit(-1)
