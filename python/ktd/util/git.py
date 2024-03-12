@@ -1,7 +1,6 @@
 from tempfile import NamedTemporaryFile
 
-import git
-from git import Repo
+from git import Repo, Commit, TagReference
 from git.remote import Remote
 from ktd.logging import get_logger
 from ktd.util.identifier import RUN_ID, StringIdType
@@ -47,9 +46,9 @@ def is_synced(repo: str | Repo, branch: str | None = None) -> bool:
 def get_tags(
     repo: str | Repo,
     remote: str | Remote | None = None,
-    commit: git.Commit | None = None,
+    commit: Commit | None = None,
     remote_only: bool = False,
-) -> list[git.TagReference]:
+) -> list[TagReference]:
     """Returns all tags sorted by increasing commit date"""
     repo = repo if isinstance(repo, Repo) else get_repo(repo)
     if remote:
@@ -64,9 +63,9 @@ def get_tag_with_type(
     repo: str | Repo,
     tag_type: StringIdType,
     remote: str | Remote | None = None,
-    commit: git.Commit | None = None,
+    commit: Commit | None = None,
     remote_only: bool = False,
-) -> git.TagReference | None:
+) -> TagReference | None:
     """Returns the most recent tag of the given type or None."""
     all_tags = get_tags(repo, remote, commit, remote_only=remote_only)
     return next((t for t in reversed(all_tags) if tag_type.is_valid(t.name)), None)
@@ -77,7 +76,7 @@ def create_tag_with_type(
     tag_type: StringIdType,
     message: str | None = None,
     remote: str | Remote | None = None,
-) -> git.TagReference:
+) -> TagReference:
     repo = repo if isinstance(repo, Repo) else get_repo(repo)
     if remote:
         fetch_tags(repo, remote)
