@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 import pytorch_lightning as pl
+import torch
 import torchvision
 from filelock import FileLock
 from ktd.logging import get_logger
@@ -35,6 +36,7 @@ class CIFAR10(pl.LightningDataModule):
         self.n_workers = n_workers
         self.prepare_data_per_node = False
         self.augment = augment
+        self.generator = torch.Generator().manual_seed(hash("CIFAR10"))
 
     def setup(self, stage: str | None = None):
         normalization = Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
@@ -63,7 +65,9 @@ class CIFAR10(pl.LightningDataModule):
         )
 
         n_train = int(len(train) * self.train_split)
-        self.train, not_train = random_split(train, [n_train, len(train) - n_train])
+        self.train, not_train = random_split(
+            train, [n_train, len(train) - n_train], generator=self.generator
+        )
         self.val = Subset(val, not_train.indices)
 
         self.test = torchvision.datasets.CIFAR10(
@@ -79,6 +83,7 @@ class CIFAR10(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.n_workers,
             shuffle=True,
+            generator=self.generator,
         )
 
     def val_dataloader(self):
@@ -112,6 +117,7 @@ class SmokeTestCIFAR10(pl.LightningDataModule):
         self.prepare_data_per_node = False
         self.num_classes = num_classes
         self.img_shape = img_shape
+        self.generator = torch.Generator().manual_seed(hash("SmokeTestCIFAR10"))
 
     def setup(self, stage: str | None = None):
         num_train = int(self.num_train * self.train_split)
@@ -136,7 +142,12 @@ class SmokeTestCIFAR10(pl.LightningDataModule):
         )
 
     def train_dataloader(self):
-        return DataLoader(self.train, batch_size=self.batch_size, shuffle=True)
+        return DataLoader(
+            self.train,
+            batch_size=self.batch_size,
+            shuffle=True,
+            generator=self.generator,
+        )
 
     def val_dataloader(self):
         return DataLoader(self.val, batch_size=self.batch_size)
