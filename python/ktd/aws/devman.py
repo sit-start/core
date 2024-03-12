@@ -20,7 +20,7 @@ from ktd.aws.ec2.util import get_instance_name, get_instances, wait_for_instance
 from ktd.aws.util import sso_login
 from ktd.cloudpathlib import CloudPath
 from ktd.logging import get_logger
-from ktd.util.git_util import create_tag_with_type, get_repo_state, is_pristine
+from ktd.util.git import create_tag_with_type, get_repo_state, is_pristine
 from ktd.util.identifier import RUN_ID
 from ktd.util.ssh import (
     close_ssh_connection,

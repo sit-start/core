@@ -3,7 +3,7 @@ from typing import Callable
 
 import pytorch_lightning as pl
 from ktd.logging import get_logger
-from ktd.util.git_util import (
+from ktd.util.git import (
     get_repo,
     get_repo_state,
     get_short_repo_description,
