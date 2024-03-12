@@ -124,6 +124,7 @@ def main():
             "checkpoint_score_order": "min",
         },
         "train": {
+            "seed": None,
             "augment_training_data": False,
             "weight_decay": 5e-4,
             "lr": 1e-2,

@@ -27,6 +27,9 @@ def train(
 ) -> None:
     logger.info(f"Training with config: {config}")
 
+    if config.get("seed", None):
+        pl.seed_everything(config["seed"])
+
     with_ray = kwargs.get("with_ray", False)
     if with_ray:
         import ray
