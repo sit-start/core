@@ -1,4 +1,4 @@
-cluster_name: g5g
+cluster_name: main
 upscaling_speed: 1.0
 idle_timeout_minutes: 10
 provider:
