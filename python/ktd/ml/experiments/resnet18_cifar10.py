@@ -127,6 +127,7 @@ def main():
         "scale": {
             "num_workers": 4,
             "use_gpu": True,
+            "resources_per_worker": {"GPU": 1},
         },
         "checkpoint": {
             "num_to_keep": 2,
