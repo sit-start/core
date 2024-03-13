@@ -281,7 +281,7 @@ def _update_hostnames_in_ssh_config(
 
 
 def _ray_up(
-    config: str = "g5g",
+    config: str = "main",
     min_workers: int = -1,
     max_workers: int = -1,
     no_restart: bool = False,
@@ -482,7 +482,7 @@ def _cmd_open(
 
 def _cmd_ray_up(
     session: boto3.Session,
-    config: str = "g5g",
+    config: str = "main",
     min_workers: int = -1,
     max_workers: int = -1,
     no_restart: bool = False,
@@ -527,7 +527,7 @@ def _cmd_ray_up(
 
 def _cmd_ray_down(
     session: boto3.Session,
-    cluster_name: str = "g5g",
+    cluster_name: str = "main",
     workers_only: bool = False,
     keep_min_workers: bool = False,
     prompt: bool = False,
@@ -582,7 +582,7 @@ def _cmd_ray_down(
     _update_hostnames_in_ssh_config(session, instance_name=cluster_names)
 
 
-def _cmd_ray_monitor(session: boto3.Session, cluster_name: str = "g5g") -> None:
+def _cmd_ray_monitor(session: boto3.Session, cluster_name: str = "main") -> None:
     """Monitor autoscaling for a Ray cluster"""
     log_path = "/tmp/ray/session_latest/logs/monitor*"
     cmd = [
@@ -603,7 +603,7 @@ def _cmd_tagged_run(
     script_name: str = "",
     script_path: str = _SCRIPT_PATH_DEFAULT,
     no_strict: bool = False,
-    config: str = "g5g",
+    config: str = "main",
     cluster_name: str = "",
     restart: bool = False,
 ) -> None:
