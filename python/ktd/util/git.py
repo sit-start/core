@@ -1,9 +1,9 @@
 from tempfile import NamedTemporaryFile
 
-from git import Repo, Commit, TagReference
+from git import Commit, GitCommandError, Repo, TagReference
 from git.remote import Remote
 from ktd.logging import get_logger
-from ktd.util.identifier import RUN_ID, StringIdType
+from ktd.util.identifier import StringIdType
 
 logger = get_logger(__name__)
 
@@ -59,6 +59,24 @@ def get_tags(
     return list(tags) if tags else []
 
 
+def get_first_remote_ancestor(
+    repo: str | Repo,
+    commit: Commit | str = "HEAD",
+    remote: Remote | str = "origin",
+    branch: str = "main",
+) -> Commit:
+    repo = repo if isinstance(repo, Repo) else get_repo(repo)
+    repo.remotes[str(remote)].fetch()
+    commit = commit if isinstance(commit, Commit) else repo.commit(commit)
+    try:
+        return repo.commit(repo.git.merge_base(commit.hexsha, f"{remote}/{branch}"))
+    except GitCommandError as e:
+        logger.error(
+            f"No remote ancestor on {remote}/{branch} found for {commit.hexsha}"
+        )
+        raise e
+
+
 def get_tag_with_type(
     repo: str | Repo,
     tag_type: StringIdType,
@@ -98,30 +116,41 @@ def update_to_ref(repo: str | Repo, ref: str) -> None:
     repo.git.checkout(ref)
 
 
-def get_repo_state(repo: str | Repo) -> dict[str, str | list[str] | None]:
+def get_remote_branches_for_commit(repo: str | Repo, commit: Commit | str) -> list[str]:
     repo = repo if isinstance(repo, Repo) else get_repo(repo)
-    local_branch = repo.active_branch if not repo.head.is_detached else None
-    commit = local_branch.commit if local_branch else repo.head.commit
-    remote_branch = local_branch.tracking_branch() if local_branch else None
-    remote = remote_branch.remote_name if remote_branch else "origin"
-    # Note: run and tags below may include local-only tags; can specify
-    # remote_only=True to exclude these in both invocations below
-    run = get_tag_with_type(repo, RUN_ID, remote, commit)
-    tags = [t.name for t in get_tags(repo, remote, commit)]
+    commit = commit if isinstance(commit, Commit) else repo.commit(commit)
+    try:
+        return repo.git.branch("-r", "--contains", commit.hexsha).splitlines()
+    except GitCommandError:
+        return []
 
-    return {
-        "path": str(repo.working_dir),
-        "url": repo.remotes[remote].url if remote else None,
-        "branch": local_branch.name if local_branch else None,
-        "commit": commit.hexsha,
-        "tags": tags or None,
-        "run": run.name if run else None,
-        "remote": remote,
-        "remote_branch": remote_branch.name if remote_branch else None,
-        "remote_commit": remote_branch.commit.hexsha if remote_branch else None,
-        "status": repo.git.status("--porcelain") or None,
-        "diff": diff_vs_commit(repo, include_untracked=True) or None,
-    }
+
+def is_commit_in_remote(repo: str | Repo, commit: Commit | str) -> bool:
+    return bool(get_remote_branches_for_commit(repo, commit))
+
+
+def get_repo_state(
+    repo: str | Repo, remote: str | Remote = "origin", branch: str = "main"
+) -> dict[str, str]:
+    """Returns a repo description that allows playback from the given remote branch.
+
+    `uncommitted_changes` can be applied with `git apply`
+    `local_commits` can be applied with `git am`
+    """
+    repo = repo if isinstance(repo, Repo) else get_repo(repo)
+    commit = repo.head.commit
+    remote_commit = get_first_remote_ancestor(repo, commit, remote, branch)
+
+    return dict(
+        path=str(repo.working_dir),
+        url=repo.remotes[str(remote)].url,
+        remote=str(remote),
+        branch=branch,
+        commit=commit.hexsha,
+        remote_commit=remote_commit.hexsha,
+        uncommitted_changes=diff_vs_commit(repo, include_untracked=True),
+        local_commits=repo.git.format_patch("--stdout", remote_commit),
+    )
 
 
 def diff_vs_commit(
@@ -147,24 +176,15 @@ def diff_vs_commit(
         return repo.git.diff("--cached", ref, *args, **kwargs, env=env)
 
 
-def get_short_repo_description(
-    repo: str | Repo, state: dict[str, str | list[str] | None] | None = None
-) -> str:
-    repo = repo if isinstance(repo, Repo) else get_repo(repo)
-    state = state if state else get_repo_state(repo)
-    tag = state["tags"][-1] if state["tags"] else None
-    commit = state["commit"]
-    assert commit, "No commit found"
-
-    name = state["run"] or state["branch"] or tag or commit[:6]
-
-    dirty = repo.is_dirty()
-    has_untracked = bool(repo.untracked_files)
-    detached = repo.head.is_detached
-    not_synced = not detached and not is_synced(repo)
-
-    suffix = dirty * "*" + has_untracked * "?" + detached * "^" + (not_synced) * "!"
-    return str(name) + suffix
+def get_repo_state_summary(state: dict[str, str]) -> str:
+    is_local = state["commit"] != state["remote_commit"]
+    is_dirty_or_has_untracked_files = bool(state["uncommitted_changes"])
+    hash_len = 7
+    return (
+        is_local * f"{state['remote_commit'][:hash_len]}.."
+        + state["commit"][:hash_len]
+        + is_dirty_or_has_untracked_files * "+"
+    )
 
 
 def is_pristine(repo: str | Repo) -> bool:

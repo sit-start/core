@@ -6,7 +6,7 @@ from ktd.logging import get_logger
 from ktd.util.git import (
     get_repo,
     get_repo_state,
-    get_short_repo_description,
+    get_repo_state_summary,
     is_pristine,
 )
 from ktd.util.string import to_str
@@ -42,7 +42,7 @@ def _get_project_name(config: dict) -> str:
 
 
 def _get_run_and_group_name(config: dict) -> str:
-    repo_desc = get_short_repo_description(__file__, config["repo_state"])
+    repo_desc = get_repo_state_summary(config["repo_state"])
     arg_str = _get_argv_as_str(config)
     # TODO: consider adding a UUID (ideally the one that's used as the
     # prefix of all the run's trial IDs) if the repo isn't pristine,
