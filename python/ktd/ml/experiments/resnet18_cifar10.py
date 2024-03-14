@@ -114,7 +114,6 @@ def ResNet18(num_classes: int, dropout_p: float, with_batchnorm: bool = True):
 def main():
     config = {
         "debug": False,
-        "strict_provenance": False,
         "tune": {
             "num_samples": 1,
             "long_trial_names": True,
