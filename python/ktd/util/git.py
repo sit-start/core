@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from git import Commit, GitCommandError, Repo, TagReference
@@ -215,3 +216,30 @@ class RepoState:
             + self.commit[:hash_len]
             + is_dirty_or_has_untracked_files * "+"
         )
+
+    def replay(
+        self, repo: str | Repo, replay_branch_name: str = "repo-state-replay"
+    ) -> None:
+        repo = repo if isinstance(repo, Repo) else get_repo(repo)
+        replay_branch = repo.create_head(replay_branch_name, commit=self.remote_commit)
+        replay_branch.checkout()
+
+        if not (self.uncommitted_changes or self.local_commits):
+            return
+
+        with NamedTemporaryFile(prefix="/tmp/") as f:
+            f.close()
+            patch_path = Path(f.name)
+
+            if self.local_commits:
+                patch_path.write_text(self.local_commits)
+                repo.git.am(
+                    "--3way",
+                    "--keep-non-patch",
+                    "--committer-date-is-author-date",
+                    str(patch_path),
+                )
+
+            if self.uncommitted_changes:
+                patch_path.write_text(self.uncommitted_changes)
+                repo.git.apply(str(patch_path))
