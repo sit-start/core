@@ -5,7 +5,7 @@ from typing import Callable
 
 import pytorch_lightning as pl
 from ktd.logging import get_logger
-from ktd.util.git import get_repo, get_repo_state, get_repo_state_summary
+from ktd.util.git import get_repo, RepoState
 from ktd.util.string import to_str
 from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.train import CheckpointConfig, FailureConfig, RunConfig, ScalingConfig
@@ -64,7 +64,7 @@ def _get_trial_name(trial: Trial, incl_params: bool = False) -> str:
     return trial_id if not param_str else f"{trial_id}({param_str})"
 
 
-def _get_and_check_repo_state_and_add_to_config(config: dict) -> dict | None:
+def _get_repo_state_and_add_to_config(config: dict) -> RepoState | None:
     if not config.get("save_repo_state", True):
         return None
 
@@ -73,11 +73,10 @@ def _get_and_check_repo_state_and_add_to_config(config: dict) -> dict | None:
         raise NotImplementedError(
             f"Driver {driver!r} must be in this repo ({repo.working_dir!r})"
         )
-    # get_repo_state will raise an error if the state isn't recoverable
-    # from origin/master in this repo
-    repo_state = get_repo_state(repo)
 
-    config["train"]["repo_state"] = get_repo_state_summary(repo_state)
+    repo_state = RepoState.from_repo(repo)
+    config["train"]["repo_state"] = repo_state.summary
+
     return repo_state
 
 
@@ -104,7 +103,7 @@ def _get_ray_trainer(
     config: dict,
     training_module_factory: TrainingModuleFactory,
     data_module_factory: DataModuleFactory,
-    repo_state: dict | None = None,
+    repo_state: RepoState | None = None,
     scaling_config: ScalingConfig | None = None,
 ):
     run_config = RunConfig(
@@ -130,7 +129,7 @@ def _get_ray_trainer(
         train_loop_config=config["train"],
         run_config=run_config,
         scaling_config=scaling_config,
-        metadata=dict(repo_state=repo_state) if repo_state else None,
+        metadata=dict(repo_state=repo_state.__dict__) if repo_state else None,
     )
 
 
@@ -139,7 +138,7 @@ def train_with_ray(
     training_module_factory: TrainingModuleFactory,
     data_module_factory: DataModuleFactory,
 ) -> None:
-    repo_state = _get_and_check_repo_state_and_add_to_config(config)
+    repo_state = _get_repo_state_and_add_to_config(config)
 
     trainer = _get_ray_trainer(
         config,
@@ -160,7 +159,7 @@ def tune_with_ray(
     training_module_factory: Callable[[dict], pl.LightningModule],
     data_module_factory: Callable[[dict], pl.LightningDataModule],
 ) -> None:
-    repo_state = _get_and_check_repo_state_and_add_to_config(config)
+    repo_state = _get_repo_state_and_add_to_config(config)
 
     logger.info(f"Tuning with config: {config}")
 
