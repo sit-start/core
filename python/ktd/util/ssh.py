@@ -1,4 +1,5 @@
 import subprocess
+import sys
 from os import makedirs
 from os.path import exists, expanduser
 
@@ -58,19 +59,26 @@ def update_ssh_config(
 def _get_control_path() -> str:
     socket_dir = expanduser("~/.ssh/sockets")
     makedirs(socket_dir, exist_ok=True)
-    return f"{socket_dir}/%C"
+    return f"{socket_dir}/%r@%n:%p"
 
 
-def _run_cmd(cmd: list[str], quiet: bool = True) -> None:
-    if quiet:
-        stdout = stderr = subprocess.PIPE
-        try:
-            subprocess.run(cmd, stdout=stdout, stderr=stderr, check=True)
-        except subprocess.CalledProcessError as e:
-            logger.error(f"{e}\nstdout:\n{e.stdout}\nstderr:\n{e.stderr}")
-            raise e
-    else:
-        subprocess.run(cmd, check=True)
+def _run_cmd(cmd: list[str], quiet: bool = True, check: bool = True) -> None:
+    if not quiet:
+        subprocess.run(cmd, check=check)
+        return
+
+    stdout = stderr = subprocess.PIPE
+    try:
+        subprocess.run(cmd, stdout=stdout, stderr=stderr, check=check)
+    except subprocess.CalledProcessError as e:
+        logger.error(
+            "{exception}\nstdout:\n{stdout}\nstderr:\n{stderr}".format(
+                exception=e,
+                stdout=e.stdout.decode(sys.stdout.encoding),
+                stderr=e.stderr.decode(sys.stderr.encoding),
+            )
+        )
+        raise e
 
 
 def open_ssh_tunnel(
@@ -109,7 +117,7 @@ def open_ssh_tunnel(
     _run_cmd(cmd, quiet)
 
 
-def close_ssh_connection(dest: str, quiet: bool = True) -> None:
+def close_ssh_connection(dest: str, quiet: bool = True, noexcept: bool = True) -> None:
     cmd = [
         "ssh",
         # ControlPath: path to the control socket
@@ -119,4 +127,4 @@ def close_ssh_connection(dest: str, quiet: bool = True) -> None:
         "exit",
         dest,
     ]
-    _run_cmd(cmd, quiet)
+    _run_cmd(cmd, quiet, check=False)
