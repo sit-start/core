@@ -20,8 +20,6 @@ from ktd.aws.ec2.util import get_instance_name, get_instances, wait_for_instance
 from ktd.aws.util import sso_login
 from ktd.cloudpathlib import CloudPath
 from ktd.logging import get_logger
-from ktd.util.git import create_tag_with_type, get_repo_state, is_pristine
-from ktd.util.identifier import RUN_ID
 from ktd.util.ssh import (
     close_ssh_connection,
     open_ssh_tunnel,
@@ -69,10 +67,9 @@ _PARAM_HELP = {
     "workers_only": "only destroy workers",
     "keep_min_workers": "retain the minimal amount of workers specified in the config",
     "kill": "terminate all instances",
-    # tagged_run
+    # ray_submit_job
     "script_name": "name of the script to run, without the .py extension",
     "script_path": "path to the script; must exist on local and remote filesystems",
-    "no_strict": "do not enforce strict provenance on the local repository",
     "restart": "restart Ray services; this stops any existing jobs",
 }
 _INTERNAL_PARAMS = ["session"]
@@ -613,21 +610,19 @@ def _cmd_ray_monitor(session: boto3.Session, cluster_name: str = "main") -> None
 
 # TODO: control env vars here as well; use ray envs
 # TODO: support additional user-specified repos on local+remote hosts
-def _cmd_tagged_run(
+def _cmd_ray_submit_job(
     session: boto3.Session,
     script_name: str = "",
     script_path: str = _SCRIPT_PATH_DEFAULT,
-    no_strict: bool = False,
     config: str = "main",
     cluster_name: str = "",
     restart: bool = False,
 ) -> None:
-    """Runs an experiment on the cluster"""
+    """Runs a job on the Ray cluster"""
     # get script name
     if not script_name and script_path == _SCRIPT_PATH_DEFAULT:
         raise RuntimeError("exp_name or exp_path must be provided")
     script_path = script_path.format(exp_name=script_name)
-    script_name = Path(script_path).stem
 
     # get repo
     try:
@@ -635,14 +630,6 @@ def _cmd_tagged_run(
     except git.InvalidGitRepositoryError:
         logger.error(f"No git repository found for {script_path!r}; exiting")
         sys.exit(-1)
-
-    if not is_pristine(repo):
-        msg = f"Repo {repo.working_dir!r} is not pristine"
-        if no_strict:
-            logger.warning(f"{msg}; reproducibility will be compromised")
-        else:
-            logger.error(f"{msg}; exiting")
-            sys.exit(-1)
 
     # ensure the repo is in cluster config's file mounts, as we'll use that
     # to sync repo state with head and worker nodes
@@ -653,15 +640,6 @@ def _cmd_tagged_run(
     if not any(repo_path.is_relative_to(f) for f in file_mounts):
         msg = f"Repo {repo.working_dir!r} not in file_mounts and cannot be synced."
         raise RuntimeError(msg)
-
-    # create a tag in the remote repo
-    repo_state = get_repo_state(repo)
-    remote = str(repo_state["remote"]) if repo_state["remote"] else None
-    if repo_state["run"]:
-        logger.info(f"Existing run tag found: {repo_state['run']!r}")
-    else:
-        tag = create_tag_with_type(repo, RUN_ID, remote=remote)
-        logger.info(f"Created run tag: {tag.name!r}")
 
     # invoke ray-up
     logger.info("Running 'ray up' to sync files and run setup commands")
@@ -701,8 +679,8 @@ def main():
         "ray_up": ["u", "up"],
         "ray_down": ["d", "down"],
         "ray_monitor": ["m", "monitor"],
-        "tagged_run": ["tr"],
-        "ray_stop_all_jobs": ["stop_jobs", "sj"],
+        "ray_submit_job": ["submit_job", "sj"],
+        "ray_stop_all_jobs": ["stop_jobs", "kj"],
     }
     for cmd, aliases in commands.items():
         _add_subparser(subparsers, cmd, aliases)

@@ -4,12 +4,7 @@ from typing import Callable
 
 import pytorch_lightning as pl
 from ktd.logging import get_logger
-from ktd.util.git import (
-    get_repo,
-    get_repo_state,
-    get_repo_state_summary,
-    is_pristine,
-)
+from ktd.util.git import get_repo, get_repo_state, get_repo_state_summary
 from ktd.util.string import to_str
 from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.train import CheckpointConfig, FailureConfig, RunConfig, ScalingConfig
@@ -26,7 +21,7 @@ logger = get_logger(__name__)
 
 
 def _get_project_name(config: dict) -> str:
-    return Path(sys.argv[0]).stem
+    return config.get("project_name", Path(sys.argv[0]).stem)
 
 
 def _get_run_and_group_name(config: dict) -> str:
@@ -75,17 +70,14 @@ def _get_trial_name(trial: Trial, incl_params: bool = False) -> str:
     return trial_id if not param_str else f"{trial_id}({param_str})"
 
 
-def _get_and_check_repo_state(config) -> dict:
-    repo = get_repo(__file__)
-    if not is_pristine(repo):
-        msg = (
-            f"Repo {repo.working_dir} is not pristine. "
-            "Ensure head is attached and repo is clean and synced."
+def _get_and_check_repo_state() -> dict:
+    driver = sys.argv[0]
+    if (repo := get_repo(__file__)) != get_repo(driver):
+        raise NotImplementedError(
+            f"Driver {driver!r} must be in this repo ({repo.working_dir!r})"
         )
-        if config["strict_provenance"]:
-            raise RuntimeError(msg)
-        else:
-            logger.warning(msg)
+    # get_repo_state will raise an error if the state isn't recoverable
+    # from origin/master in this repo
     return get_repo_state(repo)
 
 
@@ -158,8 +150,10 @@ def tune_with_ray(
     training_module_factory: Callable[[dict], pl.LightningModule],
     data_module_factory: Callable[[dict], pl.LightningDataModule],
 ) -> None:
-    # TODO: save repo state in the checkpoint dir and wandb run
-    config["repo_state"] = _get_and_check_repo_state(config)
+    if config.get("save_repo_state", True):
+        # TODO: save repo state in the checkpoint dir and wandb run
+        config["repo_state"] = _get_and_check_repo_state(config)
+
     logger.info(f"Tuning with config: {config}")
 
     trainer = _get_ray_trainer(config, training_module_factory, data_module_factory)
