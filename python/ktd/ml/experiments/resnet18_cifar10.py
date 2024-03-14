@@ -114,6 +114,9 @@ def ResNet18(num_classes: int, dropout_p: float, with_batchnorm: bool = True):
 def main():
     config = {
         "debug": False,
+        # specifying this shouldn't be necessary, but the wandb project
+        # for resnet18_cifar10 seems to be corrupted
+        "project_name": "resnet18_cifar10_1",
         "tune": {
             "num_samples": 1,
             "long_trial_names": True,
