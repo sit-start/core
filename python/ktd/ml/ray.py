@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+from datetime import datetime
 from typing import Callable
 
 import pytorch_lightning as pl
@@ -24,14 +25,8 @@ def _get_project_name(config: dict) -> str:
     return config.get("project_name", Path(sys.argv[0]).stem)
 
 
-def _get_run_and_group_name(config: dict) -> str:
-    repo_desc = get_repo_state_summary(config["repo_state"])
-    arg_str = ",".join(sys.argv[1:])
-    # TODO: consider adding a UUID (ideally the one that's used as the
-    # prefix of all the run's trial IDs) if the repo isn't pristine,
-    # in case you don't want TB dirs or WandB groups to contain
-    # trials with different source for the same ID/params.
-    return repo_desc if not arg_str else f"{repo_desc}({arg_str})"
+def _get_group_name() -> str:
+    return datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
 
 def _get_trial_dirname(trial: Trial) -> str:
@@ -43,8 +38,7 @@ def _get_trial_name(trial: Trial, incl_params: bool = False) -> str:
     # distinguishes trials from different runs in the same group, and
     # the trial_num, from different trials in the same run. This is
     # particularly important if we're allowing multiple runs to use
-    # the same group when those runs may be different, i.e., with non-
-    # strict SCM provenance.
+    # the same group when those runs may be different.
     if not incl_params:
         return trial.trial_id
 
@@ -70,7 +64,10 @@ def _get_trial_name(trial: Trial, incl_params: bool = False) -> str:
     return trial_id if not param_str else f"{trial_id}({param_str})"
 
 
-def _get_and_check_repo_state() -> dict:
+def _get_and_check_repo_state_and_add_to_config(config: dict) -> dict | None:
+    if not config.get("save_repo_state", True):
+        return None
+
     driver = sys.argv[0]
     if (repo := get_repo(__file__)) != get_repo(driver):
         raise NotImplementedError(
@@ -78,7 +75,10 @@ def _get_and_check_repo_state() -> dict:
         )
     # get_repo_state will raise an error if the state isn't recoverable
     # from origin/master in this repo
-    return get_repo_state(repo)
+    repo_state = get_repo_state(repo)
+
+    config["train"]["repo_state"] = get_repo_state_summary(repo_state)
+    return repo_state
 
 
 def _get_checkpoint_config(config: dict) -> CheckpointConfig:
@@ -90,19 +90,25 @@ def _get_checkpoint_config(config: dict) -> CheckpointConfig:
 
 
 def _get_callbacks(config: dict) -> list:
+    callbacks = []
     if config["wandb"]["enabled"]:
-        return [WandbLoggerCallback(project=_get_project_name(config))]
-    return []
+        callbacks.append(
+            WandbLoggerCallback(
+                project=_get_project_name(config), group=_get_group_name()
+            )
+        )
+    return callbacks
 
 
 def _get_ray_trainer(
     config: dict,
     training_module_factory: TrainingModuleFactory,
     data_module_factory: DataModuleFactory,
+    repo_state: dict | None = None,
     scaling_config: ScalingConfig | None = None,
 ):
     run_config = RunConfig(
-        name=_get_run_and_group_name(config),
+        name="_".join([_get_project_name(config), _get_group_name()]),
         checkpoint_config=_get_checkpoint_config(config),
         storage_path=CHECKPOINT_STORAGE_PATH,
         callbacks=_get_callbacks(config),
@@ -124,6 +130,7 @@ def _get_ray_trainer(
         train_loop_config=config["train"],
         run_config=run_config,
         scaling_config=scaling_config,
+        metadata=dict(repo_state=repo_state) if repo_state else None,
     )
 
 
@@ -132,10 +139,13 @@ def train_with_ray(
     training_module_factory: TrainingModuleFactory,
     data_module_factory: DataModuleFactory,
 ) -> None:
+    repo_state = _get_and_check_repo_state_and_add_to_config(config)
+
     trainer = _get_ray_trainer(
         config,
         training_module_factory,
         data_module_factory,
+        repo_state=repo_state,
         scaling_config=ScalingConfig(
             num_workers=config["scale"]["num_workers"],
             use_gpu=config["scale"]["use_gpu"],
@@ -150,13 +160,13 @@ def tune_with_ray(
     training_module_factory: Callable[[dict], pl.LightningModule],
     data_module_factory: Callable[[dict], pl.LightningDataModule],
 ) -> None:
-    if config.get("save_repo_state", True):
-        # TODO: save repo state in the checkpoint dir and wandb run
-        config["repo_state"] = _get_and_check_repo_state(config)
+    repo_state = _get_and_check_repo_state_and_add_to_config(config)
 
     logger.info(f"Tuning with config: {config}")
 
-    trainer = _get_ray_trainer(config, training_module_factory, data_module_factory)
+    trainer = _get_ray_trainer(
+        config, training_module_factory, data_module_factory, repo_state=repo_state
+    )
 
     max_num_epochs = config["schedule"]["max_num_epochs"]
     scheduler = ASHAScheduler(
