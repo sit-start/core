@@ -584,6 +584,19 @@ def _cmd_ray_down(
     _update_hostnames_in_ssh_config(session, instance_name=cluster_names)
 
 
+def _cmd_ray_stop_all_jobs(session: boto3.Session) -> None:
+    client = ray.job_submission.JobSubmissionClient("http://127.0.0.1:8265")
+    for job in client.list_jobs():
+        if job.status == "RUNNING":
+            if not job.submission_id:
+                logger.warning(
+                    f"Running {job.job_id} has no submission ID and cannot be stopped"
+                )
+                continue
+            logger.info(f"Stopping job {job.job_id} / {job.submission_id}")
+            client.stop_job(job.submission_id)
+
+
 def _cmd_ray_monitor(session: boto3.Session, cluster_name: str = "main") -> None:
     """Monitor autoscaling for a Ray cluster"""
     log_path = "/tmp/ray/session_latest/logs/monitor*"
@@ -689,6 +702,7 @@ def main():
         "ray_down": ["d", "down"],
         "ray_monitor": ["m", "monitor"],
         "tagged_run": ["tr"],
+        "ray_stop_all_jobs": ["stop_jobs", "sj"],
     }
     for cmd, aliases in commands.items():
         _add_subparser(subparsers, cmd, aliases)

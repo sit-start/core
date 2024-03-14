@@ -117,7 +117,7 @@ def open_ssh_tunnel(
     _run_cmd(cmd, quiet)
 
 
-def close_ssh_connection(dest: str, quiet: bool = True, noexcept: bool = True) -> None:
+def close_ssh_connection(dest: str, quiet: bool = True) -> None:
     cmd = [
         "ssh",
         # ControlPath: path to the control socket
