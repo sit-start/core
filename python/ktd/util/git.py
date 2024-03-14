@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from tempfile import NamedTemporaryFile
 
 from git import Commit, GitCommandError, Repo, TagReference
@@ -129,30 +130,6 @@ def is_commit_in_remote(repo: str | Repo, commit: Commit | str) -> bool:
     return bool(get_remote_branches_for_commit(repo, commit))
 
 
-def get_repo_state(
-    repo: str | Repo, remote: str | Remote = "origin", branch: str = "main"
-) -> dict[str, str]:
-    """Returns a repo description that allows playback from the given remote branch.
-
-    `uncommitted_changes` can be applied with `git apply`
-    `local_commits` can be applied with `git am`
-    """
-    repo = repo if isinstance(repo, Repo) else get_repo(repo)
-    commit = repo.head.commit
-    remote_commit = get_first_remote_ancestor(repo, commit, remote, branch)
-
-    return dict(
-        path=str(repo.working_dir),
-        url=repo.remotes[str(remote)].url,
-        remote=str(remote),
-        branch=branch,
-        commit=commit.hexsha,
-        remote_commit=remote_commit.hexsha,
-        uncommitted_changes=diff_vs_commit(repo, include_untracked=True),
-        local_commits=repo.git.format_patch("--stdout", remote_commit),
-    )
-
-
 def diff_vs_commit(
     repo: str | Repo,
     ref: str = "HEAD",
@@ -176,17 +153,6 @@ def diff_vs_commit(
         return repo.git.diff("--cached", ref, *args, **kwargs, env=env)
 
 
-def get_repo_state_summary(state: dict[str, str]) -> str:
-    is_local = state["commit"] != state["remote_commit"]
-    is_dirty_or_has_untracked_files = bool(state["uncommitted_changes"])
-    hash_len = 7
-    return (
-        is_local * f"{state['remote_commit'][:hash_len]}.."
-        + state["commit"][:hash_len]
-        + is_dirty_or_has_untracked_files * "+"
-    )
-
-
 def is_pristine(repo: str | Repo) -> bool:
     repo = repo if isinstance(repo, Repo) else get_repo(repo)
     return not (
@@ -195,3 +161,57 @@ def is_pristine(repo: str | Repo) -> bool:
         or repo.head.is_detached
         or not is_synced(repo)
     )
+
+
+@dataclass
+class RepoState:
+    path: str
+    url: str
+    remote: str
+    branch: str
+    commit: str
+    remote_commit: str
+    uncommitted_changes: str
+    local_commits: str
+
+    @classmethod
+    def from_repo(
+        cls,
+        repo: str | Repo,
+        remote: str | Remote = "origin",
+        branch: str = "main",
+    ) -> "RepoState":
+        repo = repo if isinstance(repo, Repo) else get_repo(repo)
+        commit = repo.head.commit
+        remote_commit = get_first_remote_ancestor(repo, commit, remote, branch)
+        local_commits = repo.git.format_patch("--stdout", remote_commit)
+
+        assert commit == remote_commit or bool(
+            local_commits
+        ), "No local commits, but commit != remote_commit"
+
+        return cls(
+            path=str(repo.working_dir),
+            url=repo.remotes[str(remote)].url,
+            remote=str(remote),
+            branch=branch,
+            commit=commit.hexsha,
+            remote_commit=remote_commit.hexsha,
+            uncommitted_changes=diff_vs_commit(repo, include_untracked=True),
+            local_commits=local_commits,
+        )
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "RepoState":
+        return cls(**d)
+
+    @property
+    def summary(self) -> str:
+        is_local = self.commit != self.remote_commit
+        is_dirty_or_has_untracked_files = bool(self.uncommitted_changes)
+        hash_len = 7
+        return (
+            is_local * f"{self.remote_commit[:hash_len]}.."
+            + self.commit[:hash_len]
+            + is_dirty_or_has_untracked_files * "+"
+        )
