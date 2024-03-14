@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 from typing import Callable
 
 import pytorch_lightning as pl
@@ -24,26 +25,13 @@ CHECKPOINT_STORAGE_PATH = "s3://ktd-ray/runs"
 logger = get_logger(__name__)
 
 
-def _get_argv_as_str(config: dict) -> str:
-    """Returns a string of command-line args for the driver listed in the config."""
-    driver_name = config["driver_name"]
-    driver_idx = next((i for i, x in enumerate(sys.argv) if driver_name in x), None)
-    if driver_idx is None:
-        logger.warning(
-            f"Driver name {driver_name} not found in command-line invocation. Creating "
-            "project name from possibly irrelevant command-line arguments."
-        )
-        driver_idx = 0
-    return ",".join(sys.argv[driver_idx + 1 :])
-
-
 def _get_project_name(config: dict) -> str:
-    return config["driver_name"]
+    return Path(sys.argv[0]).stem
 
 
 def _get_run_and_group_name(config: dict) -> str:
     repo_desc = get_repo_state_summary(config["repo_state"])
-    arg_str = _get_argv_as_str(config)
+    arg_str = ",".join(sys.argv[1:])
     # TODO: consider adding a UUID (ideally the one that's used as the
     # prefix of all the run's trial IDs) if the repo isn't pristine,
     # in case you don't want TB dirs or WandB groups to contain
