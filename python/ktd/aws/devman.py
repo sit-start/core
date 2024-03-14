@@ -518,6 +518,8 @@ def _cmd_ray_up(
         f"[{cluster_head_name}] Forwarding ports for "
         f"{', '.join(_FORWARDED_PORTS.keys())}"
     )
+
+    close_ssh_connection(cluster_head_name)
     for port in _FORWARDED_PORTS.values():
         open_ssh_tunnel(cluster_head_name, port)
 
