@@ -9,7 +9,7 @@ from ktd.util.git import get_repo, RepoState
 from ktd.util.string import to_str
 from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.train import CheckpointConfig, FailureConfig, RunConfig, ScalingConfig
-from ray.train.torch import TorchTrainer
+from ray.train.torch import TorchTrainer, TorchConfig
 from ray.tune import TuneConfig, Tuner
 from ray.tune.experiment.trial import Trial
 from ray.tune.schedulers import ASHAScheduler
@@ -99,6 +99,14 @@ def _get_callbacks(config: dict) -> list:
     return callbacks
 
 
+def _get_scaling_config(config: dict) -> ScalingConfig:
+    return ScalingConfig(
+        num_workers=config["scale"]["num_workers"],
+        use_gpu=config["scale"]["use_gpu"],
+        resources_per_worker=config["scale"]["resources_per_worker"],
+    )
+
+
 def _get_ray_trainer(
     config: dict,
     training_module_factory: TrainingModuleFactory,
@@ -130,6 +138,7 @@ def _get_ray_trainer(
         run_config=run_config,
         scaling_config=scaling_config,
         metadata=dict(repo_state=repo_state.__dict__) if repo_state else None,
+        torch_config=TorchConfig(backend=config["torch"]["backend"]),
     )
 
 
@@ -145,10 +154,7 @@ def train_with_ray(
         training_module_factory,
         data_module_factory,
         repo_state=repo_state,
-        scaling_config=ScalingConfig(
-            num_workers=config["scale"]["num_workers"],
-            use_gpu=config["scale"]["use_gpu"],
-        ),
+        scaling_config=_get_scaling_config(config),
     )
     result = trainer.fit()
     print(f"Training result: {result}")
@@ -192,10 +198,7 @@ def tune_with_ray(
             trial_dirname_creator=_get_trial_dirname,
         ),
         param_space={
-            "scaling_config": ScalingConfig(
-                num_workers=config["scale"]["num_workers"],
-                use_gpu=config["scale"]["use_gpu"],
-            ),
+            "scaling_config": _get_scaling_config(config),
             "train_loop_config": config["train"],
         },
     )

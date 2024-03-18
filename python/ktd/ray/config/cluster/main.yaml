@@ -1,4 +1,5 @@
 cluster_name: main
+max_workers: 8
 upscaling_speed: 1.0
 idle_timeout_minutes: 10
 provider:
@@ -23,25 +24,9 @@ available_node_types:
           Ebs:
             VolumeSize: 256
             VolumeType: gp3
-  g5.12xlarge:
-    min_workers: 0
-    max_workers: 1
-    resources: { "CPU": 48, "GPU": 4 }
-    node_config:
-      InstanceType: g5.12xlarge
-      ImageId: ami-0c38021ff804d9342
-      KeyName: rsa
-      IamInstanceProfile:
-        Arn: arn:aws:iam::960487471244:instance-profile/ray-worker
-      BlockDeviceMappings:
-        - DeviceName: /dev/xvda
-          Ebs:
-            VolumeSize: 256
-            VolumeType: gp3
   g5.xlarge:
     min_workers: 0
-    # quota allows 8, but max_workers=4 allows 4 xlarge and 1 12xlarge
-    max_workers: 4
+    max_workers: 8
     resources: { "CPU": 4, "GPU": 1 }
     node_config:
       InstanceType: g5.xlarge
