@@ -6,10 +6,10 @@
   "editor.tabSize": 2,
   "flake8.args": [
     // black uses a line length of 88
-    "--max-line-length=88", 
-    // black will break before binary operator and add whitespace before
-    // `:` in slices
-    "--ignore=W503,E203", 
+    "--max-line-length=88",
+    // black will break before binary operator, add whitespace before
+    // `:` in slices, and move `...` to the func definition line
+    "--ignore=W503,E203,E704",
   ],
   "[python]": {
     "editor.defaultFormatter": "ms-python.black-formatter",
