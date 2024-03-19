@@ -7,7 +7,8 @@ import ray
 import torch.nn as nn
 import torch.nn.functional as F
 from ktd.logging import get_logger
-from ktd.ml.data.cifar10 import CIFAR10, SmokeTestCIFAR10
+from ktd.ml.data.cifar10 import CIFAR10
+from ktd.ml.data.smoke_test import SmokeTest
 from ktd.ml.ray import tune_with_ray
 from ktd.ml.training_module import TrainingModule
 from pytorch_lightning import LightningDataModule, LightningModule
@@ -171,10 +172,16 @@ def main():
 
     def data_module_factory(config: dict[str, Any]) -> LightningDataModule:
         if config["smoke_test"]:
-            return SmokeTestCIFAR10(batch_size=config["batch_size"])
+            return SmokeTest(
+                batch_size=config["batch_size"], num_classes=CIFAR10.NUM_CLASSES
+            )
+
+        data_dir = os.path.expanduser("~/datasets/cifar10")
+        os.makedirs(data_dir, exist_ok=True)
+
         return CIFAR10(
+            data_dir=data_dir,
             batch_size=config["batch_size"],
-            data_dir="data",
             augment=config["augment_training_data"],
         )
 
