@@ -36,7 +36,7 @@ class CIFAR10(pl.LightningDataModule):
         self.n_workers = n_workers
         self.prepare_data_per_node = False
         self.augment = augment
-        self.generator = torch.Generator().manual_seed(hash("CIFAR10"))
+        self.generator = torch.Generator().manual_seed(42)
 
     def setup(self, stage: str | None = None):
         normalization = Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
