@@ -30,6 +30,8 @@ available_node_types:
     resources: { "CPU": 4, "GPU": 1 }
     node_config:
       InstanceType: g5.xlarge
+      InstanceMarketOptions:
+        MarketType: spot
       ImageId: ami-0c38021ff804d9342
       KeyName: rsa
       IamInstanceProfile:
