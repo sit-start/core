@@ -5,7 +5,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 from os.path import expanduser, expandvars, realpath
 from pathlib import Path
 from time import sleep
@@ -20,17 +19,16 @@ from ktd.aws.ec2.util import get_instance_name, get_instances, wait_for_instance
 from ktd.aws.util import sso_login
 from ktd.cloudpathlib import CloudPath
 from ktd.logging import get_logger
+from ktd.util.run import run
 from ktd.util.ssh import (
     close_ssh_connection,
     open_ssh_tunnel,
     remove_from_ssh_config,
     update_ssh_config,
 )
-from ktd.util.string import strip_ansi_codes, truncate
+from ktd.util.string import truncate
 
 logger = get_logger(__name__, format="simple")
-
-# TODO: use subprocess.check_call() throughout
 
 SSH_CONFIG_PATH = Path(os.environ["HOME"]) / ".ssh" / "config"
 CF_TEMPLATE_PATH = Path(__file__).parent / "cloudformation" / "templates" / "dev.yaml"
@@ -110,7 +108,7 @@ def _open_vscode(
     path: str = "/home/ec2-user/dev/dev.code-workspace",
 ) -> None:
     logger.info(f"[{instance_name}] Opening VS Code on instance")
-    subprocess.call(
+    run(
         [
             "code",
             "--",
@@ -122,7 +120,7 @@ def _open_vscode(
 
 def _wait_for_ssh(instance_name: str, max_attempts: int = 15) -> None:
     logger.info(f"[{instance_name}] Waiting for SSH")
-    subprocess.call(
+    run(
         [
             "ssh",
             "-o",
@@ -308,16 +306,9 @@ def _ray_up(
 
     logger.info(f"[{cluster_name}] Creating or updating Ray cluster")
     if show_output:
-        subprocess.run(cmd, check=True)
+        run(cmd, output="std")
     else:
-        log_path = Path(tempfile.mkdtemp(prefix="/tmp/")) / f"ray_up_{cluster_name}.log"
-        logger.info(f"[{cluster_name}] Ray output written to {log_path}")
-        cmd += ["--log-color", "false"]
-        with open(log_path, "w") as f:
-            subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, check=True)
-        # even with --log-color false, the log still contains ANSI codes, so
-        # strip them
-        log_path.write_text(strip_ansi_codes(log_path.read_text()))
+        run(cmd + ["--log-color", "false"], output="file")
 
 
 def _cmd_start(session: boto3.Session, instance_name: str) -> None:
@@ -548,18 +539,9 @@ def _cmd_ray_down(
         cmd.append("--verbose")
 
     if show_output:
-        subprocess.call(cmd)
+        run(cmd, output="std")
     else:
-        log_path = (
-            Path(tempfile.mkdtemp(prefix="/tmp/")) / f"ray_down_{cluster_name}.log"
-        )
-        logger.info(f"[{cluster_name}] Ray output written to {log_path}")
-        cmd += ["--log-color", "false"]
-        with open(log_path, "w") as f:
-            subprocess.call(cmd, stdout=f, stderr=subprocess.STDOUT)
-        # even with --log-color false, the log still contains ANSI codes, so
-        # strip them
-        log_path.write_text(strip_ansi_codes(log_path.read_text()))
+        run(cmd + ["--log-color", "false"], output="file")
 
     cluster_head_name = f"ray-{cluster_name}-head"
     cluster_names = f"ray-{cluster_name}-*"
@@ -604,8 +586,7 @@ def _cmd_ray_monitor(session: boto3.Session, cluster_name: str = "main") -> None
         "--",
         f"tail -n 100 -f {log_path}",
     ]
-    logger.info(" ".join(cmd))
-    subprocess.call(cmd)
+    run(cmd)
 
 
 # TODO: control env vars here as well; use ray envs
