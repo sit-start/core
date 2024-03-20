@@ -84,6 +84,7 @@ _FORWARDED_PORTS = {
     "Ray Dashboard": 8265,
     "Prometheus": 9090,
     "Grafana": 3000,
+    "TensorBoard": 6006,
 }
 _SCRIPT_PATH_DEFAULT = "$DEV/core/python/ktd/ml/experiments/{exp_name}.py"
 _RUNNER = "$DEV/core/python/ktd/util/run_from_ref.py"

@@ -116,6 +116,10 @@ head_setup_commands:
       sudo cp /etc/grafana/grafana.ini /etc/grafana/grafana.ini.ray-bak &&
         sudo cp "$DEV/core/python/ktd/ray/config/aux/grafana.ini" \
           /etc/grafana/grafana.ini)
+  # create the tensorboard service
+  - |
+    sudo $DEV/core/python/ktd/ray/config/aux/create-tensorboard-service.sh \
+      $USER
   # install loki TODO: move to AMI
   - |
     yum list installed loki >/dev/null 2>&1 || 
@@ -141,6 +145,7 @@ head_start_ray_commands:
   - sudo systemctl restart prometheus
   - sudo systemctl restart fluent-bit
   - sudo systemctl restart loki
+  - sudo systemctl restart tensorboard
 worker_start_ray_commands:
   # restart ray
   - ray stop
