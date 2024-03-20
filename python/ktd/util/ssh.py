@@ -1,9 +1,8 @@
-import subprocess
-import sys
 from os import makedirs
 from os.path import exists, expanduser
 
 from ktd.logging import get_logger
+from ktd.util.run import run
 from sshconf import empty_ssh_config_file, read_ssh_config
 
 logger = get_logger(__name__)
@@ -62,25 +61,6 @@ def _get_control_path() -> str:
     return f"{socket_dir}/%r@%n:%p"
 
 
-def _run_cmd(cmd: list[str], quiet: bool = True, check: bool = True) -> None:
-    if not quiet:
-        subprocess.run(cmd, check=check)
-        return
-
-    stdout = stderr = subprocess.PIPE
-    try:
-        subprocess.run(cmd, stdout=stdout, stderr=stderr, check=check)
-    except subprocess.CalledProcessError as e:
-        logger.error(
-            "{exception}\nstdout:\n{stdout}\nstderr:\n{stderr}".format(
-                exception=e,
-                stdout=e.stdout.decode(sys.stdout.encoding),
-                stderr=e.stderr.decode(sys.stderr.encoding),
-            )
-        )
-        raise e
-
-
 def open_ssh_tunnel(
     dest: str,
     port: int,
@@ -114,7 +94,7 @@ def open_ssh_tunnel(
         connection_str,
         dest,
     ]
-    _run_cmd(cmd, quiet)
+    run(cmd, output="quiet" if quiet else "std")
 
 
 def close_ssh_connection(dest: str, quiet: bool = True) -> None:
@@ -127,4 +107,4 @@ def close_ssh_connection(dest: str, quiet: bool = True) -> None:
         "exit",
         dest,
     ]
-    _run_cmd(cmd, quiet, check=False)
+    run(cmd, output="quiet" if quiet else "std", check=False)
