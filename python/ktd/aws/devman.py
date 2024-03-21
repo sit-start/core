@@ -2,7 +2,6 @@
 import argparse
 import inspect
 import os
-import re
 import subprocess
 import sys
 from os.path import expanduser, expandvars, realpath
@@ -11,22 +10,29 @@ from time import sleep
 
 import boto3
 import git
-import json5
 import ray.job_submission
 import yaml
-from boto3.resources.base import ServiceResource
-from ktd.aws.ec2.util import get_instance_name, get_instances, wait_for_instance_with_id
+from ktd.aws.ec2.util import (
+    get_instance_name,
+    get_instances,
+    get_unique_instance_name,
+    kill_instances_with_name,
+    update_ssh_config_for_instance,
+    update_ssh_config_for_instances_with_name,
+    wait_for_instance_with_id,
+    wait_for_stack_with_name,
+)
 from ktd.aws.util import sso_login
-from ktd.cloudpathlib import CloudPath
 from ktd.logging import get_logger
 from ktd.util.run import run
 from ktd.util.ssh import (
     close_ssh_connection,
     open_ssh_tunnel,
     remove_from_ssh_config,
-    update_ssh_config,
+    wait_for_connection,
 )
 from ktd.util.string import truncate
+from ktd.util.vscode import open_vscode_over_ssh
 
 logger = get_logger(__name__, format="simple")
 
@@ -72,14 +78,6 @@ _PARAM_HELP = {
 }
 _INTERNAL_PARAMS = ["session"]
 _CMD_PREFIX = "_cmd_"
-_ALL_INSTANCE_STATES = [
-    "pending",
-    "running",
-    "stopping",
-    "stopped",
-    "shutting-down",
-    "terminated",
-]
 _FORWARDED_PORTS = {
     "Ray Dashboard": 8265,
     "Prometheus": 9090,
@@ -87,132 +85,6 @@ _FORWARDED_PORTS = {
     "TensorBoard": 6006,
 }
 _SCRIPT_PATH_DEFAULT = "$DEV/core/python/ktd/ml/experiments/{exp_name}.py"
-_RUNNER = "$DEV/core/python/ktd/util/run_from_ref.py"
-
-
-def _github_ssh_keys(use_cached: bool = True) -> str:
-    github_keys_path = Path(os.environ["HOME"]) / ".ssh" / "github_keys"
-    if use_cached and github_keys_path.exists():
-        return github_keys_path.read_text()
-
-    path = CloudPath("https://api.github.com/meta")
-    meta = json5.loads(path.read_text())
-    if not isinstance(meta, dict) or "ssh_keys" not in meta:
-        raise RuntimeError("Failed to fetch GitHub SSH keys")
-    return "\n".join(f"github.com {v}" for v in meta["ssh_keys"])
-
-
-def _open_vscode(
-    session: boto3.Session,
-    instance_name: str,
-    target: str = "file",
-    path: str = "/home/ec2-user/dev/dev.code-workspace",
-) -> None:
-    logger.info(f"[{instance_name}] Opening VS Code on instance")
-    run(
-        [
-            "code",
-            "--",
-            f"--{target}-uri",
-            f"vscode-remote://ssh-remote+{instance_name}{path}",
-        ]
-    )
-
-
-def _wait_for_ssh(instance_name: str, max_attempts: int = 15) -> None:
-    logger.info(f"[{instance_name}] Waiting for SSH")
-    run(
-        [
-            "ssh",
-            "-o",
-            f"ConnectionAttempts {max_attempts}",
-            "-o",
-            "BatchMode yes",
-            "-o",
-            "StrictHostKeyChecking no",
-            instance_name,
-            "true",
-        ]
-    )
-
-
-def _get_instance_name_for_ssh_config(instance: ServiceResource) -> str:
-    """Attempts to return a unique name for the given instance"""
-    name = get_instance_name(instance)
-    id = instance.id  # type: ignore
-    if name is None:
-        logger.warning(f"Instance has no name; using instance ID {id}")
-        return id
-    expected_duplicate_patterns = ["^ray-.*-worker$"]
-    for pattern in expected_duplicate_patterns:
-        if re.match(pattern, name):
-            return f"{name}-{id}"
-    return name
-
-
-def _update_hostname_in_ssh_config(instance: ServiceResource) -> None:
-    instance_name = _get_instance_name_for_ssh_config(instance)
-    assert instance.meta is not None, f"[{instance_name}] Instance has no metadata"
-    host_name = instance.meta.data["PublicDnsName"]
-    if not host_name:
-        logger.info("No hostname to update in SSH config")
-        return
-    update_ssh_config(instance_name, HostName=host_name, path=str(SSH_CONFIG_PATH))
-
-
-def _wait_for_stack_with_name(
-    stack_name: str,
-    session: boto3.Session | None = None,
-    delay_sec: int = 15,
-    max_attempts: int = 20,
-) -> None:
-    logger.info(f"[{stack_name}] Waiting for stack to be ready")
-    session = session or boto3.Session()
-    client = session.client("cloudformation")
-    waiter = client.get_waiter("stack_create_complete")
-    config = {"Delay": delay_sec, "MaxAttempts": max_attempts}
-    waiter.wait(StackName=stack_name, WaiterConfig=config)
-
-
-def _kill_instances(
-    session: boto3.Session,
-    instances: list[ServiceResource],
-    update_ssh_config: bool = True,
-    kill_stacks: bool = False,
-) -> None:
-    if not instances:
-        logger.warning("No instances to kill")
-        return
-    instance_ids = [instance.id for instance in instances]  # type: ignore
-    ec2_client = session.client("ec2")
-    ec2_client.terminate_instances(InstanceIds=instance_ids)  # type: ignore
-
-    # also terminate a stack if it exists, as is the case for
-    # devservers, and remove from the SSH config
-    if kill_stacks:
-        cf_client = session.client("cloudformation")
-        for instance in instances:
-            if name := get_instance_name(instance):
-                logger.info(f"[{name}] Killing stack")
-                cf_client.delete_stack(StackName=name)  # type: ignore
-
-    if update_ssh_config:
-        for instance in instances:
-            remove_from_ssh_config(_get_instance_name_for_ssh_config(instance))
-
-
-def _kill_instances_by_name(
-    session: boto3.Session,
-    instance_name: str,
-    states: list[str] | None = None,
-    update_ssh_config: bool = True,
-    kill_stacks: bool = False,
-) -> None:
-    states = states or list(set(_ALL_INSTANCE_STATES).difference(["terminated"]))
-    instances = get_instances(name=instance_name, states=states, session=session)
-    _kill_instances(
-        session, instances, update_ssh_config=update_ssh_config, kill_stacks=kill_stacks
-    )
 
 
 def _add_subparser(
@@ -252,28 +124,6 @@ def _add_subparser(
         parser.add_argument(*args, **kwargs)
     parser.set_defaults(func=func)
     return parser
-
-
-def _update_hostnames_in_ssh_config(
-    session: boto3.Session, instance_name: str = "?*"
-) -> None:
-    """Update the SSH config for all running instances with the given name"""
-    logger.info(f"[{instance_name}] Updating hostnames in SSH config")
-
-    running_instances: list[ServiceResource] = []
-    other_instance_names: list[str] = []
-
-    for instance in get_instances(name=instance_name, session=session):
-        this_instance_name = _get_instance_name_for_ssh_config(instance)
-        if instance.state["Name"].strip() == "running":  # type: ignore
-            running_instances.append(instance)
-        else:
-            other_instance_names.append(this_instance_name)
-
-    for this_instance_name in set(other_instance_names):
-        remove_from_ssh_config(this_instance_name)
-    for instance in running_instances:
-        _update_hostname_in_ssh_config(instance)
 
 
 def _ray_up(
@@ -326,7 +176,7 @@ def _cmd_start(session: boto3.Session, instance_name: str) -> None:
         ec2_client = session.client("ec2")
         ec2_client.start_instances(InstanceIds=[instance.id])  # type: ignore
         wait_for_instance_with_id(instance.id, session=session)  # type: ignore
-        _update_hostname_in_ssh_config(instance)
+        update_ssh_config_for_instance(instance)
 
 
 def _cmd_stop(session: boto3.Session, instance_name: str) -> None:
@@ -344,13 +194,13 @@ def _cmd_stop(session: boto3.Session, instance_name: str) -> None:
     ec2_client.stop_instances(InstanceIds=instance_ids)  # type: ignore
 
     for instance in instances:
-        remove_from_ssh_config(_get_instance_name_for_ssh_config(instance))
+        remove_from_ssh_config(get_unique_instance_name(instance))
 
 
 def _cmd_kill(session: boto3.Session, instance_name: str) -> None:
     """Kill/terminate instances with the given name"""
     logger.info(f"[{instance_name}] Killing instances")
-    _kill_instances_by_name(session, instance_name, kill_stacks=True)
+    kill_instances_with_name(session, instance_name, kill_stacks=True)
 
 
 def _cmd_list(
@@ -409,7 +259,7 @@ def _cmd_list(
 
 def _cmd_refresh(session: boto3.Session) -> None:
     """Refresh hostnames in the SSH config for all running named instances"""
-    _update_hostnames_in_ssh_config(session, instance_name="?*")
+    update_ssh_config_for_instances_with_name(session, instance_name="?*")
 
 
 def _cmd_create(
@@ -445,18 +295,19 @@ def _cmd_create(
         ],
     )
 
-    _wait_for_stack_with_name(instance_name, session=session)
+    wait_for_stack_with_name(instance_name, session=session)
 
     # the devserver stack creates an instance with the same name
     instances = get_instances(name=instance_name, states=["running"], session=session)
     assert instances is not None and len(instances) == 1
 
-    _update_hostname_in_ssh_config(instances[0])
+    update_ssh_config_for_instance(instances[0])
 
-    _wait_for_ssh(instance_name)
+    logger.info(f"[{instance_name}] Waiting for SSH")
+    wait_for_connection(instance_name)
 
     if open_vscode:
-        _open_vscode(session, instance_name)
+        open_vscode_over_ssh(instance_name)
 
 
 def _cmd_open(
@@ -466,7 +317,7 @@ def _cmd_open(
     path: str = "/home/ec2-user/dev/dev.code-workspace",
 ) -> None:
     """Open VS Code on the instance with the given name"""
-    _open_vscode(session, instance_name, target, path)
+    open_vscode_over_ssh(instance_name, target, path)
 
 
 def _cmd_ray_up(
@@ -500,7 +351,9 @@ def _cmd_ray_up(
     # running state after the Ray cluster is up
     sleep(5)
     cluster_name = cluster_name or config
-    _update_hostnames_in_ssh_config(session, instance_name=f"ray-{cluster_name}-*")
+    update_ssh_config_for_instances_with_name(
+        session, instance_name=f"ray-{cluster_name}-*"
+    )
 
     cluster_head_name = f"ray-{cluster_name}-head"
     logger.info(
@@ -513,7 +366,7 @@ def _cmd_ray_up(
         open_ssh_tunnel(cluster_head_name, port)
 
     if open_vscode:
-        _open_vscode(session, cluster_head_name)
+        open_vscode_over_ssh(cluster_head_name)
 
 
 def _cmd_ray_down(
@@ -559,9 +412,9 @@ def _cmd_ray_down(
     elif kill:
         instance_name = worker_names if workers_only else cluster_names
         logger.info(f"[{instance_name}] Killing instances")
-        _kill_instances_by_name(session, instance_name, update_ssh_config=False)
+        kill_instances_with_name(session, instance_name, update_ssh_config=False)
 
-    _update_hostnames_in_ssh_config(session, instance_name=cluster_names)
+    update_ssh_config_for_instances_with_name(session, instance_name=cluster_names)
 
 
 def _cmd_ray_stop_all_jobs(session: boto3.Session) -> None:
