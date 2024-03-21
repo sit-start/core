@@ -26,14 +26,14 @@ def get_instance_name(instance: ServiceResource) -> str | None:
 
 
 def get_unique_instance_name(instance: ServiceResource) -> str:
-    """Returns a unique name for the given EC2 instance."""
+    """Returns a name for the given EC2 instance unique among running instances."""
     name = get_instance_name(instance)
     id = instance.id  # type: ignore
     if name is None:
         logger.warning(f"Instance has no name; using instance ID {id}")
         return id
 
-    instances_with_name = get_instances(name)
+    instances_with_name = get_instances(name, states=["pending", "running"])
     if len(instances_with_name) == 1:
         return name
 
