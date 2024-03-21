@@ -86,38 +86,45 @@ Resources:
             VolumeSize: 256
             VolumeType: gp3
       IamInstanceProfile: devserver
-      UserData: !If
-        - CloneRepositories
-        - !Base64 |
-          #!/usr/bin/env bash
-          # get read-only deploy keys for all repos
-          mkdir -p ~ec2-user/.ssh
-          repos=(dev core notebooks dotfiles)
-          for repo in "${repos[@]}"; do
-            key_name="${repo}_deploy_ed25519"
-            aws secretsmanager get-secret-value --secret-id "$key_name" \
-              --query SecretString --output text |
-              jq --raw-output .private \
-                >~ec2-user/.ssh/"$key_name"
-            chmod go-rwx ~ec2-user/.ssh/"$key_name"
-            chown ec2-user:ec2-user ~ec2-user/.ssh/"$key_name"
-          done
-          # add github keys to known hosts
-          github_keys=$(curl -s https://api.github.com/meta |
-            jq -r .ssh_keys[])
-          while IFS= read -r key; do
-            echo "github.com $key" >>~ec2-user/.ssh/known_hosts
-          done <<<"$github_keys"
-          chown ec2-user:ec2-user ~ec2-user/.ssh/known_hosts
-          # clone dotfiles via yadm
-          cd ~ec2-user
-          GIT_SSH_COMMAND="ssh -i ~ec2-user/.ssh/dotfiles_deploy_ed25519" \
-            su ec2-user -c '\
-            yadm clone git@github.com:kevdale/dotfiles --no-checkout && \
-            yadm checkout ~'
-          # clone the main dev repo
-          su - ec2-user -c 'deploy_repo dev'
-        - !Ref AWS::NoValue
+      UserData: !Base64
+        Fn::Join:
+          - ""
+          - - |
+              #!/usr/bin/env bash
+              # increase the max number of files watched
+              echo "fs.inotify.max_user_watches=524288" >> /etc/sysctl.conf
+              sysctl -p
+            - !If
+              - CloneRepositories
+              - |
+                # get read-only deploy keys for all repos
+                mkdir -p ~ec2-user/.ssh
+                repos=(dev core notebooks dotfiles)
+                for repo in "${repos[@]}"; do
+                  key_name="${repo}_deploy_ed25519"
+                  aws secretsmanager get-secret-value --secret-id "$key_name" \
+                    --query SecretString --output text |
+                    jq --raw-output .private \
+                      >~ec2-user/.ssh/"$key_name"
+                  chmod go-rwx ~ec2-user/.ssh/"$key_name"
+                  chown ec2-user:ec2-user ~ec2-user/.ssh/"$key_name"
+                done
+                # add github keys to known hosts
+                github_keys=$(curl -s https://api.github.com/meta |
+                  jq -r .ssh_keys[])
+                while IFS= read -r key; do
+                  echo "github.com $key" >>~ec2-user/.ssh/known_hosts
+                done <<<"$github_keys"
+                chown ec2-user:ec2-user ~ec2-user/.ssh/known_hosts
+                # clone dotfiles via yadm
+                cd ~ec2-user
+                GIT_SSH_COMMAND="ssh -i ~ec2-user/.ssh/dotfiles_deploy_ed25519" \
+                  su ec2-user -c '\
+                  yadm clone git@github.com:kevdale/dotfiles --no-checkout && \
+                  yadm checkout ~'
+                # clone the main dev repo
+                su - ec2-user -c 'deploy_repo dev'
+              - !Ref AWS::NoValue
   InactiveAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
