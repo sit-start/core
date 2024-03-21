@@ -47,12 +47,12 @@ _profile_opt = Option(
 )
 _min_workers_opt = Option(
     None,
-    help="The minimum number of workers; overrides the config.",
+    help="The minimum number of workers. This overrides the config.",
     show_default=False,
 )
 _max_workers_opt = Option(
     None,
-    help="The maximum number of workers; overrides the config.",
+    help="The maximum number of workers. This overrides the config.",
     show_default=False,
 )
 _no_restart_opt = Option(
@@ -69,7 +69,7 @@ _restart_only_opt = Option(
 )
 _cluster_name_opt = Option(
     None,
-    help="The cluster name; overrides the config.",
+    help="The cluster name. This overrides the config.",
     show_default=False,
 )
 _prompt_opt = Option(
@@ -116,18 +116,16 @@ _kill_opt = Option(
 )
 _script_path_arg = Argument(
     SCRIPT_PATH_DEFAULT,
-    help="The path to the script to run; "
-    "either this or --script-name must be specified.",
+    help="The path to the script to run, required if --script-name is not specified.",
 )
 _script_name_opt = Option(
     None,
-    help="The name of the script to run, without the .py extension. "
-    "Required if script_path is not specified.",
+    help="The name of the script to run, required if script_path is not specified.",
     show_default=False,
 )
 _restart_opt = Option(
     False,
-    help="Restart Ray services; this stops any existing jobs.",
+    help="Restart Ray services. This stops any existing jobs.",
     is_flag=False,
     show_default=False,
 )
@@ -194,7 +192,7 @@ def submit(
     cluster_name: str = _cluster_name_opt,
     restart: bool = _restart_opt,
 ) -> None:
-    """Runs a job on the Ray cluster."""
+    """Run a job on a Ray cluster."""
     # get script name
     if not script_name and script_path == SCRIPT_PATH_DEFAULT:
         raise RuntimeError("exp_name or exp_path must be provided")
@@ -344,7 +342,7 @@ def monitor(
         help=f"The Ray cluster config in '{CONFIG_ROOT}'.", default=DEFAULT_CONFIG
     ),
 ) -> None:
-    """Monitor autoscaling for a Ray cluster."""
+    """Monitor autoscaling on a Ray cluster."""
     log_path = "/tmp/ray/session_latest/logs/monitor*"
     cmd = [
         "ray",
@@ -353,4 +351,4 @@ def monitor(
         "--",
         f"tail -n 100 -f {log_path}",
     ]
-    run(cmd)
+    run(cmd, check=False)
