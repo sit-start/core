@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from time import sleep
 
@@ -19,7 +20,9 @@ from ktd.util.string import truncate
 from ktd.util.vscode import DEFAULT_WORKSPACE, VSCodeTarget, open_vscode_over_ssh
 from typer import Argument, Option
 
-CF_TEMPLATE_PATH = Path(__file__).parent / "cloudformation" / "templates" / "dev.yaml"
+CF_TEMPLATE_PATH = (
+    f"{os.environ['DEV']}/core/python/ktd/aws/cloudformation/templates/dev.yaml"
+)
 DEFAULT_INSTANCE_TYPE = "g5.xlarge"
 
 _EXTRA_INSTANCE_WAIT_SEC = 5
@@ -94,7 +97,7 @@ def create(
     cf_client = session.client("cloudformation")
     cf_client.create_stack(  # type: ignore
         StackName=instance_name,
-        TemplateBody=CF_TEMPLATE_PATH.read_text(),
+        TemplateBody=Path(CF_TEMPLATE_PATH).read_text(),
         Capabilities=["CAPABILITY_IAM"],
         Parameters=[
             {"ParameterKey": "InstanceType", "ParameterValue": instance_type},
