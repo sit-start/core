@@ -1,6 +1,8 @@
 from os import makedirs
 from os.path import exists, expanduser
 
+import json5
+from ktd.cloudpathlib import CloudPath
 from ktd.logging import get_logger
 from ktd.util.run import run
 from sshconf import empty_ssh_config_file, read_ssh_config
@@ -97,7 +99,7 @@ def open_ssh_tunnel(
     run(cmd, output="quiet" if quiet else "std")
 
 
-def close_ssh_connection(dest: str, quiet: bool = True) -> None:
+def close_ssh_connection(dest: str, quiet: bool = True, check: bool = False) -> None:
     cmd = [
         "ssh",
         # ControlPath: path to the control socket
@@ -107,4 +109,29 @@ def close_ssh_connection(dest: str, quiet: bool = True) -> None:
         "exit",
         dest,
     ]
-    run(cmd, output="quiet" if quiet else "std", check=False)
+    run(cmd, output="quiet" if quiet else "std", check=check)
+
+
+def wait_for_connection(dest: str, max_attempts: int = 15) -> None:
+    run(
+        [
+            "ssh",
+            "-o",
+            f"ConnectionAttempts {max_attempts}",
+            "-o",
+            "BatchMode yes",
+            "-o",
+            "StrictHostKeyChecking no",
+            dest,
+            "true",
+        ],
+        check=True,
+    )
+
+
+def get_github_ssh_keys():
+    path = CloudPath("https://api.github.com/meta")
+    meta = json5.loads(path.read_text())
+    if not isinstance(meta, dict) or "ssh_keys" not in meta:
+        raise RuntimeError("Failed to fetch GitHub SSH keys")
+    return meta["ssh_keys"]

@@ -39,3 +39,8 @@ def sso_login(profile_name=None) -> None:
         ["--profile", profile_name] if profile_name is not None else []
     )
     subprocess.run(cmd)
+
+
+def get_aws_session(profile: str | None = None) -> boto3.Session:
+    sso_login(profile_name=profile)
+    return boto3.Session(profile_name=profile)
