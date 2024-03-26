@@ -1,3 +1,5 @@
+import json
+import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -6,6 +8,7 @@ from git import Commit, GitCommandError, Repo, TagReference
 from git.remote import Remote
 from ktd.logging import get_logger
 from ktd.util.identifier import StringIdType
+from ktd.util.run import run
 
 logger = get_logger(__name__)
 
@@ -243,3 +246,11 @@ class RepoState:
             if self.uncommitted_changes:
                 patch_path.write_text(self.uncommitted_changes)
                 repo.git.apply(str(patch_path))
+
+
+def get_github_user():
+    return json.loads(run(shlex.split("gh api user"), output="capture").stdout)["login"]
+
+
+def get_github_ssh_url(account: str, repo: str):
+    return f"git@github.com:{account}/{repo}"
