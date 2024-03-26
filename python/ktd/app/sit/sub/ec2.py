@@ -25,8 +25,6 @@ CF_TEMPLATE_PATH = (
 )
 DEFAULT_INSTANCE_TYPE = "g5.xlarge"
 
-_EXTRA_INSTANCE_WAIT_SEC = 5
-
 app = typer.Typer()
 logger = get_logger(__name__, format="simple")
 
@@ -139,10 +137,8 @@ def start(instance_name: str = _instance_name_arg, profile: str = _profile_opt) 
         ec2_client = session.client("ec2")
         ec2_client.start_instances(InstanceIds=[instance.id])  # type: ignore
         wait_for_instance_with_id(instance.id, session=session)  # type: ignore
-        # occasionally the instance doesn't have a public DNS name
-        # immediately, so we wait a bit longer
-        sleep(_EXTRA_INSTANCE_WAIT_SEC)
-        update_ssh_config_for_instance(instance)
+
+    update_ssh_config_for_instances_with_name(session, instance_name)
 
 
 @app.command()
