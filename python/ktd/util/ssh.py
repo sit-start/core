@@ -96,7 +96,7 @@ def open_ssh_tunnel(
         connection_str,
         dest,
     ]
-    run(cmd, output="quiet" if quiet else "std")
+    run(cmd, output="capture" if quiet else "std")
 
 
 def close_ssh_connection(dest: str, quiet: bool = True, check: bool = False) -> None:
@@ -109,7 +109,7 @@ def close_ssh_connection(dest: str, quiet: bool = True, check: bool = False) -> 
         "exit",
         dest,
     ]
-    run(cmd, output="quiet" if quiet else "std", check=check)
+    run(cmd, output="capture" if quiet else "std", check=check)
 
 
 def wait_for_connection(dest: str, max_attempts: int = 15) -> None:
