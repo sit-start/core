@@ -3,6 +3,7 @@ from os.path import expanduser, expandvars
 
 import boto3
 from boto3.resources.base import ServiceResource
+
 from ktd.logging import get_logger
 from ktd.util.ssh import remove_from_ssh_config, update_ssh_config
 

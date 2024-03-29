@@ -1,8 +1,9 @@
-from typing import Any
 from pathlib import Path
+from typing import Any
+
+from torchvision.datasets.imagenet import META_FILE, load_meta_file, verify_str_arg
 
 from .s3 import ImageFolderS3
-from torchvision.datasets.imagenet import load_meta_file, verify_str_arg, META_FILE
 
 
 class ImageNetS3(ImageFolderS3):

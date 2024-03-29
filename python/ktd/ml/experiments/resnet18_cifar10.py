@@ -6,12 +6,13 @@ from typing import Any
 import ray
 import torch.nn as nn
 import torch.nn.functional as F
+from pytorch_lightning import LightningDataModule, LightningModule
+
 from ktd.logging import get_logger
 from ktd.ml.data.cifar10 import CIFAR10
 from ktd.ml.data.smoke_test import SmokeTest
 from ktd.ml.ray import tune_with_ray
 from ktd.ml.training_module import TrainingModule
-from pytorch_lightning import LightningDataModule, LightningModule
 
 logger = get_logger(format="bare", level=logging.INFO)
 

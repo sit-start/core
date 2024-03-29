@@ -2,8 +2,6 @@ import os
 
 import pytorch_lightning as pl
 import torchvision.datasets as datasets
-from ktd.logging import get_logger
-from ktd.ml.util import split_dataset
 from torch.utils.data import DataLoader
 from torchvision.transforms import (
     Compose,
@@ -12,6 +10,9 @@ from torchvision.transforms import (
     RandomHorizontalFlip,
     ToTensor,
 )
+
+from ktd.logging import get_logger
+from ktd.ml.util import split_dataset
 
 logger = get_logger(__name__)
 

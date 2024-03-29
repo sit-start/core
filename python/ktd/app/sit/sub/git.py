@@ -3,10 +3,11 @@ import shlex
 import tempfile
 
 import typer
+from typer import Argument, Option
+
 from ktd.logging import get_logger
 from ktd.util.git import get_github_ssh_url, get_github_user
 from ktd.util.run import run
-from typer import Argument, Option
 
 app = typer.Typer()
 logger = get_logger(__name__)

@@ -11,6 +11,7 @@ import requests
 from cloudpathlib.client import Client, register_client_class
 from cloudpathlib.enums import FileCacheMode
 from dateutil.parser import parse as parsedate
+
 from ktd.cloudpathlib.http_path import HttpPath
 from ktd.logging import get_logger
 

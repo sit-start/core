@@ -1,5 +1,5 @@
-from enum import Enum
 import os
+from enum import Enum
 
 from ktd.logging import get_logger
 from ktd.util.run import run
