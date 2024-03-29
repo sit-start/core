@@ -96,6 +96,12 @@ _show_output_opt = Option(
     is_flag=False,
     show_default=False,
 )
+_no_config_cache_opt = Option(
+    False,
+    help="Disable the local cluster config cache.",
+    is_flag=False,
+    show_default=False,
+)
 _workers_only_opt = Option(
     False,
     help="Only destroy workers.",
@@ -141,6 +147,7 @@ def _ray_up(
     prompt: bool = False,
     verbose: bool = False,
     show_output: bool = False,
+    no_config_cache: bool = False,
 ) -> None:
     cmd = ["ray", "up", f"{CONFIG_ROOT}/{config}.yaml"]
     if min_workers is not None:
@@ -159,6 +166,8 @@ def _ray_up(
         cmd.append("--yes")
     if verbose:
         cmd.append("--verbose")
+    if no_config_cache:
+        cmd.append("--no-config-cache")
 
     logger.info(f"[{cluster_name}] Creating or updating Ray cluster")
     if show_output:
@@ -215,9 +224,15 @@ def submit(
         msg = f"Repo {repo.working_dir!r} not in file_mounts and cannot be synced."
         raise RuntimeError(msg)
 
-    # invoke ray-up
+    # invoke ray-up, syncing file mounts and running setup commands
+    # even if the config hasn't changed
     logger.info("Running 'ray up' to sync files and run setup commands")
-    _ray_up(config=config, no_restart=not restart, cluster_name=cluster_name)
+    _ray_up(
+        config=config,
+        no_restart=not restart,
+        cluster_name=cluster_name,
+        no_config_cache=True,
+    )
 
     # run a basic job that uses the native environment and existing file(s)
     client = ray.job_submission.JobSubmissionClient("http://127.0.0.1:8265")
@@ -246,6 +261,7 @@ def up(
     verbose: bool = _verbose_opt,
     open_vscode: bool = _open_vscode_opt,
     show_output: bool = _show_output_opt,
+    no_config_cache: bool = _no_config_cache_opt,
 ) -> None:
     """Create or update a Ray cluster."""
     # invoke ray up
@@ -259,6 +275,7 @@ def up(
         prompt=prompt,
         verbose=verbose,
         show_output=show_output,
+        no_config_cache=no_config_cache,
     )
 
     # 5s is usually sufficient for the minimal workers to be in the
