@@ -1,6 +1,5 @@
-[tool.black]
-line-length = 88
+[tool.ruff]
+src = ["python"]
 
-[tool.flake8]
-ignore = ['W503', "E203"]
-max-line-length = 88
+[tool.ruff.lint.isort]
+known-first-party = ["ktd", "sit", "sitstart"]
