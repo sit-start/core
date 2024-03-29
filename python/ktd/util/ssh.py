@@ -1,13 +1,20 @@
-from os import makedirs
+from os import chmod, makedirs
 from os.path import exists, expanduser
 
 import json5
+from sshconf import empty_ssh_config_file, read_ssh_config
+
 from ktd.cloudpathlib import CloudPath
 from ktd.logging import get_logger
 from ktd.util.run import run
-from sshconf import empty_ssh_config_file, read_ssh_config
 
 logger = get_logger(__name__)
+
+
+def _write_ssh_config(conf, path):
+    permissions = 0o644 if path == "/etc/ssh/ssh_config" else 0o600
+    conf.write(path)
+    chmod(path, permissions)
 
 
 def remove_from_ssh_config(host: str, path="~/.ssh/config") -> bool:
@@ -20,7 +27,7 @@ def remove_from_ssh_config(host: str, path="~/.ssh/config") -> bool:
         return False
     logger.info(f"Removing host '{host}' from SSH config")
     conf.remove(host)
-    conf.write(conf_path)
+    _write_ssh_config(conf, conf_path)
     return True
 
 
@@ -54,7 +61,7 @@ def update_ssh_config(
     if host not in conf.hosts():
         conf.add(host, **kwargs)
 
-    conf.write(conf_path)
+    _write_ssh_config(conf, conf_path)
 
 
 def _get_control_path() -> str:
