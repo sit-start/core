@@ -63,17 +63,20 @@ rsync_filter:
   - ".gitignore"
 initialization_commands: []
 setup_commands:
-  # fetch repo deploy keys
+  # fetch sit-start deploy key
   - |
-    repos=(dev core notebooks dotfiles)
-    for repo in "${repos[@]}"; do
-      key_name="${repo}_deploy_ed25519"
-      test -f ~/.ssh/"$key_name" ||
-        (aws secretsmanager get-secret-value --secret-id "$key_name" \
-          --query SecretString --output text |
-          jq --raw-output .private >~/.ssh/"$key_name" &&
-          chmod go-rwx ~/.ssh/"$key_name")
-    done
+    deploy_key=sitstart_deploy_ed25519
+    test -f ~/.ssh/"$deploy_key" ||
+      (aws secretsmanager get-secret-value --secret-id "$deploy_key" \
+        --query SecretString --output text |
+        jq --raw-output .private >~/.ssh/"$deploy_key" &&
+        chmod go-rwx ~/.ssh/"$deploy_key")
+  # add deploy key to ssh config
+  - |
+    deploy_key=sitstart_deploy_ed25519
+    grep -xqF "Host github.com" ~/.ssh/config 2>/dev/null ||
+      echo -e "\nHost github.com\n  IdentityFile ~/.ssh/$deploy_key" \
+        >>~/.ssh/config && chmod go-rwx ~/.ssh/config
   # add github keys to known hosts
   - |
     github_keys=$(curl -s https://api.github.com/meta | jq -r .ssh_keys[])
@@ -81,12 +84,6 @@ setup_commands:
       while IFS= read -r key; do
         echo "github.com $key" >>~/.ssh/known_hosts
       done <<<"$github_keys"
-  # setup a deploy key for read-only access to the core repository
-  # TODO: support read-only access for all repos via custom clone
-  - |
-    grep -xqF "Host github.com" ~/.ssh/config 2>/dev/null ||
-      echo -e "\nHost github.com\n  IdentityFile ~/.ssh/core_deploy_ed25519" \
-        >>~/.ssh/config && chmod go-rwx ~/.ssh/config
   # fetch/prune so local tags on nodes don't conflict with new remote tags
   - git -C $DEV/core fetch --all --prune --prune-tags
   # login and configure wandb
