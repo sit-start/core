@@ -43,24 +43,26 @@ _profile_opt = Option(
 _instance_type_opt = Option(DEFAULT_INSTANCE_TYPE, help="The instance type to create.")
 _clone_repos_opt = Option(
     True,
+    "--clone-repos",
     help="Whether to clone repositories.",
+    show_default=False,
 )
 _open_vscode_opt = Option(
     False,
+    "--open-vscode",
     help=f"Open VS Code to the default workspace ({DEFAULT_WORKSPACE}).",
-    is_flag=False,
     show_default=False,
 )
 _show_killed_opt = Option(
     False,
+    "--show-killed",
     help="Show killed instances.",
-    is_flag=False,
     show_default=False,
 )
 _compact_opt = Option(
     False,
+    "--compact",
     help="Display compact output.",
-    is_flag=False,
     show_default=False,
 )
 _target_opt = Option(
