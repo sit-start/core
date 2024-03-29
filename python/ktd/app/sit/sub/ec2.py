@@ -1,8 +1,9 @@
 import os
 from pathlib import Path
-from time import sleep
 
 import typer
+from typer import Argument, Option
+
 from ktd.aws.ec2.util import (
     get_instance_name,
     get_instances,
@@ -18,7 +19,6 @@ from ktd.logging import get_logger
 from ktd.util.ssh import remove_from_ssh_config, wait_for_connection
 from ktd.util.string import truncate
 from ktd.util.vscode import DEFAULT_WORKSPACE, VSCodeTarget, open_vscode_over_ssh
-from typer import Argument, Option
 
 CF_TEMPLATE_PATH = (
     f"{os.environ['DEV']}/core/python/ktd/aws/cloudformation/templates/dev.yaml"

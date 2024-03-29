@@ -2,8 +2,8 @@ import string
 from dataclasses import dataclass
 from typing import Callable
 
-from ktd.util.string import is_from_alphabet, int_to_str, str_to_int, rand_str
 from ktd.logging import get_logger
+from ktd.util.string import int_to_str, is_from_alphabet, rand_str, str_to_int
 
 logger = get_logger(__name__)
 

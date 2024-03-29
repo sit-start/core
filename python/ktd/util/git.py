@@ -6,6 +6,7 @@ from tempfile import NamedTemporaryFile
 
 from git import Commit, GitCommandError, Repo, TagReference
 from git.remote import Remote
+
 from ktd.logging import get_logger
 from ktd.util.identifier import StringIdType
 from ktd.util.run import run

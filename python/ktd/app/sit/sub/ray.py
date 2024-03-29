@@ -9,6 +9,8 @@ import git
 import ray
 import typer
 import yaml
+from typer import Argument, Option
+
 from ktd.aws.ec2.util import (
     kill_instances_with_name,
     update_ssh_config_for_instances_with_name,
@@ -18,7 +20,6 @@ from ktd.logging import get_logger
 from ktd.util.run import run
 from ktd.util.ssh import close_ssh_connection, open_ssh_tunnel
 from ktd.util.vscode import open_vscode_over_ssh
-from typer import Argument, Option
 
 DEFAULT_CONFIG = "main"
 CONFIG_ROOT = f"{os.environ['DEV']}/core/python/ktd/ray/config/cluster"
