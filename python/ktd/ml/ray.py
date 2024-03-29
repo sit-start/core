@@ -1,18 +1,19 @@
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 from typing import Callable
 
 import pytorch_lightning as pl
-from ktd.logging import get_logger
-from ktd.util.git import get_repo, RepoState
-from ktd.util.string import to_str
 from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.train import CheckpointConfig, FailureConfig, RunConfig, ScalingConfig
-from ray.train.torch import TorchTrainer, TorchConfig
+from ray.train.torch import TorchConfig, TorchTrainer
 from ray.tune import TuneConfig, Tuner
 from ray.tune.experiment.trial import Trial
 from ray.tune.schedulers import ASHAScheduler
+
+from ktd.logging import get_logger
+from ktd.util.git import RepoState, get_repo
+from ktd.util.string import to_str
 
 from .train import DataModuleFactory, TrainingModuleFactory, train
 

@@ -4,10 +4,11 @@ from typing import Any, Callable
 
 import pytorch_lightning as pl
 import torch
-from ktd.logging import get_logger
 from pytorch_lightning.callbacks import Callback
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.strategies import Strategy
+
+from ktd.logging import get_logger
 
 from .callbacks import LoggerCallback
 

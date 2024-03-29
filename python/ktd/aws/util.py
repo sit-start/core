@@ -5,6 +5,7 @@ from typing import Optional
 import boto3
 import botocore
 import botocore.exceptions
+
 from ktd.logging import get_logger
 
 logger = get_logger(__name__)
