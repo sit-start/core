@@ -57,14 +57,14 @@ _max_workers_opt = Option(
 )
 _no_restart_opt = Option(
     False,
+    "--no-restart",
     help="Do not restart Ray services during the update.",
-    is_flag=False,
     show_default=False,
 )
 _restart_only_opt = Option(
     False,
+    "--restart-only",
     help="Skip running setup commands and only restart Ray.",
-    is_flag=False,
     show_default=False,
 )
 _cluster_name_opt = Option(
@@ -74,50 +74,50 @@ _cluster_name_opt = Option(
 )
 _prompt_opt = Option(
     False,
+    "--prompt",
     help="Prompt for confirmation.",
-    is_flag=False,
     show_default=False,
 )
 _verbose_opt = Option(
     False,
+    "--verbose",
     help="Display verbose output.",
-    is_flag=False,
     show_default=False,
 )
 _open_vscode_opt = Option(
     False,
+    "--open-vscode",
     help="Open VS Code on the cluster head.",
-    is_flag=False,
     show_default=False,
 )
 _show_output_opt = Option(
     False,
+    "--show-output",
     help="Display output from the 'ray' command.",
-    is_flag=False,
     show_default=False,
 )
 _no_config_cache_opt = Option(
     False,
+    "--no-config-cache",
     help="Disable the local cluster config cache.",
-    is_flag=False,
     show_default=False,
 )
 _workers_only_opt = Option(
     False,
+    "--workers-only",
     help="Only destroy workers.",
-    is_flag=False,
     show_default=False,
 )
 _keep_min_workers_opt = Option(
     False,
+    "--keep-min-workers",
     help="Retain the minimum number of workers specified in the config.",
-    is_flag=False,
     show_default=False,
 )
 _kill_opt = Option(
     False,
+    "--kill",
     help="Terminate all instances.",
-    is_flag=False,
     show_default=False,
 )
 _script_path_arg = Argument(
@@ -131,8 +131,8 @@ _script_name_opt = Option(
 )
 _restart_opt = Option(
     False,
+    "--restart",
     help="Restart Ray services. This stops any existing jobs.",
-    is_flag=False,
     show_default=False,
 )
 
