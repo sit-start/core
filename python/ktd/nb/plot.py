@@ -3,15 +3,18 @@ from IPython.core.getipython import get_ipython
 from IPython.display import HTML, display
 
 _color_consistency_styling = HTML(
-    """<style>
-  .cell-output-ipywidget-background {
-      background-color: transparent !important;
-  }
-  :root {
-      --jp-ui-font-color1: var(--vscode-editor-foreground)
-      --jp-widgets-color: var(--vscode-editor-foreground);
-      --jp-widgets-font-size: var(--vscode-editor-font-size);
-  }"""
+    """
+    <style>
+        .cell-output-ipywidget-background {
+            background-color: transparent !important;
+        }
+        :root {
+            --jp-ui-font-color1: var(--vscode-editor-foreground);
+            --jp-widgets-color: var(--vscode-editor-foreground);
+            --jp-widgets-font-size: var(--vscode-editor-font-size);  
+        }
+    </style>
+  """
 )
 
 
