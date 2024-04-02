@@ -63,17 +63,17 @@ def next_str(s: str, alphabet: str) -> str:
     return int_to_str(str_to_int(s, alphabet) + 1, alphabet, len(s))
 
 
-def to_str(x: Any, **kwargs) -> str:
-    kwargs_copy = kwargs.copy()
-    precision = kwargs_copy.pop("precision", 8)
-    list_ends = kwargs_copy.pop("list_ends", ["[", "]"])
-    list_sep = kwargs_copy.pop("list_sep", ", ")
-    dict_ends = kwargs_copy.pop("dict_ends", ["{", "}"])
-    dict_sep = kwargs_copy.pop("dict_sep", ", ")
-    dict_kv_sep = kwargs_copy.pop("dict_kv_sep", ": ")
-    use_repr = kwargs_copy.pop("use_repr", True)
-    if len(kwargs_copy) > 0:
-        raise ValueError(f"Unknown kwargs: {kwargs_copy.keys()}")
+def to_str(
+    x: Any,
+    precision: int = 8,
+    list_ends: list[str] = ["[", "]"],
+    list_sep: str = ", ",
+    dict_ends: list[str] = ["{", "}"],
+    dict_sep: str = ", ",
+    dict_kv_sep: str = ": ",
+    use_repr: bool = True,
+) -> str:
+    kwargs = locals().copy()
 
     if not (len(list_ends) == 2 and all(isinstance(x, str) for x in list_ends)):
         raise ValueError("list_ends must be a list of str of len 2")
