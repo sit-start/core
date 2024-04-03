@@ -64,9 +64,10 @@ def update_ssh_config(
     _write_ssh_config(conf, conf_path)
 
 
-def _get_control_path() -> str:
+def _get_control_path(make_dir: bool = True) -> str:
     socket_dir = expanduser("~/.ssh/sockets")
-    makedirs(socket_dir, exist_ok=True)
+    if make_dir:
+        makedirs(socket_dir, exist_ok=True)
     return f"{socket_dir}/%r@%n:%p"
 
 
@@ -123,12 +124,9 @@ def wait_for_connection(dest: str, max_attempts: int = 15) -> None:
     run(
         [
             "ssh",
-            "-o",
-            f"ConnectionAttempts {max_attempts}",
-            "-o",
-            "BatchMode yes",
-            "-o",
-            "StrictHostKeyChecking no",
+            f"-o ConnectionAttempts={max_attempts}",
+            "-o BatchMode=yes",
+            "-o StrictHostKeyChecking=no",
             dest,
             "true",
         ],
