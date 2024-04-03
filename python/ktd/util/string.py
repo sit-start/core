@@ -27,7 +27,9 @@ def rand_str(
     alphabet: str | None = None,
     test: Callable[[str], bool] | None = None,
     max_attempts: int = 100,
+    seed: int | None = None,
 ) -> str:
+    random.seed(seed)
     if alphabet is None:
         alphabet = string.digits + string.ascii_uppercase
     for _ in range(max_attempts):
