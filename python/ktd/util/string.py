@@ -5,6 +5,8 @@ from typing import Any, Callable
 
 
 def strip_ansi_codes(s: str) -> str:
+    # TODO: add support for RGB color sequence
+    # https://stackoverflow.com/questions/15682537/ansi-color-specific-rgb-sequence-bash
     return re.sub(r"\x1b\[([0-9,A-Z]{1,2}(;[0-9]{1,2})?(;[0-9]{3})?)?[m|K]?", "", s)
 
 
@@ -41,6 +43,8 @@ def rand_str(
 def str_to_int(s: str, alphabet: str) -> int:
     b = len(alphabet)
     n = len(s)
+    if n == 0:
+        raise ValueError("Input string cannot be empty")
     return sum(alphabet.index(s[i]) * b ** (n - 1 - i) for i in range(n))
 
 
@@ -74,6 +78,7 @@ def to_str(
     use_repr: bool = True,
 ) -> str:
     kwargs = locals().copy()
+    kwargs.pop("x")
 
     if not (len(list_ends) == 2 and all(isinstance(x, str) for x in list_ends)):
         raise ValueError("list_ends must be a list of str of len 2")
