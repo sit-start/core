@@ -25,7 +25,8 @@ class StringIdType:
                 suffix_len == self.suffix_len
                 or (not self.fixed_len and suffix_len > self.suffix_len)
             )
-            and is_from_alphabet(s[len(self.prefix) :], self.alphabet)
+            and str_to_int(self._suffix(s), self.alphabet) >= self.start
+            and is_from_alphabet(self._suffix(s), self.alphabet)
         )
 
     def _suffix(self, s: str) -> str:
@@ -39,7 +40,7 @@ class StringIdType:
         existing_vals = [
             str_to_int(self._suffix(s), self.alphabet) for s in existing
         ] + [self.start - 1]
-        next_val = max(existing_vals) + 1
+        next_val = max(max(existing_vals) + 1, self.start)
         suffix = int_to_str(next_val, self.alphabet, length=self.suffix_len)
         if len(suffix) > self.suffix_len:
             raise ValueError(
@@ -49,13 +50,19 @@ class StringIdType:
             )
         return self._id(suffix)
 
-    def _next_random(self, exists: Callable[[str], bool], max_attempts: int) -> str:
+    def _next_random(
+        self,
+        exists: Callable[[str], bool],
+        max_attempts: int,
+        seed: int | None = None,
+    ) -> str:
         assert not self.sequential
         suffix = rand_str(
             self.suffix_len,
             self.alphabet,
             lambda s: not exists(self._id(s)),
             max_attempts=max_attempts,
+            seed=seed,
         )
         return self._id(suffix)
 
@@ -65,6 +72,7 @@ class StringIdType:
         exists: Callable[[str], bool] | None = None,
         existing: list[str] | None = None,
         max_attempts: int = 100,
+        seed: int | None = None,
     ) -> str:
         if last is not None and not self.is_valid(last):
             raise ValueError(f"Invalid last id: {last}")
@@ -76,7 +84,9 @@ class StringIdType:
             return self._next_sequential(existing)
 
         exists = exists or (lambda s: False)
-        return self._next_random(lambda s: s in existing or exists(s), max_attempts)
+        return self._next_random(
+            lambda s: s in existing or exists(s), max_attempts, seed
+        )
 
 
 RUN_ID = StringIdType(
