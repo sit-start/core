@@ -1,5 +1,6 @@
 import json
 import shlex
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -49,22 +50,6 @@ def is_synced(repo: str | Repo, branch: str | None = None) -> bool:
     return remote_branch is not None and local_branch.commit == remote_branch.commit
 
 
-def get_tags(
-    repo: str | Repo,
-    remote: str | Remote | None = None,
-    commit: Commit | None = None,
-    remote_only: bool = False,
-) -> list[TagReference]:
-    """Returns all tags sorted by increasing commit date"""
-    repo = repo if isinstance(repo, Repo) else get_repo(repo)
-    if remote:
-        fetch_tags(repo, remote, prune=remote_only)
-    tags = sorted(repo.tags, key=lambda t: t.commit.committed_datetime)
-    if commit:
-        tags = filter(lambda t: t.commit == commit, tags)
-    return list(tags) if tags else []
-
-
 def get_first_remote_ancestor(
     repo: str | Repo,
     commit: Commit | str = "HEAD",
@@ -83,16 +68,18 @@ def get_first_remote_ancestor(
         raise e
 
 
-def get_tag_with_type(
+def get_tags(
     repo: str | Repo,
-    tag_type: StringIdType,
-    remote: str | Remote | None = None,
     commit: Commit | None = None,
-    remote_only: bool = False,
-) -> TagReference | None:
-    """Returns the most recent tag of the given type or None."""
-    all_tags = get_tags(repo, remote, commit, remote_only=remote_only)
-    return next((t for t in reversed(all_tags) if tag_type.is_valid(t.name)), None)
+    tag_type: StringIdType | None = None,
+) -> list[TagReference]:
+    repo = repo if isinstance(repo, Repo) else get_repo(repo)
+    return [
+        tag
+        for tag in sorted(repo.tags, key=lambda tag: tag.commit.committed_datetime)
+        if (commit is None or tag.commit == commit)
+        and (tag_type is None or tag_type.is_valid(tag.name))
+    ]
 
 
 def create_tag_with_type(
@@ -115,7 +102,7 @@ def create_tag_with_type(
 
 def update_to_ref(repo: str | Repo, ref: str) -> None:
     repo = repo if isinstance(repo, Repo) else get_repo(repo)
-    logger.info(f"Fetching {repo.working_dir}")
+    logger.info(f"Fetching {repo.working_tree_dir}")
     for remote in repo.remotes:
         remote.fetch()
     logger.info(f"Checking out {ref}")
@@ -126,7 +113,8 @@ def get_remote_branches_for_commit(repo: str | Repo, commit: Commit | str) -> li
     repo = repo if isinstance(repo, Repo) else get_repo(repo)
     commit = commit if isinstance(commit, Commit) else repo.commit(commit)
     try:
-        return repo.git.branch("-r", "--contains", commit.hexsha).splitlines()
+        branches = repo.git.branch("-r", "--contains", commit.hexsha).splitlines()
+        return [branch.strip() for branch in branches]
     except GitCommandError:
         return []
 
@@ -135,26 +123,39 @@ def is_commit_in_remote(repo: str | Repo, commit: Commit | str) -> bool:
     return bool(get_remote_branches_for_commit(repo, commit))
 
 
+def get_staged_files(repo: str | Repo) -> list[str]:
+    repo = repo if isinstance(repo, Repo) else get_repo(repo)
+    return repo.git.diff(cached=True, name_only=True).splitlines()
+
+
 def diff_vs_commit(
     repo: str | Repo,
     ref: str = "HEAD",
+    include_staged_untracked: bool = True,
     include_untracked: bool = False,
     *args,
     **kwargs,
 ) -> str:
-    repo = repo if isinstance(repo, Repo) else get_repo(repo)
     """Returns the diff between the working dir and the given ref
-    
-    The result is as if the staging area had been restored prior to
-    calling diff.
+
+    The result is as if the staging area had been unstaged prior to
+    calling `diff`, but previously staged files, regardless of whether
+    or not they're untracked, are included in the diff.
     """
+    repo = repo if isinstance(repo, Repo) else get_repo(repo)
+    staged_files = get_staged_files(repo)
+    logger.info(f"{staged_files=}")  # TEMP
+
     # use a temporary index file to avoid modifying the actual index and
     # add all files, including untracked files
     # https://git.vger.kernel.narkive.com/yH88SS4R/diff-new-files-without-using-index
     with NamedTemporaryFile(prefix="/tmp/") as temp_index_file:
         temp_index_file.close()
+        shutil.copyfile(repo.index.path, temp_index_file.name)
         env = {"GIT_INDEX_FILE": temp_index_file.name}
-        repo.git.add("--all" if include_untracked else "--update", env=env)
+        if include_staged_untracked:
+            repo.git.add([f for f in staged_files if Path(f).exists()], env=env)
+        repo.git.add(all=include_untracked, update=not include_untracked, env=env)
         return repo.git.diff("--cached", ref, *args, **kwargs, env=env)
 
 
@@ -166,6 +167,14 @@ def is_pristine(repo: str | Repo) -> bool:
         or repo.head.is_detached
         or not is_synced(repo)
     )
+
+
+def get_github_user():
+    return json.loads(run(shlex.split("gh api user"), output="capture").stdout)["login"]
+
+
+def get_github_ssh_url(account: str, repo: str):
+    return f"git@github.com:{account}/{repo}"
 
 
 @dataclass
@@ -245,13 +254,5 @@ class RepoState:
                 )
 
             if self.uncommitted_changes:
-                patch_path.write_text(self.uncommitted_changes)
+                patch_path.write_text(f"{self.uncommitted_changes}\n")
                 repo.git.apply(str(patch_path))
-
-
-def get_github_user():
-    return json.loads(run(shlex.split("gh api user"), output="capture").stdout)["login"]
-
-
-def get_github_ssh_url(account: str, repo: str):
-    return f"git@github.com:{account}/{repo}"
