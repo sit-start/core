@@ -121,7 +121,7 @@ head_setup_commands:
       $USER
   # install loki TODO: move to AMI
   - |
-    yum list installed loki >/dev/null 2>&1 || 
+    yum list installed loki >/dev/null 2>&1 ||
       sudo -- bash -c 'source ~ec2-user/dev/core/scripts/ec2_dev_setup.sh; \
         install_components loki'
   # increase the max number of files watched TODO: move to AMI

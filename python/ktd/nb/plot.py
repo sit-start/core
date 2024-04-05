@@ -11,7 +11,7 @@ _color_consistency_styling = HTML(
         :root {
             --jp-ui-font-color1: var(--vscode-editor-foreground);
             --jp-widgets-color: var(--vscode-editor-foreground);
-            --jp-widgets-font-size: var(--vscode-editor-font-size);  
+            --jp-widgets-font-size: var(--vscode-editor-font-size);
         }
     </style>
   """

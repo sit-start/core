@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 @register_path_class("http")
 class HttpPath(CloudPath):
-    cloud_prefix: str = "http://" 
+    cloud_prefix: str = "http://"
     client: "HttpClient"
 
     def __init__(self, *args, **kwargs):
@@ -57,6 +57,7 @@ class HttpPath(CloudPath):
     @property
     def etag(self):
         return self.client._get_metadata(self).get("etag")
+
 
 @register_path_class("https")
 class HttpsPath(HttpPath):
