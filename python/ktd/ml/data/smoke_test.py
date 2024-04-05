@@ -5,7 +5,6 @@ from torchvision.transforms import ToTensor
 
 
 class SmokeTest(pl.LightningDataModule):
-
     def __init__(
         self,
         batch_size: int = 128,

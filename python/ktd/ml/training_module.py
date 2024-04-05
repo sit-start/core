@@ -71,7 +71,7 @@ class TrainingModule(pl.LightningModule):
         lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
             T_max=self.config["max_num_epochs"],
-            eta_min=self.config["min_lr"]
+            eta_min=self.config["min_lr"],
         )
         return {
             "optimizer": optimizer,
