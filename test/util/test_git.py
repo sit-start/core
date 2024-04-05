@@ -38,7 +38,9 @@ def _add_and_commit_file(repo, filename, msg=None):
 
 
 def _create_repo_with_remote(root: str) -> Repo:
-    repo = Repo.init(Path(root) / "local")
+    repo = Repo.init(Path(root) / "local", initial_branch="main")
+    repo.git.config("user.email", "test@test.com")
+    repo.git.config("user.name", "Test")
     remote_repo_working_tree_dir = Path(root) / "remote"
     Repo.init(remote_repo_working_tree_dir, bare=True)
     Remote.create(repo, "origin", str(remote_repo_working_tree_dir))
