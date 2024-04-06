@@ -2,6 +2,7 @@
   "files.associations": {
     "**/include/c++/**": "cpp"
   },
+  "files.insertFinalNewline": true,
   "C_Cpp.clang_format_fallbackStyle": "Google",
   "editor.tabSize": 2,
   "[python]": {
@@ -24,6 +25,16 @@
     ],
     "editor.wordWrap": "off",
   },
+  "[shellscript]": {
+    "editor.defaultFormatter": "foxundermoon.shell-format",
+    "editor.rulers": [
+      80
+    ],
+  },
+  "shellformat.flag": "--indent 2",
+  "shellcheck.customArgs": [
+    "--rcfile=${workspaceFolder}/.shellcheckrc",
+  ],
   "python.analysis.typeCheckingMode": "basic",
   "python.testing.pytestEnabled": true,
   "notebook.formatOnSave.enabled": false,
