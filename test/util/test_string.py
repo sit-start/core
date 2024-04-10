@@ -3,10 +3,12 @@ import string
 import pytest
 
 from ktd.util.string import (
+    camel_to_snake,
     int_to_str,
     is_from_alphabet,
     next_str,
     rand_str,
+    snake_to_camel,
     str_to_int,
     strip_ansi_codes,
     terminal_hyperlink,
@@ -90,3 +92,19 @@ def test_to_str():
     assert to_str({"a": 1, "b": 2}) == "{'a': 1, 'b': 2}"
     assert to_str({"a": 1, "b": [1, 2]}, dict_sep=";\n") == "{'a': 1;\n'b': [1, 2]}"
     assert to_str({"a": 1, "b": 2}, dict_ends=["{(", ")}"]) == "{('a': 1, 'b': 2)}"
+
+
+def test_camel_to_snake():
+    assert camel_to_snake("CamelCase") == "camel_case"
+    assert camel_to_snake("CamelAI") == "camel_a_i"
+    assert camel_to_snake("CamelAI", reversible=False) == "camel_ai"
+    assert camel_to_snake("camelCase") == "camel_case"
+    assert camel_to_snake("camel") == "camel"
+
+
+def test_snake_to_camel():
+    assert snake_to_camel("snake_case") == "SnakeCase"
+    assert snake_to_camel("SNAKE_CASE") == "SnakeCase"
+    assert snake_to_camel("snake_case", lowercase=True) == "snakeCase"
+    assert snake_to_camel("snake_a_i") == "SnakeAI"
+    assert snake_to_camel("snake_ai") == "SnakeAi"
