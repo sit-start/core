@@ -108,3 +108,16 @@ def to_str(
             + dict_ends[1]
         )
     return repr(x) if use_repr else str(x)
+
+
+# https://stackoverflow.com/questions/1175208/elegant-python-function-to-convert-camelcase-to-snake-case
+def camel_to_snake(s: str, reversible: bool = True) -> str:
+    if reversible:
+        return re.sub(r"(?<!^)(?=[A-Z])", "_", s).lower()
+    s = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", s)
+    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", s).lower()
+
+
+def snake_to_camel(s: str, lowercase: bool = False) -> str:
+    result = "".join(word.title() for word in s.split("_"))
+    return result[0].lower() + result[1:] if lowercase else result
