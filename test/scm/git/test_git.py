@@ -9,7 +9,7 @@ from unittest import mock
 import pytest
 from git import Remote, Repo
 
-from ktd.util.git import (
+from ktd.scm.git.util import (
     RepoState,
     create_tag_with_type,
     diff_vs_commit,
@@ -200,7 +200,7 @@ def test_is_pristine(repo):
     assert not is_pristine(repo)
 
 
-@mock.patch("ktd.util.git.run")
+@mock.patch("ktd.scm.git.util.run")
 def test_get_github_user(run_mock):
     run_mock.return_value = SimpleNamespace(stdout='{"login": "user"}')
 

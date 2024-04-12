@@ -12,7 +12,7 @@ from ray.tune.experiment.trial import Trial
 from ray.tune.schedulers import ASHAScheduler
 
 from ktd.logging import get_logger
-from ktd.util.git import RepoState, get_repo
+from ktd.scm.git.util import RepoState, get_repo
 from ktd.util.string import to_str
 
 from .train import DataModuleFactory, TrainingModuleFactory, train
