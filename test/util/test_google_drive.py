@@ -74,6 +74,19 @@ def test_get_file_from_path():
     with pytest.raises(ValueError):
         get_file_from_path(service_mock, "file")
 
+    service_mock.files().list().execute.return_value = {"files": []}
+    with pytest.raises(FileNotFoundError):
+        get_file_from_path(service_mock, "/nonexistent_file")
+
+    service_mock.files().list().execute.return_value = {
+        "files": [{"name": "file", "id": "file_id"}] * 2
+    }
+    with pytest.raises(ValueError):
+        get_file_from_path(service_mock, "/file")
+
+    with pytest.raises(ValueError):
+        get_file_from_path(service_mock, "/")
+
 
 def test_get_folder_contents():
     root_folder = {"name": "folder", "id": "folder_id", "mimeType": FOLDER_TYPE}
@@ -82,7 +95,7 @@ def test_get_folder_contents():
 
     service_mock = MagicMock()
     service_mock.files().get().execute.return_value = root_folder
-    service_mock.files().list().execute.side_effect = [
+    execute_results = [
         {
             "files": [
                 {"name": f"file{i:02d}", "id": f"file{i:02d}_id", "mimeType": file_type}
@@ -99,10 +112,16 @@ def test_get_folder_contents():
         },
     ]
 
+    service_mock.files().list().execute.side_effect = execute_results
     folder, folders, files = get_folder_contents(service_mock, "folder_id")
     assert folder == root_folder
     assert folders == [sub_folder]
     assert len(files) == PAGE_SIZE + 1
+
+    service_mock.files().list().execute.side_effect = execute_results
+    _, _, _ = get_folder_contents(service_mock, "folder_id", folders_only=True)
+    query = service_mock.files().list.call_args[1].get("q")
+    assert query and f"mimeType='{FOLDER_TYPE}'" in query
 
 
 @patch("ktd.util.google_drive.get_folder_contents")

@@ -43,9 +43,14 @@ def test_rand_str():
     def from_alphabet(s: str, alphabet: str) -> bool:
         return all(c in alphabet for c in s)
 
+    default_alphabet = string.digits + string.ascii_uppercase
+    assert rand_str(seed=42) == rand_str(alphabet=default_alphabet, seed=42)
+
     assert from_alphabet(rand_str(5, string.ascii_lowercase), string.ascii_lowercase)
+
     with pytest.raises(RuntimeError):
         _ = rand_str(8, "a", test=lambda s: False)
+
     assert from_alphabet(rand_str(8, "a", test=lambda s: True), "a")
 
 
@@ -79,6 +84,11 @@ def test_next_str():
 
 
 def test_to_str():
+    with pytest.raises(ValueError):
+        to_str("", list_ends=[])
+    with pytest.raises(ValueError):
+        to_str("", dict_ends=[])
+
     assert to_str(True) == "True"
     assert to_str(False) == "False"
     assert to_str(123) == "123"

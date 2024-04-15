@@ -12,7 +12,7 @@ def test_is_valid():
     assert not id_type.is_valid("P00000")
 
 
-def test_next_sequential():
+def test_next_sequential(caplog):
     id_type = RUN_ID
 
     assert id_type.next(existing=["R00000"]) == id_type._id(str(id_type.start))
@@ -20,6 +20,13 @@ def test_next_sequential():
 
     with pytest.raises(ValueError):
         id_type.next(existing=["R99999"])
+
+    with pytest.raises(ValueError):
+        id_type.next(last="InvalidRunId")
+
+    caplog.clear()
+    id_type.next(exists=lambda x: True)
+    assert "Ignoring `exists`" in caplog.text
 
 
 def test_next_random():

@@ -108,11 +108,8 @@ def update_to_ref(repo: str | Repo, ref: str) -> None:
 def get_remote_branches_for_commit(repo: str | Repo, commit: Commit | str) -> list[str]:
     repo = repo if isinstance(repo, Repo) else get_repo(repo)
     commit = commit if isinstance(commit, Commit) else repo.commit(commit)
-    try:
-        branches = repo.git.branch("-r", "--contains", commit.hexsha).splitlines()
-        return [branch.strip() for branch in branches]
-    except GitCommandError:
-        return []
+    branches = repo.git.branch("-r", "--contains", commit.hexsha).splitlines()
+    return [branch.strip() for branch in branches]
 
 
 def is_commit_in_remote(repo: str | Repo, commit: Commit | str) -> bool:

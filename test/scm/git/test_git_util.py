@@ -1,6 +1,8 @@
 from pathlib import Path
 from time import sleep
 
+import pytest
+from git import GitCommandError
 
 from ktd.scm.git.util import (
     create_tag_with_type,
@@ -51,6 +53,7 @@ def test_fetch_tags(repo):
 
 
 def test_is_synced(repo, add_and_commit_file):
+    base_commit = repo.head.commit.hexsha
     assert is_synced(repo)
 
     add_and_commit_file(repo, "another_file")
@@ -58,6 +61,9 @@ def test_is_synced(repo, add_and_commit_file):
 
     repo.remote().push()
     assert is_synced(repo)
+
+    repo.git.checkout(base_commit)
+    assert not is_synced(repo)
 
 
 def test_get_first_remote_ancestor(repo, add_and_commit_file):
@@ -67,6 +73,11 @@ def test_get_first_remote_ancestor(repo, add_and_commit_file):
         add_and_commit_file(repo, f"file_{i}")
 
     assert repo.branches["main"].commit == get_first_remote_ancestor(repo)
+
+    repo.git.checkout("orphan-branch", orphan=True)
+    add_and_commit_file(repo, "another_file")
+    with pytest.raises(GitCommandError):
+        get_first_remote_ancestor(repo)
 
 
 def test_get_tags(repo, add_and_commit_file):
@@ -84,7 +95,7 @@ def test_get_tags(repo, add_and_commit_file):
 
 
 def test_create_tag_with_type(repo):
-    tag = create_tag_with_type(repo, RUN_ID, message="some message")
+    tag = create_tag_with_type(repo, RUN_ID, message="some message", remote="origin")
 
     assert RUN_ID.is_valid(tag.name)
     assert tag.tag and tag.tag.message == "some message"

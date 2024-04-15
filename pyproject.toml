@@ -9,3 +9,6 @@ venvPath = "."
 venv = ".venv"
 typeCheckingMode = "basic"
 extraPaths = ["python"]
+
+[tool.coverage.run]
+include = ["python/*"]

@@ -1,6 +1,8 @@
 import logging
 import re
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -46,3 +48,8 @@ def test_run_with_capture_output_error():
     cmd = ["invalid_command"]
     with pytest.raises(FileNotFoundError, match=f".*{cmd[0]}.*"):
         run(cmd, output=Output.CAPTURE)
+
+    cmd = ["ls", "nonexistent_file"]
+    with tempfile.TemporaryDirectory() as temp_dir:
+        with pytest.raises(subprocess.CalledProcessError):
+            run(cmd, output=Output.CAPTURE, cwd=temp_dir)
