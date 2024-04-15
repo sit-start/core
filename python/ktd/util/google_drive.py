@@ -48,11 +48,11 @@ def get_file_from_path(
         path = path[8:]
     if not path.startswith("/"):
         raise ValueError("Path must be absolute.")
-    path_el = path.strip("/").split("/")
-    if not path_el:
+    path = path.strip("/")
+    if not path:
         raise ValueError("Path must be non-empty.")
     file = get_file(service, "root", fields=["id", "name"])
-    for el in path_el:
+    for el in path.split("/"):
         query = (
             f" '{file['id']}' in parents and trashed=false "
             f"and mimeType='{FOLDER_TYPE}' and name='{el}'"

@@ -3,6 +3,8 @@ import tempfile
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 from ktd.util.ssh import (
     _get_control_path,
     close_ssh_connection,
@@ -15,13 +17,19 @@ from ktd.util.ssh import (
 
 
 def test_remove_from_ssh_config():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        assert not remove_from_ssh_config("host", path=f"{temp_dir}/nonexistent_file")
+
     with tempfile.NamedTemporaryFile() as conf_file:
         conf_file.close()
+
         update_ssh_config(
             "host", path=conf_file.name, User="user", StrictHostKeyChecking="no"
         )
         remove_from_ssh_config("host", path=conf_file.name)
         assert Path(conf_file.name).read_text().strip() == ""
+
+        assert not remove_from_ssh_config("nonexistent_host", path=conf_file.name)
 
 
 def test_update_ssh_config():
@@ -61,13 +69,9 @@ def test_update_ssh_config():
             ]
         )
 
-        update_ssh_config(
-            "host",
-            path=conf_file.name,
-            no_overwrite=True,
-            User="user",
-            AddKeysToAgent="no",
-        )
+        update_ssh_config("host", path=conf_file.name, no_overwrite=True, User="user-1")
+        update_ssh_config("host", path=conf_file.name, no_overwrite=True, User="user-2")
+        print(Path(conf_file.name).read_text().strip())
         assert Path(conf_file.name).read_text().strip() == "\n".join(
             [
                 "Host host",
@@ -75,8 +79,12 @@ def test_update_ssh_config():
                 "  AddKeysToAgent yes",
                 "",
                 "Host host-1",
-                "  User user",
-                "  AddKeysToAgent no",
+                "  User user-1",
+                "  AddKeysToAgent yes",
+                "",
+                "Host host-2",
+                "  User user-2",
+                "  AddKeysToAgent yes",
             ]
         )
 
@@ -86,12 +94,14 @@ def test_open_ssh_tunnel(run_mock):
     control_path = _get_control_path(make_dir=False)
     dest = "dest"
     port = 8000
+    bind_address = "localhost"
 
-    open_ssh_tunnel(dest, port)
+    open_ssh_tunnel(dest, port, bind_address)
     run_mock.assert_called_once_with(
         shlex.split(
             f"ssh '-o ControlMaster=auto' '-o ControlPath={control_path}' "
-            f"'-o ExitOnForwardFailure=yes' -fN -L {port}:localhost:{port} {dest}"
+            f"'-o ExitOnForwardFailure=yes' -fN -L {bind_address}:{port}:"
+            f"localhost:{port} {dest}"
         ),
         output="capture",
     )
@@ -127,3 +137,7 @@ def test_get_github_ssh_keys(cloud_path_mock):
     cloud_path_instance = cloud_path_mock.return_value
     cloud_path_instance.read_text.return_value = '{"ssh_keys": ["key1", "key2"]}'
     assert get_github_ssh_keys() == ["key1", "key2"]
+
+    cloud_path_instance.read_text.return_value = "{}"
+    with pytest.raises(RuntimeError):
+        get_github_ssh_keys()

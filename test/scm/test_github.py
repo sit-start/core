@@ -2,7 +2,14 @@ import os
 from types import SimpleNamespace
 from unittest import mock
 
-from ktd.scm.github import create_private_fork, get_ssh_url, get_user
+from ktd.scm.github import create_private_fork, get_ssh_url, get_user, _run
+
+
+@mock.patch("ktd.scm.github.run")
+def test__run(run_mock):
+    cmd = "ls -la"
+    _run(cmd)
+    run_mock.assert_called_once_with(["ls", "-la"], output="capture")
 
 
 @mock.patch("ktd.scm.github._run")
