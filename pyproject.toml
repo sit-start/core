@@ -10,5 +10,12 @@ venv = ".venv"
 typeCheckingMode = "basic"
 extraPaths = ["python"]
 
+[tool.pytest.ini_options]
+filterwarnings = [
+  "ignore::DeprecationWarning",
+  "ignore::PendingDeprecationWarning",
+  'ignore: You are trying to `self.log\(\)`',
+]
+
 [tool.coverage.run]
 include = ["python/*"]
