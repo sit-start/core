@@ -77,6 +77,8 @@ setup_commands:
     grep -xqF "Host github.com" ~/.ssh/config 2>/dev/null ||
       echo -e "\nHost github.com\n  IdentityFile ~/.ssh/$deploy_key" \
         >>~/.ssh/config && chmod go-rwx ~/.ssh/config
+  # use the default venv as the dev repo's local venv
+  - test -d "$DEV/core/.venv" || ln -s "$DEFAULT_VENV" "$DEV/core/.venv"
   # add github keys to known hosts
   - |
     github_keys=$(curl -s https://api.github.com/meta | jq -r .ssh_keys[])

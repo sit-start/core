@@ -85,10 +85,8 @@ def process(
 
         # add import-/export-related tags as yaml frontmatter
         if include_front_matter:
-            stat = os.stat(src_md_path)
-            # NOTE: this is platform-specific; confirmed on MacOS
-            creation_date = datetime.fromtimestamp(stat.st_birthtime)
-            modified_date = datetime.fromtimestamp(stat.st_mtime)
+            creation_date = datetime.fromtimestamp(os.path.getctime(src_md_path))
+            modified_date = datetime.fromtimestamp(os.path.getmtime(src_md_path))
             front_matter = {
                 "creation_date": f"{creation_date:%Y-%m-%d-%H-%M-%S}",
                 "modified_date": f"{modified_date:%Y-%m-%d-%H-%M-%S}",

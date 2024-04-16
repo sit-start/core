@@ -124,6 +124,8 @@ Resources:
                   yadm checkout ~'
                 # clone the main dev repo
                 su - ec2-user -c 'deploy_repo dev'
+                # use the default venv as the dev repo's local venv
+                su - ec2-user -c 'ln -s "$DEFAULT_VENV" "$DEV/core/.venv"'
               - !Ref AWS::NoValue
   InactiveAlarm:
     Type: AWS::CloudWatch::Alarm
