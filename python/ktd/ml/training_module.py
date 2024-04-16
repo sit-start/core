@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
@@ -15,7 +17,7 @@ class TrainingModule(pl.LightningModule):
 
         self.config = config.copy()
         self.model = model
-        self.loss_fn = nn.CrossEntropyLoss()
+        self.loss_fn = nn.CrossEntropyLoss()  # TODO: hardcoded
         self.acc_fn = lambda y_hat, y: (y_hat.argmax(1) == y).mean(dtype=float)
 
         self.val_loss, self.val_acc = [], []
@@ -23,7 +25,7 @@ class TrainingModule(pl.LightningModule):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model.forward(x)
 
-    def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
+    def training_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
         x, y = batch
         y_hat = self.forward(x)
         loss = self.loss_fn(y_hat, y)
@@ -31,9 +33,7 @@ class TrainingModule(pl.LightningModule):
 
         return loss
 
-    def validation_step(
-        self, batch: torch.Tensor, batch_idx: int
-    ) -> dict[str, torch.Tensor]:
+    def validation_step(self, batch: Any, batch_idx: int) -> dict[str, torch.Tensor]:
         x, y = batch
         y_hat = self.forward(x)
         loss = self.loss_fn(y_hat, y)

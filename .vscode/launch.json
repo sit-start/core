@@ -9,6 +9,16 @@
       "console": "integratedTerminal",
       "args": "${command:pickArgs}",
       "justMyCode": false,
-    }
-  ]
+    },
+    {
+      "name": "PyTest Debugger: Current File",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": [
+        "${file}"
+      ],
+      "justMyCode": false,
+    },
+  ],
 }
