@@ -52,10 +52,12 @@
     "**/.pytest_cache/**": true,
     "**/__pycache__/**": true,
     "**/.ruff_cache/**": true,
+    ".venv/**": true,
   },
   "files.exclude": {
     "**/.pytest_cache": true,
     "**/.ruff_cache": true,
     "**/__pycache__": true,
+    "**/.venv/**": true,
   }
 }
