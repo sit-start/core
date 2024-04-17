@@ -74,7 +74,7 @@ def train(
     # TODO: address warning re: missing tensorboard logging directory
     trainer = pl.Trainer(
         devices="auto",
-        accelerator="auto",
+        accelerator="gpu" if config.get("use_gpu") else "cpu",
         strategy=strategy,
         plugins=plugins,
         callbacks=callbacks,
