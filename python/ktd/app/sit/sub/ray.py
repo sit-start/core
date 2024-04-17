@@ -9,6 +9,7 @@ import git
 import ray
 import typer
 import yaml
+from ray.job_submission import JobSubmissionClient
 from typer import Argument, Option
 
 from ktd.aws.ec2.util import (
@@ -236,7 +237,7 @@ def submit(
     )
 
     # run a basic job that uses the native environment and existing file(s)
-    client = ray.job_submission.JobSubmissionClient("http://127.0.0.1:8265")
+    client = JobSubmissionClient("http://127.0.0.1:8265")
     entrypoint = f"python {script_path}"
     try:
         logger.info(f"Submitting job with entrypoint {entrypoint!r}")
