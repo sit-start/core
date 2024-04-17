@@ -1,3 +1,4 @@
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -70,7 +71,8 @@ def _get_repo_state_and_add_to_config(config: dict) -> RepoState | None:
         return None
 
     driver = sys.argv[0]
-    if (repo := get_repo(__file__)) != get_repo(driver):
+    repo = get_repo(__file__)
+    if "PYTEST_CURRENT_TEST" not in os.environ and repo != get_repo(driver):
         raise NotImplementedError(
             f"Driver {driver!r} must be in this repo ({repo.working_dir!r})"
         )
@@ -117,7 +119,7 @@ def _get_ray_trainer(
     repo_state: RepoState | None = None,
     scaling_config: ScalingConfig | None = None,
 ):
-    storage_path = config["train"].get("storage_path", CHECKPOINT_STORAGE_PATH)
+    storage_path = config["train"].get("storage_path") or CHECKPOINT_STORAGE_PATH
 
     run_config = RunConfig(
         name="_".join([_get_project_name(config), _get_group_name()]),

@@ -10,12 +10,18 @@ venv = ".venv"
 typeCheckingMode = "basic"
 extraPaths = ["python"]
 
+[tool.coverage.run]
+include = ["python/*"]
+
 [tool.pytest.ini_options]
 filterwarnings = [
   "ignore::DeprecationWarning",
   "ignore::PendingDeprecationWarning",
   'ignore: You are trying to `self.log\(\)`',
+  "ignore: GPU available but not used",
+  "ignore: .*Consider increasing the value of the `num_workers` argument",
 ]
-
-[tool.coverage.run]
-include = ["python/*"]
+markers = [
+  "slow: mark test as slow to run",
+  "integration: mark test as integration test",
+]

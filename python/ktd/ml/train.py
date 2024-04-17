@@ -10,7 +10,7 @@ from pytorch_lightning.strategies import Strategy
 
 from ktd.logging import get_logger
 
-from .callbacks import LoggerCallback
+from ktd.ml.callbacks import LoggerCallback
 
 TrainingModuleCreator = Callable[[dict[str, Any]], pl.LightningModule]
 DataModuleCreator = Callable[[dict[str, Any]], pl.LightningDataModule]
@@ -65,7 +65,6 @@ def train(
         plugins = [RayLightningEnvironment()]
         callbacks.append(RayTrainReportCallback())
     else:
-        # TODO: needs testing
         callbacks.append(LoggerCallback(logger, interval=config["log_every_n_steps"]))
         if wandb_enabled:
             pl_logger = WandbLogger(project=config["project"])
@@ -83,6 +82,7 @@ def train(
         max_epochs=config["max_num_epochs"],
         log_every_n_steps=config["log_every_n_steps"],
         enable_checkpointing=not with_ray,
+        default_root_dir=config.get("storage_path", None) if not with_ray else None,
     )
 
     if with_ray:
@@ -103,7 +103,6 @@ def train(
         )
 
 
-# TODO: flesh out ktd.ml.train.test
 def test(
     config,
     training_module_creator: TrainingModuleCreator,
@@ -114,9 +113,9 @@ def test(
 
     trainer = pl.Trainer(
         devices="auto",
-        accelerator="auto",
+        accelerator="gpu" if config.get("use_gpu") else "cpu",
         enable_progress_bar=False,
-        callbacks=[LoggerCallback(logger, interval=config["log_every_n_steps"])],
+        default_root_dir=config.get("storage_path", None),
     )
     output = trainer.test(training_module, datamodule=data_module)
     logger.info(output)
