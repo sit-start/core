@@ -10,7 +10,7 @@ else
   user=$USER
 fi
 
-log_dir="/home/$user/ray_results"
+log_dir="/tmp/ray/session_latest/artifacts"
 script_path="/home/$user/tensorboard.sh"
 
 cat >"$script_path" <<EOM
