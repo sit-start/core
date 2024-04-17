@@ -96,6 +96,7 @@ setup_commands:
     gh >/dev/null 2>&1 ||
       sudo bash -c "source $DEV/core/scripts/ec2_dev_setup.sh &&
       install_components github"
+    pip install --upgrade --quiet "ray[default,data,train,tune,client]"
 head_setup_commands:
   # create the prometheus service file
   - |
