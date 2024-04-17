@@ -43,8 +43,8 @@ def test_training_module(
     assert "val_acc" in validation_output
 
     module.on_validation_epoch_end()
-    assert module.val_loss == []
-    assert module.val_acc == []
+    assert module.loss["val"] == []
+    assert module.acc["val"] == []
     log_mock.assert_has_calls(
         [call("val_loss", ANY, sync_dist=True), call("val_acc", ANY, sync_dist=True)]
     )
