@@ -81,11 +81,13 @@ def _get_repo_state_and_add_to_config(config: dict) -> RepoState | None:
     return repo_state
 
 
-def _get_checkpoint_config(config: dict) -> CheckpointConfig:
+def _get_checkpoint_config(config: dict) -> CheckpointConfig | None:
+    if not (ckpt_config := config.get("checkpoint")):
+        return None
     return CheckpointConfig(
-        num_to_keep=config["checkpoint"]["num_to_keep"],
-        checkpoint_score_attribute=config["checkpoint"]["checkpoint_score_attribute"],
-        checkpoint_score_order=config["checkpoint"]["checkpoint_score_order"],
+        num_to_keep=ckpt_config["num_to_keep"],
+        checkpoint_score_attribute=ckpt_config["checkpoint_score_attribute"],
+        checkpoint_score_order=ckpt_config["checkpoint_score_order"],
     )
 
 
@@ -115,10 +117,12 @@ def _get_ray_trainer(
     repo_state: RepoState | None = None,
     scaling_config: ScalingConfig | None = None,
 ):
+    storage_path = config["train"].get("storage_path", CHECKPOINT_STORAGE_PATH)
+
     run_config = RunConfig(
         name="_".join([_get_project_name(config), _get_group_name()]),
         checkpoint_config=_get_checkpoint_config(config),
-        storage_path=CHECKPOINT_STORAGE_PATH,
+        storage_path=storage_path,
         callbacks=_get_callbacks(config),
         log_to_file=True,  # NOTE: doesn't work in Jupyter notebook
         failure_config=FailureConfig(max_failures=3),
@@ -143,12 +147,21 @@ def _get_ray_trainer(
     )
 
 
+def _populate_train_loop_config_with_config_vals(config: dict) -> None:
+    for var, src in {"max_num_epochs": "schedule", "use_gpu": "scale"}.items():
+        val = config[src].get(var)
+        logger.info(f"Using {var}={val} from config[{src!r}] in the training loop")
+        _ = config["train"][var] = val
+
+
 def train_with_ray(
     config: dict,
     training_module_factory: TrainingModuleFactory,
     data_module_factory: DataModuleFactory,
 ) -> None:
     repo_state = _get_repo_state_and_add_to_config(config)
+
+    _populate_train_loop_config_with_config_vals(config)
 
     trainer = _get_ray_trainer(
         config,
@@ -170,21 +183,17 @@ def tune_with_ray(
 
     logger.info(f"Tuning with config: {config}")
 
+    _populate_train_loop_config_with_config_vals(config)
+
     trainer = _get_ray_trainer(
         config, training_module_factory, data_module_factory, repo_state=repo_state
     )
 
-    max_num_epochs = config["schedule"]["max_num_epochs"]
     scheduler = ASHAScheduler(
-        max_t=max_num_epochs,
+        max_t=config["schedule"]["max_num_epochs"],
         grace_period=config["schedule"]["grace_period"],
         reduction_factor=2,
     )
-
-    logger.info(
-        f"Using {max_num_epochs=} from the scheduling config in the training loop"
-    )
-    _ = config["train"]["max_num_epochs"] = max_num_epochs
 
     tuner = Tuner(
         trainer,
