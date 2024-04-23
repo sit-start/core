@@ -4,6 +4,7 @@ from pathlib import Path
 import typer
 from typer import Argument, Option
 
+from ktd.util.system import get_system_config
 from ktd.aws.ec2.util import (
     get_instance_name,
     get_instances,
@@ -41,12 +42,6 @@ _profile_opt = Option(
     show_default=False,
 )
 _instance_type_opt = Option(DEFAULT_INSTANCE_TYPE, help="The instance type to create.")
-_clone_repos_opt = Option(
-    True,
-    "--clone-repos",
-    help="Whether to clone repositories.",
-    show_default=False,
-)
 _open_vscode_opt = Option(
     False,
     "--open-vscode",
@@ -81,7 +76,6 @@ def create(
     instance_name: str = _instance_name_arg,
     profile: str = _profile_opt,
     instance_type: str = _instance_type_opt,
-    clone_repos: bool = _clone_repos_opt,
     open_vscode: bool = _open_vscode_opt,
 ) -> None:
     """Create a devserver with the given name and arguments."""
@@ -94,6 +88,8 @@ def create(
         logger.info(f"[{instance_name}] Instance name in use. Aborting.")
         return
 
+    system_files_url = get_system_config()["archive_url"]
+
     cf_client = session.client("cloudformation")
     cf_client.create_stack(  # type: ignore
         StackName=instance_name,
@@ -101,10 +97,7 @@ def create(
         Capabilities=["CAPABILITY_IAM"],
         Parameters=[
             {"ParameterKey": "InstanceType", "ParameterValue": instance_type},
-            {
-                "ParameterKey": "CloneRepositories",
-                "ParameterValue": "true" if clone_repos else "false",
-            },
+            {"ParameterKey": "SystemFilesUrl", "ParameterValue": system_files_url},
         ],
     )
 
@@ -118,6 +111,8 @@ def create(
 
     logger.info(f"[{instance_name}] Waiting for SSH")
     wait_for_connection(instance_name)
+
+    # TODO: clone dotfiles via bash fn if username param provided
 
     if open_vscode:
         open_vscode_over_ssh(instance_name)
