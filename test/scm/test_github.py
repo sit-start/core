@@ -21,7 +21,7 @@ def test_get_user(_run_mock):
 
 
 def test_get_ssh_url():
-    assert get_ssh_url("user", "repo") == "git@github.com:user/repo"
+    assert get_ssh_url("user", "repo") == "git@github.com:user/repo.git"
 
 
 @mock.patch("ktd.scm.github._run")
@@ -30,7 +30,7 @@ def test_create_private_fork(_run_mock):
     account = "org"
     fork_name = "fork"
     fork = get_ssh_url(account, fork_name)
-    repo_url = f"git@github.com:{account}/{repo}"
+    repo_url = f"git@github.com:{account}/{repo}.git"
     fork_dir = f"{os.getcwd()}/{fork_name}"
 
     create_private_fork(repo_url, fork_name, clone=True, org=account)
