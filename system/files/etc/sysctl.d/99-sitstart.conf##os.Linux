@@ -1,0 +1,2 @@
+# Increase the max number of files watched, for VS Code.
+fs.inotify.max_user_watches=524288

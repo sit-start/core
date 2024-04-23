@@ -1,0 +1,21 @@
+# System-wide .bashrc file for interactive bash(1) shells.
+# shellcheck disable=SC1090,SC2148
+if [ -z "$PS1" ]; then
+  return
+fi
+
+PS1='\h:\W \u\$ '
+# Make bash check its window size after a process completes
+shopt -s checkwinsize
+
+[ -r "/etc/bashrc_$TERM_PROGRAM" ] && . "/etc/bashrc_$TERM_PROGRAM"
+
+for i in /etc/profile.d/*.sh; do
+  if [ -r "$i" ]; then
+    if [ "$PS1" ]; then
+      . "$i"
+    else
+      . "$i" >/dev/null
+    fi
+  fi
+done
