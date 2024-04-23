@@ -20,7 +20,7 @@ def get_user():
 
 
 def get_ssh_url(account: str, repo: str):
-    return f"git@github.com:{account}/{repo}"
+    return f"git@github.com:{account}/{repo}.git"
 
 
 def create_private_fork(

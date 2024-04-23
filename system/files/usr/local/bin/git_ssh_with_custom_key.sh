@@ -23,6 +23,8 @@ if [[ $# -eq 0 ]]; then
   echo ""
   echo "Uses ssh by default, use GIT_SSH_COMMAND_REALSSH envvar to override."
   echo "For debugging set log output in envvar GIT_SSH_COMMAND_DEBUGLOG."
+  echo ""
+  echo "Repository URLs without the '.git' may result in unexpected behavior."
   exit 1
 fi
 
