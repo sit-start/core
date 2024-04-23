@@ -3,7 +3,7 @@
 # Source all util scripts.
 root_path="$(dirname "$(dirname "$(dirname "${BASH_SOURCE[0]}")")")"
 util_path="$root_path/usr/local/share/sitstart/util"
-utils=(general git py_env scm_prompt)
+utils=(general git py_env deploy scm_prompt)
 for util in "${utils[@]}"; do
   source "$util_path/$util.sh"
 done
