@@ -36,3 +36,12 @@ repos:
     rev: v1.1.359
     hooks:
       - id: pyright
+  - repo: local
+    hooks:
+      - id: push-system-files
+        name: System file archive
+        files: ^system/files/.*
+        pass_filenames: false
+        language: python
+        entry: python/ktd/scripts/push_system_files.py
+        additional_dependencies: [boto3, checksumdir]

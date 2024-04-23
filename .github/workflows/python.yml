@@ -19,9 +19,12 @@ jobs:
           source .venv/bin/activate
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
+      - name: Set environment variables
+        run: |
+          echo "PYTHONPATH=python:$PYTHONPATH" >> $GITHUB_ENV
       - name: Run pre-commit
         uses: pre-commit/action@v3.0.1
       - name: Test with pytest
         run: |
           source .venv/bin/activate
-          PYTHONPATH=python:$PYTHONPATH pytest
+          pytest
