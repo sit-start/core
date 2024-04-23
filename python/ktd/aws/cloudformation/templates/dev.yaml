@@ -28,13 +28,9 @@ Parameters:
     Description: SNS topic to which activity should be sent
     Type: String
     Default: arn:aws:sns:us-west-2:960487471244:DevserverActivityTopic
-  CloneRepositories:
-    Description: Whether to clone repositories
+  SystemFilesUrl:
+    Description: URL of the system files to download
     Type: String
-    Default: "true"
-    AllowedValues: ["true", "false"]
-Conditions:
-  CloneRepositories: !Equals [!Ref CloneRepositories, "true"]
 Mappings:
   InstanceTypeToArch:
     g5g.2xlarge:
@@ -86,47 +82,21 @@ Resources:
             VolumeSize: 256
             VolumeType: gp3
       IamInstanceProfile: devserver
-      UserData: !Base64
-        Fn::Join:
-          - ""
-          - - |
-              #!/usr/bin/env bash
-              # increase the max number of files watched
-              echo "fs.inotify.max_user_watches=524288" >> /etc/sysctl.conf
-              sysctl -p
-            - !If
-              - CloneRepositories
-              - |
-                # get read-only deploy keys for all repos
-                mkdir -p ~ec2-user/.ssh
-                repos=(dev core notebooks dotfiles)
-                for repo in "${repos[@]}"; do
-                  key_name="${repo}_deploy_ed25519"
-                  aws secretsmanager get-secret-value --secret-id "$key_name" \
-                    --query SecretString --output text |
-                    jq --raw-output .private \
-                      >~ec2-user/.ssh/"$key_name"
-                  chmod go-rwx ~ec2-user/.ssh/"$key_name"
-                  chown ec2-user:ec2-user ~ec2-user/.ssh/"$key_name"
-                done
-                # add github keys to known hosts
-                github_keys=$(curl -s https://api.github.com/meta |
-                  jq -r .ssh_keys[])
-                while IFS= read -r key; do
-                  echo "github.com $key" >>~ec2-user/.ssh/known_hosts
-                done <<<"$github_keys"
-                chown ec2-user:ec2-user ~ec2-user/.ssh/known_hosts
-                # clone dotfiles via yadm
-                cd ~ec2-user
-                GIT_SSH_COMMAND="ssh -i ~ec2-user/.ssh/dotfiles_deploy_ed25519" \
-                  su ec2-user -c '\
-                  yadm clone git@github.com:kevdale/dotfiles --no-checkout && \
-                  yadm checkout ~'
-                # clone the main dev repo
-                su - ec2-user -c 'deploy_repo dev'
-                # use the default venv as the dev repo's local venv
-                su - ec2-user -c 'ln -s "$DEFAULT_VENV" "$DEV/core/.venv"'
-              - !Ref AWS::NoValue
+      UserData:
+        Fn::Base64: !Sub |
+          #!/usr/bin/env bash
+          su - ec2-user bash -c '(
+            SYSTEM_FILES_URL=${SystemFilesUrl}
+            tmpdir=~/tmp/system_files
+            mkdir -p $tmpdir
+            aws s3 cp $SYSTEM_FILES_URL $tmpdir/system_files.tar.gz
+            tar -xzf $tmpdir/system_files.tar.gz -C $tmpdir
+            . $tmpdir/etc/profile.d/sitstart.sh##os.Linux
+            . $tmpdir/etc/profile.d/sh.local##os.Linux
+            sudo cp $tmpdir/etc/ssh/ssh_known_hosts##os.Linux \
+              /etc/ssh/ssh_known_hosts
+            deploy_sitstart
+          )'
   InactiveAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
