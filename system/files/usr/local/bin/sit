@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+
+try:
+    from ktd.app.sit.sit import app
+except ImportError:
+    print(
+        "Error: sit app not found. "
+        "Clone git@github.com:sit-start/core.git and "
+        "ensure core is in your PYTHONPATH."
+    )
+
+if __name__ == "__main__":
+    app()

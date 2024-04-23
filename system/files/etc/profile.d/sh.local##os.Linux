@@ -1,0 +1,52 @@
+#!/use/bin/env bash
+
+# Bash
+export BASH_SILENCE_DEPRECATION_WARNING=1
+export EDITOR="code --wait"
+if [[ $(uname -s) == "Linux" ]]; then
+  if [[ "$TERM_PROGRAM" == "vscode" ]]; then
+    export EDITOR='code --wait'
+  else
+    export EDITOR=emacs
+  fi
+fi
+
+# Repository paths
+export DEV="$HOME/dev"
+export CORE="$DEV/core"
+
+# Homebrew
+if [[ $(uname -s) == "Darwin" ]]; then
+  eval "$(/opt/homebrew/bin/brew shellenv)"
+  gnu_replacements=(sed tar)
+  for gnu_cmd in "${gnu_replacements[@]}"; do
+    PATH="/opt/homebrew/opt/gnu-${gnu_cmd}/libexec/gnubin:$PATH"
+  done
+  export PATH
+fi
+
+# CUDA
+if [[ $(uname -s) == "Linux" ]]; then
+  CUDA_HOME=/usr/local/cuda
+  LD_LIBRARY_PATH=$(join_by '' \
+    "${CUDA_HOME}/lib64/:${CUDA_HOME}/extras/CUPTI/lib64:${LD_LIBRARY_PATH}")
+  export LD_LIBRARY_PATH
+  export PATH="${CUDA_HOME}/bin:${PATH}"
+  # default to all devices on the host (up to 8 GPUs)
+  export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+fi
+
+# Python. Activate venv only after all modifications to PATH, as the next
+# activation will drop any changes made since.
+export PYTHONPATH="$CORE/python:$PYTHONPATH"
+activate_default_py_env
+
+# GFlags
+export GLOG_stderrthereshold=0
+export GLOG_alsologtostderr=1
+
+# Ray
+export RAY_DEDUP_LOGS_AGG_WINDOW_S=0
+if [[ $(uname -s) == "Darwin" ]]; then
+  export RAY_ADDRESS="http://127.0.0.1:8265"
+fi
