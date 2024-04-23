@@ -47,13 +47,8 @@ file_mounts: {
     "~/dev": "~/dev",
     # relevant contents of the dotfiles repo
     "~/.aws/config": "~/.aws/config",
-    "~/.local/bin/scm-prompt.sh": "~/.local/bin/scm-prompt.sh",
-    "~/.local/bin/sit": "~/.local/bin/sit",
     "~/.bash_profile": "~/.bash_profile",
     "~/.bashrc": "~/.bashrc",
-    "~/.bash_completions": "~/.bash_completions",
-    "~/.ipython/profile_default/ipython_config.py": "~/.ipython/profile_default/ipython_config.py",
-    "~/.ipython/profile_default/ipython_kernel_config.py": "~/.ipython/profile_default/ipython_kernel_config.py",
     "~/.vscode-server/data/Machine/settings.json": "~/.vscode-server/data/Machine/settings.json",
   }
 cluster_synced_files: []
@@ -63,49 +58,29 @@ rsync_filter:
   - ".gitignore"
 initialization_commands: []
 setup_commands:
-  # fetch sit-start deploy key
+  # one-time setup of system files
   - |
-    deploy_key=sitstart_deploy_ed25519
-    test -f ~/.ssh/"$deploy_key" ||
-      (aws secretsmanager get-secret-value --secret-id "$deploy_key" \
-        --query SecretString --output text |
-        jq --raw-output .private >~/.ssh/"$deploy_key" &&
-        chmod go-rwx ~/.ssh/"$deploy_key")
-  # add deploy key to ssh config
-  - |
-    deploy_key=sitstart_deploy_ed25519
-    grep -xqF "Host github.com" ~/.ssh/config 2>/dev/null ||
-      echo -e "\nHost github.com\n  IdentityFile ~/.ssh/$deploy_key" \
-        >>~/.ssh/config && chmod go-rwx ~/.ssh/config
-  # use the default venv as the dev repo's local venv
-  - test -d "$DEV/core/.venv" || ln -s "$DEFAULT_VENV" "$DEV/core/.venv"
-  # add github keys to known hosts
-  - |
-    github_keys=$(curl -s https://api.github.com/meta | jq -r .ssh_keys[])
-    grep -xqF "$github_keys" ~/.ssh/known_hosts 2>/dev/null ||
-      while IFS= read -r key; do
-        echo "github.com $key" >>~/.ssh/known_hosts
-      done <<<"$github_keys"
+    [ -f ~ec2-user/.ray_sitstart_deployed ] || {
+      . ~ec2-user/dev/core/system/files/etc/profile.d/sitstart.sh##os.Linux
+      . ~ec2-user/dev/core/system/files/etc/profile.d/sh.local##os.Linux
+      deploy_sitstart && touch ~ec2-user/.ray_sitstart_deployed
+    }
   # fetch/prune so local tags on nodes don't conflict with new remote tags
-  - git -C $DEV/core fetch --all --prune --prune-tags
+  - |
+    use_deploy_keys true
+    git -C $CORE fetch --all --prune --prune-tags
   # login and configure wandb
   - mkdir -p $WANDB_DIR
   - wandb login
-  # install new components not in the AMI (TODO: update AMI)
-  - |
-    gh >/dev/null 2>&1 ||
-      sudo bash -c "source $DEV/core/scripts/ec2_dev_setup.sh &&
-      install_components github"
-    pip install --upgrade --quiet "ray[default,data,train,tune,client]"
 head_setup_commands:
   # create the prometheus service file
   - |
-    sudo cp "$DEV/core/python/ktd/ray/config/aux/prometheus.service" \
+    sudo cp "$CORE/python/ktd/ray/config/aux/prometheus.service" \
       /etc/systemd/system/prometheus.service
   # update the fluent-bit config
   - |
     sudo mkdir -p /etc/fluent-bit &&
-      sudo cp "$DEV/core/python/ktd/ray/config/aux/fluent-bit-head.conf" \
+      sudo cp "$CORE/python/ktd/ray/config/aux/fluent-bit-head.conf" \
         /etc/fluent-bit/fluent-bit.conf
   # update the grafana service file to ensure grafana can acccess Ray
   # config files in /tmp/ray
@@ -116,22 +91,17 @@ head_setup_commands:
   - |
     sudo test -f /etc/grafana/grafana.ini.ray-bak || (
       sudo cp /etc/grafana/grafana.ini /etc/grafana/grafana.ini.ray-bak &&
-        sudo cp "$DEV/core/python/ktd/ray/config/aux/grafana.ini" \
+        sudo cp "$CORE/python/ktd/ray/config/aux/grafana.ini" \
           /etc/grafana/grafana.ini)
   # create the tensorboard service
   - |
-    sudo $DEV/core/python/ktd/ray/config/aux/create-tensorboard-service.sh \
+    sudo $CORE/python/ktd/ray/config/aux/create-tensorboard-service.sh \
       $USER
   # install loki TODO: move to AMI
   - |
     yum list installed loki >/dev/null 2>&1 ||
       sudo -- bash -c 'source ~ec2-user/dev/core/scripts/ec2_dev_setup.sh; \
         install_components loki'
-  # increase the max number of files watched TODO: move to AMI
-  - |
-    max_watches_update=fs.inotify.max_user_watches=524288
-    grep -xqF "$max_watches_update" /etc/sysctl.conf 2>/dev/null ||
-      sudo bash -c "echo $max_watches_update >>/etc/sysctl.conf && sysctl -p"
 worker_setup_commands: []
 head_start_ray_commands:
   # restart ray
@@ -142,9 +112,9 @@ head_start_ray_commands:
       --dashboard-host=0.0.0.0 --ray-debugger-external
   # add loki dashboard and datasource to grafana
   - |
-    cp "$DEV/core/python/ktd/ray/config/aux/loki_grafana_datasource.yml" \
+    cp "$CORE/python/ktd/ray/config/aux/loki_grafana_datasource.yml" \
       /tmp/ray/session_latest/metrics/grafana/provisioning/datasources
-    cp "$DEV/core/python/ktd/ray/config/aux/loki_grafana_dashboard.json" \
+    cp "$CORE/python/ktd/ray/config/aux/loki_grafana_dashboard.json" \
       /tmp/ray/session_latest/metrics/grafana/dashboards/
 
   # restart services
@@ -162,7 +132,7 @@ worker_start_ray_commands:
   # update the fluent-bit config with $RAY_HEAD_IP
   - |
     sudo mkdir -p /etc/fluent-bit &&
-      cat "$DEV/core/python/ktd/ray/config/aux/fluent-bit-worker.conf" |
+      cat "$CORE/python/ktd/ray/config/aux/fluent-bit-worker.conf" |
         envsubst | sudo tee /etc/fluent-bit/fluent-bit.conf
   # restart the fluent-bit service
   - sudo systemctl restart fluent-bit
