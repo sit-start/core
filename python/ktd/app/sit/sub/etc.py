@@ -7,14 +7,15 @@ from pathlib import Path
 import typer
 from typer import Argument, Option
 
+from ktd import PYTHON_ROOT, REPO_ROOT
 from ktd.logging import get_logger
 from ktd.util.run import run
 
 app = typer.Typer()
 logger = get_logger(__name__, format="simple")
 
-DEFAULT_PROJECT_PATH = f"{os.environ['DEV']}/core/python"
-DEFAULT_REQUIREMENTS_PATH = f"{os.environ['DEV']}/core/requirements.txt"
+DEFAULT_PROJECT_PATH = PYTHON_ROOT
+DEFAULT_REQUIREMENTS_PATH = f"{REPO_ROOT}/requirements.txt"
 DEFAULT_PACKAGE_VARIANTS = ["ray[data,default,train,tune]"]
 
 

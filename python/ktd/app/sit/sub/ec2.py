@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import typer
@@ -20,10 +19,9 @@ from ktd.logging import get_logger
 from ktd.util.ssh import remove_from_ssh_config, wait_for_connection
 from ktd.util.string import truncate
 from ktd.util.vscode import DEFAULT_WORKSPACE, VSCodeTarget, open_vscode_over_ssh
+from ktd import PYTHON_ROOT
 
-CF_TEMPLATE_PATH = (
-    f"{os.environ['DEV']}/core/python/ktd/aws/cloudformation/templates/dev.yaml"
-)
+CF_TEMPLATE_PATH = f"{PYTHON_ROOT}/ktd/aws/cloudformation/templates/dev.yaml"
 DEFAULT_INSTANCE_TYPE = "g5.xlarge"
 
 app = typer.Typer()
