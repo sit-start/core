@@ -31,7 +31,7 @@ def imresize(arr: np.ndarray, size: tuple[int, int], **kwargs) -> np.ndarray:
     return np.asarray(Image.fromarray(arr).resize(size, **kwargs))
 
 
-# adapted https://github.com/znah/notebooks/blob/master/external_colab_snippets.ipynb
+# @source: https://github.com/znah/notebooks/blob/master/external_colab_snippets.ipynb
 def imtile(arr: np.ndarray, cols: int | None = None):
     N, H, W, _ = arr.shape
     arr = np.asarray(arr)

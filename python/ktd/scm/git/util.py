@@ -140,7 +140,7 @@ def diff_vs_commit(
 
     # use a temporary index file to avoid modifying the actual index and
     # add all files, including untracked files
-    # https://git.vger.kernel.narkive.com/yH88SS4R/diff-new-files-without-using-index
+    # @source: https://git.vger.kernel.narkive.com/yH88SS4R/diff-new-files-without-using-index
     with NamedTemporaryFile(prefix="/tmp/") as temp_index_file:
         temp_index_file.close()
         shutil.copyfile(repo.index.path, temp_index_file.name)

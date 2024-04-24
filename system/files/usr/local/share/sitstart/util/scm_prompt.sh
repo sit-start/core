@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @source: https://github.com/akushner/dotfiles/blob/master/bin/scm-prompt
 # shellcheck disable=SC2162
 
 # Determines the "branch" of the current repo and emits it.

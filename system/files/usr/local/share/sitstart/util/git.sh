@@ -15,7 +15,7 @@ function git_is_clean() {
 }
 
 function git_is_synced() {
-  # https://gist.github.com/leroix/8829846
+  # @source: https://gist.github.com/leroix/8829846
   local local_branch=${1:-$(git rev-parse --abbrev-ref HEAD)}
   local remote_branch="${2:-origin}/$local_branch"
   local local_rev
