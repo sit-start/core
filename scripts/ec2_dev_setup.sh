@@ -108,7 +108,7 @@ sslcacert=/etc/pki/tls/certs/ca-bundle.crt" |
 }
 
 function install_prometheus() {
-  # https://devopscube.com/install-configure-prometheus-linux/
+  # @source: https://devopscube.com/install-configure-prometheus-linux/
   if [ "$ARCH" == "aarch64" ]; then
     arch="arm64"
   else # x86_64
@@ -189,7 +189,7 @@ function install_glog_from_source() {
 }
 
 function install_ffmpeg() {
-  # https://www.johnvansickle.com/ffmpeg/faq/
+  # @source: https://www.johnvansickle.com/ffmpeg/faq/
   if [ "$ARCH" == "aarch64" ]; then
     arch="arm64"
   else # x86_64
@@ -239,8 +239,7 @@ function install_docker() {
 }
 
 function install_nvidia() {
-  # based on this:
-  # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html
+  # @source: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html
   # NOTE: this fails on amazon linux 2023, but it works on
   # ami-08a800e4b5aa90bb8, which is based on amazon linux 2023. so we
   # can continue to use the new AMI and just update the drivers here on

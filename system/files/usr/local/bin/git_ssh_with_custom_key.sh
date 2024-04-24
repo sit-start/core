@@ -1,5 +1,5 @@
 #!/bin/bash
-# From https://gist.github.com/vhermecz/4e2ae9468f2ff7532bf3f8155ac95c74
+# @source: https://gist.github.com/vhermecz/4e2ae9468f2ff7532bf3f8155ac95c74
 # shellcheck disable=all # TODO: address shellcheck issues
 
 # Script to use custom ssh keys for various git repositories
