@@ -1,4 +1,5 @@
 AWSTemplateFormatVersion: 2010-09-09
+Transform: 'AWS::LanguageExtensions'
 Description: Development server
 Parameters:
   KeyName:
@@ -7,9 +8,9 @@ Parameters:
     ConstraintDescription: must be the name of an existing EC2 KeyPair.
     Default: rsa
   InstanceType:
-    Description: Devserver EC2 instance type. Allowed values cover all GPU types < $1.50/hr
+    Description: Devserver EC2 instance type.
     Type: String
-    Default: g5g.2xlarge
+    Default: m6a.2xlarge
     AllowedValues:
       - g5g.2xlarge
       - g5g.4xlarge
@@ -20,6 +21,11 @@ Parameters:
       - g5.xlarge
       - g5.2xlarge
       - p3.2xlarge
+      - m6a.xlarge
+      - m6a.2xlarge
+      - m7g.xlarge
+      - m7g.2xlarge
+      - m7g.4xlarge
   SecurityGroups:
     Description: Security groups to assign to the instance
     Type: List<AWS::EC2::SecurityGroup::Id>
@@ -32,24 +38,18 @@ Parameters:
     Description: URL of the system files to download
     Type: String
 Mappings:
-  InstanceTypeToArch:
-    g5g.2xlarge:
+  InstanceTypePrefixToArch:
+    m6a:
+      Arch: x86-64
+    m7g:
       Arch: aarch64
-    g5g.4xlarge:
+    g4dn:
+      Arch: x86-64
+    g5:
+      Arch: x86-64
+    g5g:
       Arch: aarch64
-    g5g.8xlarge:
-      Arch: aarch64
-    g4dn.xlarge:
-      Arch: x86-64
-    g4dn.2xlarge:
-      Arch: x86-64
-    g4dn.4xlarge:
-      Arch: x86-64
-    g5.xlarge:
-      Arch: x86-64
-    g5.2xlarge:
-      Arch: x86-64
-    p3.2xlarge:
+    p3:
       Arch: x86-64
   ArchToAMI:
     aarch64:
@@ -66,8 +66,8 @@ Resources:
       ImageId: !FindInMap
         - ArchToAMI
         - !FindInMap
-          - InstanceTypeToArch
-          - !Ref InstanceType
+          - InstanceTypePrefixToArch
+          - !Select [0, !Split [".", !Ref InstanceType]]
           - Arch
         - AMI
       KeyName: !Ref KeyName
