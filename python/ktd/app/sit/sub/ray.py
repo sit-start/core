@@ -1,4 +1,3 @@
-import os
 import subprocess
 import sys
 from os.path import expanduser, expandvars, realpath
@@ -12,6 +11,7 @@ import yaml
 from ray.job_submission import JobSubmissionClient
 from typer import Argument, Option
 
+from ktd import PYTHON_ROOT
 from ktd.aws.ec2.util import (
     kill_instances_with_name,
     update_ssh_config_for_instances_with_name,
@@ -23,14 +23,14 @@ from ktd.util.ssh import close_ssh_connection, open_ssh_tunnel
 from ktd.util.vscode import open_vscode_over_ssh
 
 DEFAULT_CONFIG = "main"
-CONFIG_ROOT = f"{os.environ['DEV']}/core/python/ktd/ray/config/cluster"
+CONFIG_ROOT = f"{PYTHON_ROOT}/ktd/ray/config/cluster"
 FORWARDED_PORTS = {
     "Ray Dashboard": 8265,
     "Prometheus": 9090,
     "Grafana": 3000,
     "TensorBoard": 6006,
 }
-SCRIPT_PATH_DEFAULT = "$DEV/core/python/ktd/ml/experiments/{script_name}.py"
+SCRIPT_PATH_DEFAULT = f"{PYTHON_ROOT}/ktd/ml/experiments/{{script_name}}.py"
 
 
 app = typer.Typer()

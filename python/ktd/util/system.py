@@ -8,14 +8,15 @@ from typing import Generator
 
 from checksumdir import dirhash
 
+from ktd import REPO_ROOT
 from ktd.aws.util import sso_login
 from ktd.logging import get_logger
 from ktd.util import is_valid_url
 from ktd.util.run import run
 
-SYSTEM_FILE_ROOT = f"{os.environ['DEV']}/core/system/files"
+SYSTEM_FILE_ROOT = f"{REPO_ROOT}/system/files"
 SYSTEM_ARCHIVE_URL = "s3://sitstart/system/files/{}.tar.gz"
-SYSTEM_CONFIG_PATH = f"{os.environ['DEV']}/core/system/config.json"
+SYSTEM_CONFIG_PATH = f"{REPO_ROOT}/system/config.json"
 SYSTEM_ATTRIBUTES = {
     "arch": os.uname().machine,
     "os": os.uname().sysname,
