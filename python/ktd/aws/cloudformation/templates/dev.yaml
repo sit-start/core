@@ -53,10 +53,10 @@ Mappings:
       Arch: x86-64
   ArchToAMI:
     aarch64:
-      # base ami-08a800e4b5aa90bb8, setup via scripts/ec2_dev_setup.sh:install_g5g()
+      # base ami-08a800e4b5aa90bb8, setup via install.sh:install_g5g()
       AMI: ami-071bc49379107ae95
     x86-64:
-      # base ami-0ba26e8b3af2b7155, setup via scripts/ec2_dev_setup.sh:install_g5()
+      # base ami-0ba26e8b3af2b7155, setup via install.sh:install_g5()
       AMI: ami-0c38021ff804d9342
 Resources:
   Ec2Instance:

@@ -100,7 +100,7 @@ head_setup_commands:
   # install loki TODO: move to AMI
   - |
     yum list installed loki >/dev/null 2>&1 ||
-      sudo -- bash -c 'source ~ec2-user/dev/core/scripts/ec2_dev_setup.sh; \
+      sudo -- bash -c '. /usr/local/share/sitstart/util/install.sh; \
         install_components loki'
 worker_setup_commands: []
 head_start_ray_commands:

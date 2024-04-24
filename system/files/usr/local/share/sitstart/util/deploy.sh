@@ -156,11 +156,8 @@ function deploy_sitstart() (
   # Install new components not in the AMI. TODO: update the AMI.
   components=(github)
   if [[ $(uname -s) == "Linux" ]]; then
-    sudo bash -c "$(
-      join_by ' ' \
-        ". $CORE/scripts/ec2_dev_setup.sh &&" \
-        "install_components ${components[*]}"
-    )"
+    sudo bash -c \
+      ". $util_path/install.sh && install_components ${components[*]}"
   else
     echo "Not on Linux, skipping additional component installation." \
       "Ensure you have the following installed: ${components[*]}."
