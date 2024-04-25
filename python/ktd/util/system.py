@@ -1,3 +1,4 @@
+import getpass
 import glob
 import json
 import os
@@ -22,7 +23,7 @@ SYSTEM_ATTRIBUTES = {
     "os": os.uname().sysname,
     "hostname": os.uname().nodename,
 }
-
+DEFAULT_DOTFILES_REPO_URL = "git@github.com:{user}/dotfiles.git"
 
 logger = get_logger(__name__)
 
@@ -177,8 +178,9 @@ def deploy_system_files(dest_dir: str, as_root: bool = False) -> None:
         )
 
 
-def deploy_dotfiles(username: str) -> None:
-    repo_url = f"git@github.com:{username}/dotfiles.git"
-    if not is_valid_url(f"ssh://{repo_url}"):
+def deploy_dotfiles(host: str, repo_url: str | None = None) -> None:
+    repo_url = repo_url or DEFAULT_DOTFILES_REPO_URL.format(user=getpass.getuser())
+    logger.info(f"Deploying dotfiles repo {repo_url!r} on host {host}.")
+    if not (is_valid_url(repo_url) or is_valid_url(f"ssh://{repo_url}")):
         raise ValueError(f"Invalid repo URL: {repo_url}.")
-    _run(f"bash -l -c 'deploy_yadm_repo {shlex.quote(repo_url)}'")
+    _run(f"ssh {host} deploy_yadm_repo {repo_url}")

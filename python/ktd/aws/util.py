@@ -34,8 +34,9 @@ def is_logged_in(session: Optional[boto3.Session] = None) -> bool:
 def sso_login(profile_name=None) -> None:
     """Login to AWS via SSO if not already logged in"""
     if is_logged_in(boto3.Session(profile_name=profile_name)):
-        logger.info("AWS SSO session has valid credentials; skipping login")
+        logger.debug("AWS SSO session has valid credentials; skipping login")
         return
+    logger.info("Logging in to AWS via SSO.")
     cmd = ["aws", "sso", "login"] + (
         ["--profile", profile_name] if profile_name is not None else []
     )

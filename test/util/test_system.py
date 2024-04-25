@@ -162,8 +162,7 @@ def test_deploy_system_files(
 
 @patch("ktd.util.system._run")
 def test_deploy_dotfiles(mock__run):
-    username = "some_user"
-    deploy_dotfiles(username)
-    mock__run.assert_called_with(
-        f"bash -l -c 'deploy_yadm_repo git@github.com:{username}/dotfiles.git'"
-    )
+    host = "some_host"
+    repo_url = "git@github.com:user/repo.git"
+    deploy_dotfiles(host, repo_url)
+    mock__run.assert_called_with(f"ssh {host} deploy_yadm_repo {repo_url}")
