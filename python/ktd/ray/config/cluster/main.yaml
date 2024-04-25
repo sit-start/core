@@ -66,9 +66,7 @@ setup_commands:
       deploy_sitstart && touch ~ec2-user/.ray_sitstart_deployed
     }
   # fetch/prune so local tags on nodes don't conflict with new remote tags
-  - |
-    use_deploy_keys true
-    git -C $CORE fetch --all --prune --prune-tags
+  - with_deploy_key git -C $CORE fetch --all --prune --prune-tags
   # login and configure wandb
   - mkdir -p $WANDB_DIR
   - wandb login
