@@ -1,14 +1,21 @@
 #!/usr/bin/env bash
+shopt -s expand_aliases
 
 util_path=$(dirname "${BASH_SOURCE[0]}")
+root_path=$(realpath "$util_path/../../../../..")
 . "$util_path/general.sh"
 . "$util_path/git.sh"
 . "$util_path/py_env.sh"
 
+# Prefix git/yadm command with `with_deploy_key` to use repo-specific deploy keys.
+git_deploy_ssh_cmd="$root_path/usr/local/bin/git_ssh_with_custom_key.sh"
+# shellcheck disable=SC2139
+alias with_deploy_key="GIT_SSH_COMMAND=$git_deploy_ssh_cmd"
+
 # Get the path to the deploy key for a given repo.
 function deploy_key_path() {
   local repo_url="$1"
-  key_name=$(python -c "import os;\
+  key_name=$(python3 -c "import os;\
     print(os.path.splitext('${repo_url}'.split(':')[-1].replace('/','-'))[0])")
   echo ~/.ssh/git-keys/"$key_name"
 }
@@ -84,39 +91,28 @@ function fetch_deploy_key() {
     (echo "Failed to fetch deploy key for $repo_url." && return 1)
 }
 
-# Use deploy keys for git operations.
-function use_deploy_keys() {
-  if (("$#" != 1)) || ! [[ "$1" = true || "$1" = false ]]; then
-    echo "Usage: use_deploy_keys <true,false>"
+# Deploy a yadm (dotfile) repo using deploy keys.
+function deploy_yadm_repo() {
+  if [ "$#" -ne 1 ]; then
+    echo "Usage: deploy_yadm_repo <repo_url>"
     return 1
   fi
-  if [ "$1" = true ]; then
-    GIT_SSH_COMMAND=$(realpath \
-      "$util_path/../../../bin/git_ssh_with_custom_key.sh")
-    export GIT_SSH_COMMAND
-    echo "Enabled preset deploy keys in ~/.ssh/git-keys."
-  else
-    unset GIT_SSH_COMMAND
-    echo "Disabled preset deploy keys."
-  fi
-}
-
-# Deploy a yadm (dotfile) repo using deploy keys.
-function deploy_yadm_repo() (
-  set -e
   repo_url="$1"
   fetch_deploy_key "$repo_url"
   if yadm_repo_exists >/dev/null 2>&1; then
     echo "Yadm repo already exists, skipping clone."
     return 1
   fi
-  use_deploy_keys true
-  yadm clone "$repo_url"
-)
+  with_deploy_key yadm clone "$repo_url" --no-checkout
+  with_deploy_key yadm checkout ~
+}
 
 # Deploy a repo using deploy keys.
-function deploy_repo() (
-  set -e
+function deploy_repo() {
+  if [ "$#" -ne 1 ]; then
+    echo "Usage: deploy_repo <repo_url>"
+    return 1
+  fi
   repo_url="$1"
   repo=$(basename "$repo_url" .git)
   fetch_deploy_key "$repo_url"
@@ -124,45 +120,48 @@ function deploy_repo() (
     echo "Repo $repo already exists, skipping clone."
     return 1
   fi
-  use_deploy_keys true
-  git clone "$repo_url"
-)
+  with_deploy_key git clone "$repo_url"
+}
 
 # Deploy the core repo and update system files and settings.
-function deploy_sitstart() (
-  set -e
+function deploy_sitstart() {
 
   # Install the core source repo and use the default venv as local venv.
   mkdir -p "$DEV"
   core_repo_url=git@github.com:sit-start/core.git
   fetch_deploy_key "$core_repo_url"
   if ! git_repo_exists "$CORE" >/dev/null 2>&1; then
-    (cd "$DEV" && deploy_repo $core_repo_url)
+    (cd "$DEV" && deploy_repo $core_repo_url) || return 1
   fi
-  [ -d "$CORE/.venv" ] ||
+  if ! [ -d "$CORE/.venv" ]; then
     ln -s "$DEFAULT_VENV" "$CORE/.venv"
+  fi
+
+  # Install any missing or out-of-date requirements. TODO: update AMI's
+  # default venv with missing requirements (ray upgrade, checksumdir)
+  activate_py_env "$CORE/.venv" &&
+    pip install --quiet -r "$CORE/requirements-dev.txt" ||
+    return 1
 
   # Deploy system files.
   echo "Deploying system files."
-  PYTHONPATH="$CORE/python:$PYTHONPATH" python -c "$(
+  PYTHONPATH="$CORE/python:$PYTHONPATH" python3 -c "$(
     join_by '; ' \
       'from ktd.util.system import deploy_system_files' \
       'deploy_system_files("/", as_root=True)'
-  )"
+  )" || return 1
 
   # Update kernel parameters.
-  sudo sysctl -p /etc/sysctl.d/99-sitstart.conf
+  sudo sysctl -p /etc/sysctl.d/99-sitstart.conf || return 1
 
   # Install new components not in the AMI. TODO: update the AMI.
-  components=(github)
+  installs=(github)
   if [[ $(uname -s) == "Linux" ]]; then
     sudo bash -c \
-      ". $util_path/install.sh && install_components ${components[*]}"
+      ". $util_path/install.sh##os.Linux && install_components ${installs[*]}" ||
+      return 1
   else
     echo "Not on Linux, skipping additional component installation." \
-      "Ensure you have the following installed: ${components[*]}."
+      "Ensure you have the following installed: ${installs[*]}."
   fi
-  activate_default_py_env
-  pip install --upgrade --quiet "ray[default,data,train,tune,client]"
-  echo "Installed additional components."
-)
+}
