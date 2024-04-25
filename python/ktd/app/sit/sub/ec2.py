@@ -1,9 +1,10 @@
+import getpass
 from pathlib import Path
 
 import typer
 from typer import Argument, Option
 
-from ktd.util.system import get_system_config
+from ktd import PYTHON_ROOT
 from ktd.aws.ec2.util import (
     get_instance_name,
     get_instances,
@@ -11,6 +12,7 @@ from ktd.aws.ec2.util import (
     kill_instances_with_name,
     update_ssh_config_for_instance,
     update_ssh_config_for_instances_with_name,
+    wait_for_cloud_init,
     wait_for_instance_with_id,
     wait_for_stack_with_name,
 )
@@ -18,8 +20,12 @@ from ktd.aws.util import get_aws_session
 from ktd.logging import get_logger
 from ktd.util.ssh import remove_from_ssh_config, wait_for_connection
 from ktd.util.string import truncate
+from ktd.util.system import (
+    DEFAULT_DOTFILES_REPO_URL,
+    deploy_dotfiles,
+    get_system_config,
+)
 from ktd.util.vscode import DEFAULT_WORKSPACE, VSCodeTarget, open_vscode_over_ssh
-from ktd import PYTHON_ROOT
 
 CF_TEMPLATE_PATH = f"{PYTHON_ROOT}/ktd/aws/cloudformation/templates/dev.yaml"
 DEFAULT_INSTANCE_TYPE = "g5.xlarge"
@@ -67,6 +73,16 @@ _path_opt = Option(
     DEFAULT_WORKSPACE,
     help="Absolute path to open in VS Code.",
 )
+_no_dotfiles_opt = Option(
+    False,
+    "--no-dotfiles",
+    help="Do not install user dotfiles.",
+    show_default=False,
+)
+_dotfiles_repo_opt = Option(
+    DEFAULT_DOTFILES_REPO_URL.format(user=getpass.getuser()),
+    help="The git repo from which to install dotfiles with yadm.",
+)
 
 
 @app.command()
@@ -75,6 +91,8 @@ def create(
     profile: str = _profile_opt,
     instance_type: str = _instance_type_opt,
     open_vscode: bool = _open_vscode_opt,
+    no_dotfiles: bool = _no_dotfiles_opt,
+    dotfiles_repo: str = _dotfiles_repo_opt,
 ) -> None:
     """Create a devserver with the given name and arguments."""
     # parameters should be kept in sync with ktd/aws/cloudformation/templates/dev.yaml
@@ -104,13 +122,19 @@ def create(
     # the devserver stack creates an instance with the same name
     instances = get_instances(name=instance_name, states=["running"], session=session)
     assert instances is not None and len(instances) == 1
+    instance = instances[0]
 
-    update_ssh_config_for_instance(instances[0])
+    update_ssh_config_for_instance(instance)
 
     logger.info(f"[{instance_name}] Waiting for SSH")
     wait_for_connection(instance_name)
 
-    # TODO: clone dotfiles via bash fn if username param provided
+    logger.info(f"[{instance_name}] Waiting for cloud-init to complete")
+    wait_for_cloud_init(instance)
+
+    if not no_dotfiles:
+        logger.info(f"[{instance_name}] Deploying dotfiles from {dotfiles_repo}")
+        deploy_dotfiles(instance_name, dotfiles_repo)
 
     if open_vscode:
         open_vscode_over_ssh(instance_name)

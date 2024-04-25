@@ -1,10 +1,12 @@
 import os
+import shlex
 from os.path import expanduser, expandvars
 
 import boto3
 from boto3.resources.base import ServiceResource
 
 from ktd.logging import get_logger
+from ktd.util.run import run, Output
 from ktd.util.ssh import remove_from_ssh_config, update_ssh_config
 
 INSTANCE_STATES = [
@@ -77,6 +79,16 @@ def wait_for_instance_with_id(
             "MaxAttempts": max_attempts,
         },  # timeout of 15s x 20 = 5 minutes w/ default values
     )
+
+
+def wait_for_cloud_init(instance: ServiceResource):
+    instance_id = instance.id  # type: ignore
+    assert instance.meta is not None, f"Instance {instance_id} has no metadata"
+    host_name = instance.meta.data["PublicDnsName"]
+    cmd = shlex.split(f"ssh {host_name} sudo cloud-init status --wait")
+    output = run(cmd, output=Output.CAPTURE)
+    status = output.stdout.decode("utf-8").strip(".").strip()
+    logger.info(f"Cloud-init {status}")
 
 
 def wait_for_stack_with_name(
