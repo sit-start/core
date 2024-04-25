@@ -167,12 +167,12 @@ def deploy_system_files(dest_dir: str, as_root: bool = False) -> None:
     remote_archive_url = file_config["archive_url"]
 
     with TemporaryDirectory() as temp_dir:
-        archive_url = f"{temp_dir}/{os.path.basename(remote_archive_url)}"
-        _run(f"aws s3 cp {remote_archive_url} {archive_url}")
+        archive_path = f"{temp_dir}/{os.path.basename(remote_archive_url)}"
+        _run(f"aws s3 cp {remote_archive_url} {archive_path}")
 
         files_dir = f"{temp_dir}/files"
         os.makedirs(files_dir)
-        _run(f"tar -xzf {archive_url} -C {files_dir}")
+        _run(f"tar -xzf {archive_path} -C {files_dir}")
         _copy_filtered_files(
             src_dir=files_dir, dest_dir=dest_dir, cmd="cp", as_root=as_root
         )
