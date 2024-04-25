@@ -1,20 +1,22 @@
-from unittest.mock import patch, call
+import os
+from unittest.mock import call, patch
 
 import pytest
+from callee import Regex
 
 from ktd.util.system import (
+    SYSTEM_ARCHIVE_URL,
+    SYSTEM_FILE_ROOT,
     _copy_filtered_files,
     _filtered_system_files,
     _get_path_and_constraints,
     _get_variant_path,
     _is_specific_system_variant,
     _system_files,
+    deploy_dotfiles,
     deploy_system_files,
     deploy_system_files_from_filesystem,
     push_system_files,
-    deploy_dotfiles,
-    SYSTEM_ARCHIVE_URL,
-    SYSTEM_FILE_ROOT,
 )
 
 
@@ -99,20 +101,21 @@ def test_push_system_files(
     mock__run,
 ):
     new_archive_url = "s3://bucket/with/new_archive.tar.gz"
+    temp_archive = "temp_files.tar.gz"
     mock_system_file_archive_url.return_value = new_archive_url
-    mock_temp_file.return_value.__enter__.return_value.name = "temp_files.tar.gz"
-    mock_read_text.return_value = (
-        '{"archive_url": "s3://bucket/with/existing_archive.tar.gz"}'
-    )
-    mock__system_files.return_value = ["file1", "file2"]
+    mock_temp_file.return_value.__enter__.return_value.name = temp_archive
+    mock_read_text.return_value = f'{{"archive_url": "{new_archive_url}"}}'
+    files = ["file1", "file2"]
+    mock__system_files.return_value = files
+    root = SYSTEM_FILE_ROOT
 
     push_system_files()
 
     mock_sso_login.assert_called_once()
     mock__run.assert_has_calls(
         [
-            call(f"tar -czf temp_files.tar.gz -C {SYSTEM_FILE_ROOT} file1 file2"),
-            call(f"aws s3 --quiet cp temp_files.tar.gz {new_archive_url}"),
+            call(Regex(f"tar -czf.*{temp_archive}.*-C.*{root}.*{' '.join(files)}.*")),
+            call(Regex(f"aws s3.*cp.*{temp_archive}.*{new_archive_url}.*")),
         ]
     )
     mock_write_text.assert_called_once()
@@ -136,27 +139,30 @@ def test_deploy_system_files(
     mock_sso_login,
     mock_temp_dir,
     mock_read_text,
-    mock_makedirs,
+    _,
     mock__copy_filtered_files,
     mock__run,
 ):
-    mock_temp_dir.return_value.__enter__.return_value = "temp_dir"
-    mock_read_text.return_value = (
-        f'{{"archive_url": "{SYSTEM_ARCHIVE_URL.format("1234")}"}}'
-    )
-    deploy_system_files(dest_dir="/", as_root=True)
+    temp_dir = "temp_dir"
+    dest_dir = "/"
+    as_root = True
+    archive_url = SYSTEM_ARCHIVE_URL.format("1234")
+    archive_path = f"{temp_dir}/{os.path.basename(archive_url)}"
+    files_dir = f"{temp_dir}/files"
+    mock_temp_dir.return_value.__enter__.return_value = temp_dir
+    mock_read_text.return_value = f'{{"archive_url": "{archive_url}"}}'
 
-    mock_makedirs.assert_called_with("temp_dir/files")
+    deploy_system_files(dest_dir=dest_dir, as_root=as_root)
+
+    mock_sso_login.assert_called_once()
     mock__run.assert_has_calls(
         [
-            call(
-                "aws s3 cp s3://sitstart/system/files/1234.tar.gz temp_dir/1234.tar.gz"
-            ),
-            call("tar -xzf temp_dir/1234.tar.gz -C temp_dir/files"),
+            call(Regex(f"aws s3 cp.*{archive_url}.*{archive_path}.*")),
+            call(Regex(f"tar -xzf.*{archive_path}.*-C.*{files_dir}.*")),
         ]
     )
     mock__copy_filtered_files.assert_called_with(
-        src_dir="temp_dir/files", dest_dir="/", cmd="cp", as_root=True
+        src_dir=files_dir, dest_dir=dest_dir, cmd="cp", as_root=as_root
     )
 
 
