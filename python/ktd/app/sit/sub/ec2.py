@@ -25,7 +25,12 @@ from ktd.util.system import (
     deploy_dotfiles,
     get_system_config,
 )
-from ktd.util.vscode import DEFAULT_WORKSPACE, VSCodeTarget, open_vscode_over_ssh
+from ktd.util.vscode import (
+    DEFAULT_FOLDER,
+    DEFAULT_TARGET,
+    VSCodeTarget,
+    open_vscode_over_ssh,
+)
 
 CF_TEMPLATE_PATH = f"{PYTHON_ROOT}/ktd/aws/cloudformation/templates/dev.yaml"
 DEFAULT_INSTANCE_TYPE = "g5.xlarge"
@@ -49,7 +54,7 @@ _instance_type_opt = Option(DEFAULT_INSTANCE_TYPE, help="The instance type to cr
 _open_vscode_opt = Option(
     False,
     "--open-vscode",
-    help=f"Open VS Code to the default workspace ({DEFAULT_WORKSPACE}).",
+    help=f"Open VS Code to the default {DEFAULT_TARGET} ({DEFAULT_FOLDER}).",
     show_default=False,
 )
 _show_killed_opt = Option(
@@ -65,12 +70,12 @@ _compact_opt = Option(
     show_default=False,
 )
 _target_opt = Option(
-    "file",
+    DEFAULT_TARGET,
     help="Target type to open in VS Code; one of 'file', 'folder'.",
     show_choices=True,
 )
 _path_opt = Option(
-    DEFAULT_WORKSPACE,
+    DEFAULT_FOLDER,
     help="Absolute path to open in VS Code.",
 )
 _no_dotfiles_opt = Option(
@@ -141,7 +146,11 @@ def create(
 
 
 @app.command()
-def start(instance_name: str = _instance_name_arg, profile: str = _profile_opt) -> None:
+def start(
+    instance_name: str = _instance_name_arg,
+    profile: str = _profile_opt,
+    open_vscode: bool = _open_vscode_opt,
+) -> None:
     """Start instances with the given name."""
     logger.info(f"[{instance_name}] Starting instances")
 
@@ -158,6 +167,11 @@ def start(instance_name: str = _instance_name_arg, profile: str = _profile_opt) 
         wait_for_instance_with_id(instance.id, session=session)  # type: ignore
 
     update_ssh_config_for_instances_with_name(session, instance_name)
+
+    if open_vscode:
+        logger.info(f"[{instance_name}] Waiting for SSH")
+        wait_for_connection(instance_name)
+        open_vscode_over_ssh(instance_name)
 
 
 @app.command()
