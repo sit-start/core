@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 
 # Source all util scripts.
-root_path="$(dirname "$(dirname "$(dirname "${BASH_SOURCE[0]}")")")"
-util_path="$root_path/usr/local/share/sitstart/util"
-utils=(general git py_env deploy scm_prompt)
-for util in "${utils[@]}"; do
-  source "$util_path/$util.sh"
+_util_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+for _util in general git py_env deploy scm_prompt; do
+  . "$_util_path/../../usr/local/share/sitstart/util/$_util.sh"
 done
+unset _util _util_path
 
 # Setup completion for the AWS CLI.
 [ "$(command -v aws)" ] && [ "$(command -v aws_completer)" ] &&
@@ -39,6 +38,6 @@ alias gitlog="git $GIT_LOG_ARGS"
 alias yadmlog="yadm $GIT_LOG_ARGS"
 
 # Setup sitstart bash completions.
-for file in "$root_path"/usr/local/share/sitstart/bash_completion/*.sh; do
+for file in "$SITSTART_ROOT"/usr/local/share/sitstart/bash_completion/*.sh; do
   source "$file"
 done

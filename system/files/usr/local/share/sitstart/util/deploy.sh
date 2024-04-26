@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
 shopt -s expand_aliases
 
-util_path=$(dirname "${BASH_SOURCE[0]}")
-root_path=$(realpath "$util_path/../../../../..")
-. "$util_path/general.sh"
-. "$util_path/git.sh"
-. "$util_path/py_env.sh"
+# Source relevant util scripts.
+for _util in general git py_env; do
+  . "$(dirname "${BASH_SOURCE[0]}")/$_util.sh"
+done
+unset _util
 
-# Prefix git/yadm command with `with_deploy_key` to use repo-specific deploy keys.
-git_deploy_ssh_cmd="$root_path/usr/local/bin/git_ssh_with_custom_key.sh"
+# Use GIT_SSH_COMMAND=$GIT_DEPLOY_SSH_COMMAND to use repo-specific deploy keys.
+GIT_DEPLOY_SSH_COMMAND="$(realpath \
+  "$SITSTART_SYSTEM_ROOT/usr/local/bin/git_ssh_with_custom_key.sh")"
+export GIT_DEPLOY_SSH_COMMAND
+
+# A shorthand prefix for the above, for use with git and yadm.
 # shellcheck disable=SC2139
-alias with_deploy_key="GIT_SSH_COMMAND=$git_deploy_ssh_cmd"
+alias with_deploy_key="GIT_SSH_COMMAND=$GIT_DEPLOY_SSH_COMMAND"
 
 # Get the path to the deploy key for a given repo.
 function deploy_key_path() {
-  local repo_url="$1"
+  local repo_url key_name
+  repo_url="$1"
   key_name=$(python3 -c "import os;\
     print(os.path.splitext('${repo_url}'.split(':')[-1].replace('/','-'))[0])")
   echo ~/.ssh/git-keys/"$key_name"
@@ -22,15 +27,17 @@ function deploy_key_path() {
 
 # Get the name of the secret for a given repo.
 function deploy_key_secrets_name() {
-  local repo_url="$1"
-  local key_path
+  local repo_url key_path
+  repo_url="$1"
   key_path=$(deploy_key_path "$repo_url")
   echo "$(basename "$key_path")-deploy-ed25519"
 }
 
 # Create a deploy key for a given repo.
 function create_deploy_key() {
-  local repo_url="$1"
+  local repo_url key_path key_secrets_name _private_key private_key \
+    public_key secret existing_deploy_key_ids
+  repo_url="$1"
   key_path=$(deploy_key_path "$repo_url")
   key_secrets_name=$(deploy_key_secrets_name "$repo_url")
 
@@ -77,7 +84,8 @@ function create_deploy_key() {
 
 # Fetch the deploy key from AWS Secrets Manager for a given repo.
 function fetch_deploy_key() {
-  local repo_url="$1"
+  local repo_url key_path key_secrets_name
+  repo_url="$1"
   key_path=$(deploy_key_path "$repo_url")
   key_secrets_name=$(deploy_key_secrets_name "$repo_url")
 
@@ -93,22 +101,26 @@ function fetch_deploy_key() {
 
 # Deploy a yadm (dotfile) repo using deploy keys.
 function deploy_yadm_repo() {
+  local repo_url repo
   if [ "$#" -ne 1 ]; then
     echo "Usage: deploy_yadm_repo <repo_url>"
     return 1
   fi
   repo_url="$1"
+  repo=$(basename "$repo_url" .git)
   fetch_deploy_key "$repo_url"
   if yadm_repo_exists >/dev/null 2>&1; then
     echo "Yadm repo already exists, skipping clone."
     return 1
   fi
   with_deploy_key yadm clone "$repo_url" --no-checkout
-  with_deploy_key yadm checkout ~
+  yadm -C "$repo" config --local core.sshCommand "$GIT_DEPLOY_SSH_COMMAND"
+  yadm checkout ~
 }
 
 # Deploy a repo using deploy keys.
 function deploy_repo() {
+  local repo_url repo
   if [ "$#" -ne 1 ]; then
     echo "Usage: deploy_repo <repo_url>"
     return 1
@@ -121,14 +133,14 @@ function deploy_repo() {
     return 1
   fi
   with_deploy_key git clone "$repo_url"
+  git -C "$repo" config --local core.sshCommand "$GIT_DEPLOY_SSH_COMMAND"
 }
 
 # Deploy the core repo and update system files and settings.
 function deploy_sitstart() {
-
   # Install the core source repo and use the default venv as local venv.
   mkdir -p "$DEV"
-  core_repo_url=git@github.com:sit-start/core.git
+  local core_repo_url=git@github.com:sit-start/core.git
   fetch_deploy_key "$core_repo_url"
   if ! git_repo_exists "$CORE" >/dev/null 2>&1; then
     (cd "$DEV" && deploy_repo $core_repo_url) || return 1
@@ -157,9 +169,8 @@ function deploy_sitstart() {
   # Install new components not in the AMI. TODO: update the AMI.
   installs=(github)
   if [[ $(uname -s) == "Linux" ]]; then
-    sudo bash -c \
-      ". $util_path/install.sh##os.Linux && install_components ${installs[*]}" ||
-      return 1
+    sudo bash -c ". $SITSTART_UTIL/install.sh##os.Linux &&\
+       install_components ${installs[*]}" || return 1
   else
     echo "Not on Linux, skipping additional component installation." \
       "Ensure you have the following installed: ${installs[*]}."

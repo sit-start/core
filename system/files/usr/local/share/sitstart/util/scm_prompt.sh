@@ -26,8 +26,7 @@
 # the $(...) (as above), but not both. Which one you use depends on if
 # you need the rest of your PS1 to interpolate variables.
 
-util_path=$(dirname "${BASH_SOURCE[0]}")
-. "$util_path/general.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/general.sh"
 
 function _dotfiles_scm_info() {
   # find out if we're in a git or hg repo by looking for the control dir

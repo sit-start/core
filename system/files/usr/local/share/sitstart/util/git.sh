@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
-util_path=$(dirname "${BASH_SOURCE[0]}")
-. "$util_path/general.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/general.sh"
 
 function git_is_clean() {
   if [ -n "$(git status --porcelain)" ]; then

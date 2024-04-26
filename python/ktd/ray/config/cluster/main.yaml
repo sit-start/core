@@ -65,8 +65,13 @@ setup_commands:
       . ~ec2-user/dev/core/system/files/etc/profile.d/sh.local##os.Linux
       deploy_sitstart && touch ~ec2-user/.ray_sitstart_deployed
     }
+  # file mounts will overwrite ~/dev/core/.git/config, so ensure the default
+  # SSH command setting persists
+  - |
+    with_deploy_key git -C $CORE config --local \
+      core.sshCommand "$GIT_DEPLOY_SSH_COMMAND"
   # fetch/prune so local tags on nodes don't conflict with new remote tags
-  - with_deploy_key git -C $CORE fetch --all --prune --prune-tags
+  - git -C $CORE fetch --all --prune --prune-tags
   # login and configure wandb
   - mkdir -p $WANDB_DIR
   - wandb login
