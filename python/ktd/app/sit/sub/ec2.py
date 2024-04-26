@@ -115,7 +115,7 @@ def create(
     cf_client.create_stack(  # type: ignore
         StackName=instance_name,
         TemplateBody=Path(CF_TEMPLATE_PATH).read_text(),
-        Capabilities=["CAPABILITY_IAM"],
+        Capabilities=["CAPABILITY_AUTO_EXPAND", "CAPABILITY_IAM"],
         Parameters=[
             {"ParameterKey": "InstanceType", "ParameterValue": instance_type},
             {"ParameterKey": "SystemFilesUrl", "ParameterValue": system_files_url},
