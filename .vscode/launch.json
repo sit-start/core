@@ -8,17 +8,15 @@
       "program": "${file}",
       "console": "integratedTerminal",
       "args": "${command:pickArgs}",
-      "justMyCode": false,
+      "justMyCode": false
     },
     {
       "name": "PyTest Debugger: Current File",
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
-      "args": [
-        "${file}"
-      ],
-      "justMyCode": false,
-    },
-  ],
+      "args": ["${file}"],
+      "justMyCode": false
+    }
+  ]
 }
