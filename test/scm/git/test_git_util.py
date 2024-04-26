@@ -80,6 +80,7 @@ def test_get_first_remote_ancestor(repo, add_and_commit_file):
         get_first_remote_ancestor(repo)
 
 
+@pytest.mark.slow
 def test_get_tags(repo, add_and_commit_file):
     commit_1 = repo.head.commit
     tag_1 = repo.create_tag("tag-1")
