@@ -15,7 +15,7 @@ from ktd.logging import get_logger
 from ktd.scm.git.repo_state import RepoState, get_repo
 from ktd.util.string import to_str
 
-from .train import DataModuleFactory, TrainingModuleFactory, train
+from .train import DataModuleCreator, TrainingModuleCreator, train
 
 CHECKPOINT_STORAGE_PATH = "s3://ktd-ray/runs"
 
@@ -112,8 +112,8 @@ def _get_scaling_config(config: dict) -> ScalingConfig:
 
 def _get_ray_trainer(
     config: dict,
-    training_module_factory: TrainingModuleFactory,
-    data_module_factory: DataModuleFactory,
+    training_module_creator: TrainingModuleCreator,
+    data_module_creator: DataModuleCreator,
     repo_state: RepoState | None = None,
     scaling_config: ScalingConfig | None = None,
 ):
@@ -131,8 +131,8 @@ def _get_ray_trainer(
     def train_loop_per_worker(train_loop_config: dict) -> None:
         train(
             train_loop_config,
-            training_module_factory,
-            data_module_factory,
+            training_module_creator,
+            data_module_creator,
             wandb_enabled=config["wandb"]["enabled"],
             with_ray=True,
         )
@@ -156,8 +156,8 @@ def _populate_train_loop_config_with_config_vals(config: dict) -> None:
 
 def train_with_ray(
     config: dict,
-    training_module_factory: TrainingModuleFactory,
-    data_module_factory: DataModuleFactory,
+    training_module_creator: TrainingModuleCreator,
+    data_module_creator: DataModuleCreator,
 ) -> None:
     repo_state = _get_repo_state_and_add_to_config(config)
 
@@ -165,8 +165,8 @@ def train_with_ray(
 
     trainer = _get_ray_trainer(
         config,
-        training_module_factory,
-        data_module_factory,
+        training_module_creator,
+        data_module_creator,
         repo_state=repo_state,
         scaling_config=_get_scaling_config(config),
     )
@@ -176,8 +176,8 @@ def train_with_ray(
 
 def tune_with_ray(
     config: dict,
-    training_module_factory: Callable[[dict], pl.LightningModule],
-    data_module_factory: Callable[[dict], pl.LightningDataModule],
+    training_module_creator: Callable[[dict], pl.LightningModule],
+    data_module_creator: Callable[[dict], pl.LightningDataModule],
 ) -> None:
     repo_state = _get_repo_state_and_add_to_config(config)
 
@@ -186,7 +186,7 @@ def tune_with_ray(
     _populate_train_loop_config_with_config_vals(config)
 
     trainer = _get_ray_trainer(
-        config, training_module_factory, data_module_factory, repo_state=repo_state
+        config, training_module_creator, data_module_creator, repo_state=repo_state
     )
 
     scheduler = ASHAScheduler(

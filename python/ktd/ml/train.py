@@ -12,16 +12,16 @@ from ktd.logging import get_logger
 
 from .callbacks import LoggerCallback
 
-TrainingModuleFactory = Callable[[dict[str, Any]], pl.LightningModule]
-DataModuleFactory = Callable[[dict[str, Any]], pl.LightningDataModule]
+TrainingModuleCreator = Callable[[dict[str, Any]], pl.LightningModule]
+DataModuleCreator = Callable[[dict[str, Any]], pl.LightningDataModule]
 
 logger = get_logger(__name__)
 
 
 def train(
     config,
-    training_module_factory: TrainingModuleFactory,
-    data_module_factory: DataModuleFactory,
+    training_module_creator: TrainingModuleCreator,
+    data_module_creator: DataModuleCreator,
     wandb_enabled: bool = False,
     ckpt_path: str | os.PathLike[str] | None = None,
     **kwargs: Any,
@@ -53,8 +53,8 @@ def train(
             f"{config['batch_size']}, {batch_size}, resp."
         )
 
-    training_module = training_module_factory(config)
-    data_module = data_module_factory(config)
+    training_module = training_module_creator(config)
+    data_module = data_module_creator(config)
 
     strategy: str | Strategy = "auto"
     plugins: list[Any] | None = None
@@ -106,11 +106,11 @@ def train(
 # TODO: flesh out ktd.ml.train.test
 def test(
     config,
-    training_module_factory: TrainingModuleFactory,
-    data_module_factory: DataModuleFactory,
+    training_module_creator: TrainingModuleCreator,
+    data_module_creator: DataModuleCreator,
 ) -> None:
-    training_module = training_module_factory(config)
-    data_module = data_module_factory(config)
+    training_module = training_module_creator(config)
+    data_module = data_module_creator(config)
 
     trainer = pl.Trainer(
         devices="auto",

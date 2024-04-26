@@ -161,7 +161,7 @@ def main():
         },
     }
 
-    def training_module_factory(config: dict[str, Any]) -> LightningModule:
+    def training_module_creator(config: dict[str, Any]) -> LightningModule:
         model = ResNet18(
             num_classes=CIFAR10.NUM_CLASSES,
             dropout_p=config["dropout_p"],
@@ -171,7 +171,7 @@ def main():
             model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
         return TrainingModule(config, model=model)
 
-    def data_module_factory(config: dict[str, Any]) -> LightningDataModule:
+    def data_module_creator(config: dict[str, Any]) -> LightningDataModule:
         if config["smoke_test"]:
             return SmokeTest(
                 batch_size=config["batch_size"], num_classes=CIFAR10.NUM_CLASSES
@@ -193,7 +193,7 @@ def main():
 
     ray.init(logging_level=ray_logging_level)
 
-    tune_with_ray(config, training_module_factory, data_module_factory)
+    tune_with_ray(config, training_module_creator, data_module_creator)
 
 
 if __name__ == "__main__":
