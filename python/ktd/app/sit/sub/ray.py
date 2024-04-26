@@ -1,6 +1,6 @@
 import subprocess
 import sys
-from os.path import expanduser, expandvars, realpath
+from os.path import expanduser, realpath
 from pathlib import Path
 from time import sleep
 
@@ -207,24 +207,30 @@ def submit(
     # get script name
     if not script_name and script_path == SCRIPT_PATH_DEFAULT:
         raise RuntimeError("exp_name or exp_path must be provided")
-    script_path = script_path.format(script_name=script_name)
 
-    # get repo
+    def _resolve(path: str) -> str:
+        return realpath(expanduser(path))
+
+    script_path = _resolve(script_path.format(script_name=script_name))
+
+    # get the script path's containing repo
     try:
-        repo = git.Repo(expandvars(script_path), search_parent_directories=True)
+        repo = git.Repo(script_path, search_parent_directories=True)
     except git.InvalidGitRepositoryError:
         logger.error(f"No git repository found for {script_path!r}; exiting")
         sys.exit(-1)
 
-    # ensure the repo is in cluster config's file mounts, as we'll use that
-    # to sync repo state with head and worker nodes
+    # ensure the repo is in the cluster config's `file_mounts`, which maps
+    # cluster paths to local paths for syncing local -> head -> worker
     config_path = Path(CONFIG_ROOT) / f"{config}.yaml"
     config_data = yaml.load(config_path.read_text(), Loader=yaml.FullLoader)
-    file_mounts = [realpath(expanduser(f)) for f in config_data["file_mounts"].values()]
     repo_path = Path(repo.working_dir).resolve()
-    if not any(repo_path.is_relative_to(f) for f in file_mounts):
+    mounts = {dst: _resolve(src) for dst, src in config_data["file_mounts"].items()}
+    mount = next((m for m in mounts.items() if repo_path.is_relative_to(m[1])), None)
+    if not mount:
         msg = f"Repo {repo.working_dir!r} not in file_mounts and cannot be synced."
         raise RuntimeError(msg)
+    cluster_script_path = f"{mount[0]}/{str(Path(script_path).relative_to(mount[1]))}"
 
     # invoke ray-up, syncing file mounts and running setup commands
     # even if the config hasn't changed
@@ -238,7 +244,7 @@ def submit(
 
     # run a basic job that uses the native environment and existing file(s)
     client = JobSubmissionClient("http://127.0.0.1:8265")
-    entrypoint = f"python {script_path}"
+    entrypoint = f"python {cluster_script_path}"
     try:
         logger.info(f"Submitting job with entrypoint {entrypoint!r}")
         sub_id = client.submit_job(entrypoint=entrypoint)
