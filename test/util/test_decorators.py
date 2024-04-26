@@ -2,9 +2,12 @@ import logging
 import re
 from time import sleep
 
+import pytest
+
 from ktd.util.decorators import debug, memoize, timer
 
 
+@pytest.mark.slow
 def test_timer(caplog):
     caplog.set_level(logging.INFO)
     sleep_time_sec = 1
