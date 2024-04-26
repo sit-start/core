@@ -8,8 +8,8 @@ from pytorch_lightning.utilities.types import OptimizerLRSchedulerConfig
 @patch("ktd.ml.training_module.TrainingModule.log")
 def test_training_module(
     log_mock,
-    smoketest_training_module_factory,
-    smoketest_data_module_factory,
+    smoketest_training_module_creator,
+    smoketest_data_module_creator,
 ):
     config = {
         "optimizer": "adamw",
@@ -21,11 +21,11 @@ def test_training_module(
         "min_lr": 0.0001,
     }
 
-    data_module = smoketest_data_module_factory(config)
+    data_module = smoketest_data_module_creator(config)
     data_module.setup()
     batch = next(iter(data_module.train_dataloader()))
 
-    module = smoketest_training_module_factory(config)
+    module = smoketest_training_module_creator(config)
     optimizer_config: OptimizerLRSchedulerConfig = module.configure_optimizers()
 
     assert isinstance(optimizer_config["optimizer"], torch.optim.AdamW)
@@ -50,11 +50,11 @@ def test_training_module(
     )
 
     config["optimizer"] = "sgd"
-    module = smoketest_training_module_factory(config)
+    module = smoketest_training_module_creator(config)
     optimizer_config = module.configure_optimizers()
     assert isinstance(optimizer_config["optimizer"], torch.optim.SGD)
 
     config["optimizer"] = "unknown"
-    module = smoketest_training_module_factory(config)
+    module = smoketest_training_module_creator(config)
     with pytest.raises(RuntimeError):
         module.configure_optimizers()

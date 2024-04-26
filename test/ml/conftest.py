@@ -7,7 +7,7 @@ from ktd.ml.training_module import TrainingModule
 
 
 @pytest.fixture()
-def smoketest_training_module_factory(smoketest_model):
+def smoketest_training_module_creator(smoketest_model):
     def factory(config):
         return TrainingModule(config, smoketest_model)
 
@@ -37,7 +37,7 @@ def smoketest_model():
 
 
 @pytest.fixture()
-def smoketest_data_module_factory():
+def smoketest_data_module_creator():
     def factory(config):
         return SmokeTest(
             batch_size=config.get("batch_size", 10),
