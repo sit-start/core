@@ -27,3 +27,12 @@ if ! [ "$(command -v realpath)" ]; then
     cd "$1" && echo "$PWD"
   }
 fi
+
+# Set the system files root; useful for debugging scripts before deploying.
+SITSTART_UTIL="$(realpath "$(dirname "${BASH_SOURCE[0]}")")"
+SITSTART_SYSTEM_ROOT=$(
+  path="$SITSTART_UTIL"
+  for _ in $(seq 5); do path="$(dirname "$path")"; done
+  echo "$path"
+)
+export SITSTART_UTIL SITSTART_SYSTEM_ROOT
