@@ -1,14 +1,10 @@
 {
-  "files.associations": {
-    "**/include/c++/**": "cpp"
+  "[git-commit]": {
+    "editor.rulers": [72, 50],
+    "editor.wordWrap": "off"
   },
-  "files.insertFinalNewline": true,
-  "C_Cpp.clang_format_fallbackStyle": "Google",
-  "editor.tabSize": 2,
-  "[python]": {
-    "editor.defaultFormatter": "charliermarsh.ruff",
-    "editor.formatOnSave": false,
-    "editor.tabSize": 4
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
   "[json]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
@@ -19,42 +15,46 @@
   "[markdown]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
-  "[javascript]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
-  "[git-commit]": {
-    "editor.rulers": [72, 50],
-    "editor.wordWrap": "off"
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": false,
+    "editor.tabSize": 4
   },
   "[shellscript]": {
     "editor.defaultFormatter": "foxundermoon.shell-format",
     "editor.rulers": [80]
   },
-  "shellformat.flag": "--indent 2",
-  "shellcheck.customArgs": ["--rcfile=${workspaceFolder}/.shellcheckrc"],
-  "python.analysis.typeCheckingMode": "basic",
-  "python.testing.pytestEnabled": true,
-  "notebook.formatOnSave.enabled": false,
-  "notebook.codeActionsOnSave": {
-    "notebook.source.organizeImports": "explicit"
-  },
-  "rewrap.wrappingColumn": 72,
-  "files.watcherExclude": {
-    "**/.git/objects/**": true,
-    "**/.git/subtree-cache/**": true,
-    "**/node_modules/*/**": true,
-    "**/bin/**": true,
-    "**/build/**": true,
-    "**/.cache/**": true,
-    "**/.pytest_cache/**": true,
-    "**/__pycache__/**": true,
-    "**/.ruff_cache/**": true,
-    ".venv/**": true
+  "C_Cpp.clang_format_fallbackStyle": "Google",
+  "editor.tabSize": 2,
+  "files.associations": {
+    "**/include/c++/**": "cpp"
   },
   "files.exclude": {
     "**/.pytest_cache": true,
     "**/.ruff_cache": true,
-    "**/__pycache__": true,
-    "**/.venv/**": true
-  }
+    "**/.venv/**": true,
+    "**/__pycache__": true
+  },
+  "files.insertFinalNewline": true,
+  "files.watcherExclude": {
+    "**/.cache/**": true,
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/.pytest_cache/**": true,
+    "**/.ruff_cache/**": true,
+    "**/__pycache__/**": true,
+    "**/bin/**": true,
+    "**/build/**": true,
+    "**/node_modules/*/**": true,
+    ".venv/**": true
+  },
+  "notebook.codeActionsOnSave": {
+    "notebook.source.organizeImports": "explicit"
+  },
+  "notebook.formatOnSave.enabled": false,
+  "python.analysis.typeCheckingMode": "basic",
+  "python.testing.pytestEnabled": true,
+  "rewrap.wrappingColumn": 72,
+  "shellcheck.customArgs": ["--rcfile=${workspaceFolder}/.shellcheckrc"],
+  "shellformat.flag": "--indent 2"
 }
