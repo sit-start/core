@@ -3,6 +3,7 @@ import re
 import shlex
 import sys
 from pathlib import Path
+from typing import Annotated
 
 import typer
 from typer import Argument, Option
@@ -21,21 +22,18 @@ DEFAULT_PACKAGE_VARIANTS = ["ray[data,default,train,tune]"]
 
 @app.command()
 def update_requirements(
-    project_path: str = Argument(
-        DEFAULT_PROJECT_PATH,
-        help="The project path.",
-        show_default=True,
-    ),
-    requirements_path: str = Option(
-        DEFAULT_REQUIREMENTS_PATH,
-        help="The requirements file path.",
-        show_default=True,
-    ),
-    package_variants: list[str] = Option(
-        DEFAULT_PACKAGE_VARIANTS,
-        help="Package variants to include the requirements file.",
-        show_default=True,
-    ),
+    project_path: Annotated[
+        str,
+        Argument(help="The project path.", show_default=True),
+    ] = DEFAULT_PROJECT_PATH,
+    requirements_path: Annotated[
+        str,
+        Option(help="The requirements file path.", show_default=True),
+    ] = DEFAULT_REQUIREMENTS_PATH,
+    package_variants: Annotated[
+        list[str],
+        Option(help="Package variants to include.", show_default=True),
+    ] = DEFAULT_PACKAGE_VARIANTS,
 ) -> None:
     """Update a Python requirements file with Pigar."""
 
