@@ -1,0 +1,47 @@
+{
+  "recommendations": [
+    // C/C++
+    "llvm-vs-code-extensions.vscode-clangd",
+    "ms-vscode.cmake-tools",
+    "ms-vscode.cpptools",
+    "ms-vscode.cpptools-themes",
+    "ms-vscode.makefile-tools",
+    // Copilot
+    "github.copilot",
+    // Editor
+    "stkb.rewrap",
+    "vscodeemacs.emacs",
+    // Jupyter
+    "ms-toolsai.jupyter",
+    "ms-toolsai.jupyter-keymap",
+    "ms-toolsai.jupyter-renderers",
+    // Markdown
+    "shd101wyy.markdown-preview-enhanced",
+    "yzhang.markdown-all-in-one",
+    // Multi-language
+    "esbenp.prettier-vscode",
+    // ML
+    "ms-toolsai.tensorboard",
+    // Python
+    "charliermarsh.ruff",
+    "ms-python.debugpy",
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    // Shell
+    "foxundermoon.shell-format",
+    "timonwong.shellcheck",
+    // SCM
+    "eamodio.gitlens",
+    "mhutchie.git-graph",
+    "github.remotehub",
+    "github.vscode-github-actions",
+    "github.vscode-pull-request-github",
+    "donjayamanne.githistory",
+    // TOML
+    "tamasfe.even-better-toml",
+    // VSCode Remote
+    "ms-vscode-remote.remote-ssh",
+    "ms-vscode-remote.remote-ssh-edit",
+    "ms-vscode.remote-repositories"
+  ]
+}
