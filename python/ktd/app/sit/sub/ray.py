@@ -10,6 +10,7 @@ import typer
 import yaml
 from ray.job_submission import JobSubmissionClient
 from typer import Argument, Option
+from typing_extensions import Annotated, Optional
 
 from ktd import PYTHON_ROOT
 from ktd.aws.ec2.util import (
@@ -37,106 +38,115 @@ app = typer.Typer()
 logger = get_logger(__name__, format="simple")
 
 # Arguments and options
-_config_arg = Argument(
-    help=f"The Ray cluster config in '{CONFIG_ROOT}'.",
-    default=DEFAULT_CONFIG,
-)
-_profile_opt = Option(
-    None,
-    help="The AWS profile to use.",
-    envvar="AWS_PROFILE",
-    show_default=False,
-)
-_min_workers_opt = Option(
-    None,
-    help="The minimum number of workers. This overrides the config.",
-    show_default=False,
-)
-_max_workers_opt = Option(
-    None,
-    help="The maximum number of workers. This overrides the config.",
-    show_default=False,
-)
-_no_restart_opt = Option(
-    False,
-    "--no-restart",
-    help="Do not restart Ray services during the update.",
-    show_default=False,
-)
-_restart_only_opt = Option(
-    False,
-    "--restart-only",
-    help="Skip running setup commands and only restart Ray.",
-    show_default=False,
-)
-_cluster_name_opt = Option(
-    None,
-    help="The cluster name. This overrides the config.",
-    show_default=False,
-)
-_prompt_opt = Option(
-    False,
-    "--prompt",
-    help="Prompt for confirmation.",
-    show_default=False,
-)
-_verbose_opt = Option(
-    False,
-    "--verbose",
-    help="Display verbose output.",
-    show_default=False,
-)
-_open_vscode_opt = Option(
-    False,
-    "--open-vscode",
-    help="Open VS Code on the cluster head.",
-    show_default=False,
-)
-_show_output_opt = Option(
-    False,
-    "--show-output",
-    help="Display output from the 'ray' command.",
-    show_default=False,
-)
-_no_config_cache_opt = Option(
-    False,
-    "--no-config-cache",
-    help="Disable the local cluster config cache.",
-    show_default=False,
-)
-_workers_only_opt = Option(
-    False,
-    "--workers-only",
-    help="Only destroy workers.",
-    show_default=False,
-)
-_keep_min_workers_opt = Option(
-    False,
-    "--keep-min-workers",
-    help="Retain the minimum number of workers specified in the config.",
-    show_default=False,
-)
-_kill_opt = Option(
-    False,
-    "--kill",
-    help="Terminate all instances.",
-    show_default=False,
-)
-_script_path_arg = Argument(
-    SCRIPT_PATH_DEFAULT,
-    help="The path to the script to run, required if --script-name is not specified.",
-)
-_script_name_opt = Option(
-    None,
-    help="The name of the script to run, required if script_path is not specified.",
-    show_default=False,
-)
-_restart_opt = Option(
-    False,
-    "--restart",
-    help="Restart Ray services. This stops any existing jobs.",
-    show_default=False,
-)
+ConfigArg = Annotated[
+    str,
+    Argument(help=f"The Ray cluster config in '{CONFIG_ROOT}'."),
+]
+ProfileOpt = Annotated[
+    Optional[str],
+    Option(help="The AWS profile to use.", envvar="AWS_PROFILE", show_default=False),
+]
+MinWorkersOpt = Annotated[
+    Optional[int],
+    Option(
+        help="The minimum number of workers. This overrides the config.",
+        show_default=False,
+    ),
+]
+MaxWorkersOpt = Annotated[
+    Optional[int],
+    Option(
+        help="The maximum number of workers. This overrides the config.",
+        show_default=False,
+    ),
+]
+NoRestartOpt = Annotated[
+    bool,
+    Option(
+        "--no-restart",
+        help="Do not restart Ray services during the update.",
+        show_default=False,
+    ),
+]
+RestartOnlyOpt = Annotated[
+    bool,
+    Option(
+        "--restart-only",
+        help="Skip running setup commands and only restart Ray.",
+        show_default=False,
+    ),
+]
+ClusterNameOpt = Annotated[
+    Optional[str],
+    Option(help="The cluster name. This overrides the config.", show_default=False),
+]
+PromptOpt = Annotated[
+    bool,
+    Option("--prompt", help="Prompt for confirmation.", show_default=False),
+]
+VerboseOpt = Annotated[
+    bool,
+    Option("--verbose", help="Display verbose output.", show_default=False),
+]
+OpenVscodeOpt = Annotated[
+    bool,
+    Option(
+        "--open-vscode", help="Open VS Code on the cluster head.", show_default=False
+    ),
+]
+ShowOutputOpt = Annotated[
+    bool,
+    Option(
+        "--show-output",
+        help="Display output from the 'ray' command.",
+        show_default=False,
+    ),
+]
+NoConfigCacheOpt = Annotated[
+    bool,
+    Option(
+        "--no-config-cache",
+        help="Disable the local cluster config cache.",
+        show_default=False,
+    ),
+]
+WorkersOnlyOpt = Annotated[
+    bool,
+    Option("--workers-only", help="Only destroy workers.", show_default=False),
+]
+KeepMinWorkersOpt = Annotated[
+    bool,
+    Option(
+        "--keep-min-workers",
+        help="Retain the minimum number of workers specified in the config.",
+        show_default=False,
+    ),
+]
+KillOpt = Annotated[
+    bool,
+    Option("--kill", help="Terminate all instances.", show_default=False),
+]
+ScriptPathArg = Annotated[
+    str,
+    Argument(
+        help="The path to the script to run, required if --script-name is not specified."
+    ),
+]
+ScriptNameOpt = Annotated[
+    Optional[str],
+    Option(
+        help="The name of the script to run, required if script_path is not specified.",
+        show_default=False,
+    ),
+]
+RestartOpt = Annotated[
+    bool,
+    Option(
+        "--restart",
+        help="Restart Ray services. This stops any existing jobs.",
+        show_default=False,
+    ),
+]
 
 
 def _ray_up(
@@ -145,7 +155,7 @@ def _ray_up(
     max_workers: int | None = None,
     no_restart: bool = False,
     restart_only: bool = False,
-    cluster_name: str = "",
+    cluster_name: str | None = None,
     prompt: bool = False,
     verbose: bool = False,
     show_output: bool = False,
@@ -197,11 +207,11 @@ def stop_jobs() -> None:
 # TODO: support additional user-specified repos on local+remote hosts
 @app.command()
 def submit(
-    script_path: str = _script_path_arg,
-    script_name: str = _script_name_opt,
-    config: str = _config_arg,
-    cluster_name: str = _cluster_name_opt,
-    restart: bool = _restart_opt,
+    script_path: ScriptPathArg = SCRIPT_PATH_DEFAULT,
+    script_name: ScriptNameOpt = None,
+    config: ConfigArg = DEFAULT_CONFIG,
+    cluster_name: ClusterNameOpt = None,
+    restart: RestartOpt = False,
 ) -> None:
     """Run a job on a Ray cluster."""
     # get script name
@@ -258,18 +268,18 @@ def submit(
 
 @app.command()
 def up(
-    config: str = _config_arg,
-    profile: str = _profile_opt,
-    min_workers: int = _min_workers_opt,
-    max_workers: int = _max_workers_opt,
-    no_restart: bool = _no_restart_opt,
-    restart_only: bool = _restart_only_opt,
-    cluster_name: str = _cluster_name_opt,
-    prompt: bool = _prompt_opt,
-    verbose: bool = _verbose_opt,
-    open_vscode: bool = _open_vscode_opt,
-    show_output: bool = _show_output_opt,
-    no_config_cache: bool = _no_config_cache_opt,
+    config: ConfigArg = DEFAULT_CONFIG,
+    profile: ProfileOpt = None,
+    min_workers: MinWorkersOpt = None,
+    max_workers: MaxWorkersOpt = None,
+    no_restart: NoRestartOpt = False,
+    restart_only: RestartOnlyOpt = False,
+    cluster_name: ClusterNameOpt = None,
+    prompt: PromptOpt = False,
+    verbose: VerboseOpt = False,
+    open_vscode: OpenVscodeOpt = False,
+    show_output: ShowOutputOpt = False,
+    no_config_cache: NoConfigCacheOpt = False,
 ) -> None:
     """Create or update a Ray cluster."""
     # invoke ray up
@@ -311,14 +321,14 @@ def up(
 
 @app.command()
 def down(
-    cluster_name: str = _cluster_name_opt,
-    profile: str = _profile_opt,
-    workers_only: bool = _workers_only_opt,
-    keep_min_workers: bool = _keep_min_workers_opt,
-    prompt: bool = _prompt_opt,
-    verbose: bool = _verbose_opt,
-    kill: bool = _kill_opt,
-    show_output: bool = _show_output_opt,
+    cluster_name: ClusterNameOpt = None,
+    profile: ProfileOpt = None,
+    workers_only: WorkersOnlyOpt = False,
+    keep_min_workers: KeepMinWorkersOpt = False,
+    prompt: PromptOpt = False,
+    verbose: VerboseOpt = False,
+    kill: KillOpt = False,
+    show_output: ShowOutputOpt = False,
 ) -> None:
     """Tear down a Ray cluster."""
     cluster_name = cluster_name or DEFAULT_CONFIG

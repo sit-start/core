@@ -1,5 +1,6 @@
 import getpass
 from pathlib import Path
+from typing import Annotated, Optional
 
 import typer
 from typer import Argument, Option
@@ -28,76 +29,74 @@ from ktd.util.system import (
 from ktd.util.vscode import (
     DEFAULT_FOLDER,
     DEFAULT_TARGET,
-    VSCodeTarget,
     open_vscode_over_ssh,
 )
 
 CF_TEMPLATE_PATH = f"{PYTHON_ROOT}/ktd/aws/cloudformation/templates/dev.yaml"
 DEFAULT_INSTANCE_TYPE = "g5.xlarge"
+DEFAULT_DOTFILES_REPO = DEFAULT_DOTFILES_REPO_URL.format(user=getpass.getuser())
 
 app = typer.Typer()
 logger = get_logger(__name__, format="simple")
 
 # Arguments and options
-_instance_name_arg = Argument(
-    ...,
-    help="The instance name or name pattern.",
-    show_default=False,
-)
-_profile_opt = Option(
-    None,
-    help="The AWS profile to use.",
-    envvar="AWS_PROFILE",
-    show_default=False,
-)
-_instance_type_opt = Option(DEFAULT_INSTANCE_TYPE, help="The instance type to create.")
-_open_vscode_opt = Option(
-    False,
-    "--open-vscode",
-    help=f"Open VS Code to the default {DEFAULT_TARGET} ({DEFAULT_FOLDER}).",
-    show_default=False,
-)
-_show_killed_opt = Option(
-    False,
-    "--show-killed",
-    help="Show killed instances.",
-    show_default=False,
-)
-_compact_opt = Option(
-    False,
-    "--compact",
-    help="Display compact output.",
-    show_default=False,
-)
-_target_opt = Option(
-    DEFAULT_TARGET,
-    help="Target type to open in VS Code; one of 'file', 'folder'.",
-    show_choices=True,
-)
-_path_opt = Option(
-    DEFAULT_FOLDER,
-    help="Absolute path to open in VS Code.",
-)
-_no_dotfiles_opt = Option(
-    False,
-    "--no-dotfiles",
-    help="Do not install user dotfiles.",
-    show_default=False,
-)
-_dotfiles_repo_opt = Option(
-    DEFAULT_DOTFILES_REPO_URL.format(user=getpass.getuser()),
-    help="The git repo from which to install dotfiles with yadm.",
-)
+InstanceNameArg = Annotated[
+    str,
+    Argument(help="The instance name or name pattern.", show_default=False),
+]
+ProfileOpt = Annotated[
+    Optional[str],
+    Option(help="The AWS profile to use.", envvar="AWS_PROFILE", show_default=False),
+]
+InstanceTypeOpt = Annotated[
+    str,
+    Option(help="The instance type to create."),
+]
+OpenVscodeOpt = Annotated[
+    bool,
+    Option(
+        "--open-vscode",
+        help=f"Open VS Code to the default {DEFAULT_TARGET} ({DEFAULT_FOLDER}).",
+        show_default=False,
+    ),
+]
+ShowKilledOpt = Annotated[
+    bool,
+    Option("--show-killed", help="Show killed instances.", show_default=False),
+]
+CompactOpt = Annotated[
+    bool,
+    Option("--compact", help="Display compact output.", show_default=False),
+]
+TargetOpt = Annotated[
+    str,
+    Option(
+        help="Target type to open in VS Code; one of 'file', 'folder'.",
+        show_choices=True,
+    ),
+]
+PathOpt = Annotated[
+    str,
+    Option(help="Absolute path to open in VS Code."),
+]
+NoDotfilesOpt = Annotated[
+    bool,
+    Option("--no-dotfiles", help="Do not install user dotfiles.", show_default=False),
+]
+DotfilesRepoOpt = Annotated[
+    str,
+    Option(help="The git repo from which to install dotfiles with yadm."),
+]
 
 
 @app.command()
 def create(
-    instance_name: str = _instance_name_arg,
-    profile: str = _profile_opt,
-    instance_type: str = _instance_type_opt,
-    open_vscode: bool = _open_vscode_opt,
-    no_dotfiles: bool = _no_dotfiles_opt,
-    dotfiles_repo: str = _dotfiles_repo_opt,
+    instance_name: InstanceNameArg,
+    profile: ProfileOpt = None,
+    instance_type: InstanceTypeOpt = DEFAULT_INSTANCE_TYPE,
+    open_vscode: OpenVscodeOpt = False,
+    no_dotfiles: NoDotfilesOpt = False,
+    dotfiles_repo: DotfilesRepoOpt = DEFAULT_DOTFILES_REPO,
 ) -> None:
     """Create a devserver with the given name and arguments."""
     # parameters should be kept in sync with ktd/aws/cloudformation/templates/dev.yaml
@@ -147,9 +146,9 @@ def create(
 
 @app.command()
 def start(
-    instance_name: str = _instance_name_arg,
-    profile: str = _profile_opt,
-    open_vscode: bool = _open_vscode_opt,
+    instance_name: InstanceNameArg,
+    profile: ProfileOpt = None,
+    open_vscode: OpenVscodeOpt = False,
 ) -> None:
     """Start instances with the given name."""
     logger.info(f"[{instance_name}] Starting instances")
@@ -175,7 +174,7 @@ def start(
 
 
 @app.command()
-def stop(instance_name: str = _instance_name_arg, profile: str = _profile_opt) -> None:
+def stop(instance_name: InstanceNameArg, profile: ProfileOpt = None) -> None:
     """Stop instances with the given name."""
     logger.info(f"[{instance_name}] Stopping instances")
 
@@ -195,7 +194,7 @@ def stop(instance_name: str = _instance_name_arg, profile: str = _profile_opt) -
 
 
 @app.command()
-def kill(instance_name: str = _instance_name_arg, profile: str = _profile_opt) -> None:
+def kill(instance_name: InstanceNameArg, profile: ProfileOpt = None) -> None:
     """Terminate instances with the given name."""
     logger.info(f"[{instance_name}] Killing instances")
     session = get_aws_session(profile)
@@ -204,12 +203,12 @@ def kill(instance_name: str = _instance_name_arg, profile: str = _profile_opt) -
 
 @app.command()
 def list(
-    profile: str = _profile_opt,
-    show_killed: bool = _show_killed_opt,
-    compact: bool = _compact_opt,
+    profile: ProfileOpt = None,
+    show_killed: ShowKilledOpt = False,
+    compact: CompactOpt = False,
 ) -> None:
     """List instances."""
-    # FIXME: track stacks w/ specific tag, not instances, since it's
+    # TODO: track stacks w/ specific tag, not instances, since it's
     # possible for, e.g., stack creation to succeed but instance
     # creation to fail
     session = get_aws_session(profile)
@@ -259,7 +258,7 @@ def list(
 
 
 @app.command()
-def refresh(profile: str = _profile_opt) -> None:
+def refresh(profile: ProfileOpt = None) -> None:
     """Refresh hostnames in the SSH config for all running named instances."""
     session = get_aws_session(profile)
     update_ssh_config_for_instances_with_name(session, instance_name="?*")
@@ -267,9 +266,9 @@ def refresh(profile: str = _profile_opt) -> None:
 
 @app.command()
 def open(
-    instance_name: str = _instance_name_arg,
-    target: VSCodeTarget = _target_opt,
-    path: str = _path_opt,
+    instance_name: InstanceNameArg,
+    target: TargetOpt = DEFAULT_TARGET,
+    path: PathOpt = DEFAULT_FOLDER,
 ) -> None:
     """Open VS Code on the instance with the given name."""
     open_vscode_over_ssh(instance_name, target, path)
