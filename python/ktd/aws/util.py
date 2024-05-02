@@ -1,4 +1,5 @@
 import logging
+import os
 import subprocess
 from typing import Optional
 
@@ -33,6 +34,10 @@ def is_logged_in(session: Optional[boto3.Session] = None) -> bool:
 
 def sso_login(profile_name=None) -> None:
     """Login to AWS via SSO if not already logged in"""
+    if os.getenv("GITHUB_ACTIONS", False):
+        # rely on OIDC and the sitstart-github-action role for tests
+        logger.warning("Skipping AWS SSO login in GitHub Actions environment.")
+        return
     if is_logged_in(boto3.Session(profile_name=profile_name)):
         logger.debug("AWS SSO session has valid credentials; skipping login")
         return

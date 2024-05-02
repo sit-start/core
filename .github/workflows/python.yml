@@ -1,29 +1,68 @@
 name: Python
 on:
   push:
+    branches: ["main"]
   pull_request:
 permissions:
+  id-token: write
   contents: read
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Check out repository
+        uses: actions/checkout@v3
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-west-2
+          role-to-assume: arn:aws:iam::960487471244:role/sitstart-github-action
+      - name: Setup EC2 SSH
+        env:
+          EC2_RSA_PRIVATE_KEY: ${{ secrets.EC2_RSA_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "$EC2_RSA_PRIVATE_KEY" > ~/.ssh/rsa.pem
+          chmod 600 ~/.ssh/rsa.pem
+      - name: Set environment variables
+        run: |
+          echo "PYTHONPATH=python:$PYTHONPATH" >> $GITHUB_ENV
+          VENV_CACHE_KEY_PREFIX=venv-${{ runner.os }}
+          echo "VENV_CACHE_KEY_PREFIX=$VENV_CACHE_KEY_PREFIX" >> $GITHUB_ENV
+          VENV_CACHE_KEY="$VENV_CACHE_KEY_PREFIX"-${{ hashFiles('**/requirements*.txt') }}
+          echo "VENV_CACHE_KEY=$VENV_CACHE_KEY" >> $GITHUB_ENV
       - name: Set up Python 3.10
         uses: actions/setup-python@v3
         with:
           python-version: "3.10"
+      - name: Load cached Python virtual environment
+        id: cache-venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: ${{ env.VENV_CACHE_KEY }}
+          restore-keys: |
+            ${{ env.VENV_CACHE_KEY_PREFIX }}
       - name: Install dependencies
         run: |
           python -m venv .venv
           source .venv/bin/activate
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
-      - name: Set environment variables
-        run: |
-          echo "PYTHONPATH=python:$PYTHONPATH" >> $GITHUB_ENV
+      - name: Save Python virtual environment
+        if: steps.cache-venv.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v3
+        with:
+          path: .venv
+          key: ${{ env.VENV_CACHE_KEY }}
       - name: Run pre-commit
         uses: pre-commit/action@v3.0.1
+      - name: Save pre-commit cache
+        uses: actions/cache/save@v3
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-3|${{ env.pythonLocation }}|${{ hashFiles('**/.pre-commit-config.yaml') }}
       - name: Test with pytest
         run: |
           source .venv/bin/activate
