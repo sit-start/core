@@ -38,6 +38,8 @@ alias gitlog="git $GIT_LOG_ARGS"
 alias yadmlog="yadm $GIT_LOG_ARGS"
 
 # Setup sitstart bash completions.
-for file in "$SITSTART_ROOT"/usr/local/share/sitstart/bash_completion/*.sh; do
+_bash_completion_path=/usr/local/share/sitstart/bash_completion
+for file in "$SITSTART_SYSTEM_ROOT/$_bash_completion_path"/*.sh; do
   source "$file"
 done
+unset _bash_completion_path
