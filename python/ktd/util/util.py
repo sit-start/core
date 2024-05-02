@@ -23,3 +23,18 @@ def rhasattr(obj: object, attr: str) -> bool:
 def is_valid_url(url: str) -> bool:
     parsed_url = urlparse(url)
     return bool(parsed_url.scheme) and bool(parsed_url.netloc)
+
+
+def flatten_dict(
+    d: dict[str, Any], parent_key: str = "", sep: str = "."
+) -> dict[str, Any]:
+    result = {}
+    for key, val in d.items():
+        if not isinstance(key, str):
+            raise KeyError(f"Key {key} is not a string.")
+        new_key = (parent_key + sep + key).lstrip(sep)
+        if isinstance(val, dict):
+            result.update(flatten_dict(val, parent_key=new_key, sep=sep))
+        else:
+            result[new_key] = val
+    return result

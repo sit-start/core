@@ -3,6 +3,8 @@ import re
 import string
 from typing import Any, Callable
 
+from ktd.util import flatten_dict
+
 
 def strip_ansi_codes(s: str) -> str:
     # TODO: add support for RGB color sequence
@@ -121,3 +123,35 @@ def camel_to_snake(s: str, reversible: bool = True) -> str:
 def snake_to_camel(s: str, lowercase: bool = False) -> str:
     result = "".join(word.title() for word in s.split("_"))
     return result[0].lower() + result[1:] if lowercase else result
+
+
+def verp(s: str, vars: dict[str, Any]) -> str:
+    """Interpolate variables in the given string.
+
+    Syntax for interpolation targets is similar to that for context
+    variables in GitHub Actions, where `${{ foo.bar }}` interpolates to
+    `vars["foo"]["bar"]`.
+
+    Keys must be valid Python identifiers.
+
+    Values must be strings, ints, or floats. String values cannot be
+    interpolation targets.
+    """
+    identifier = r"[^\d\W]\w*"
+    subst_target = r"\$\{\{\s*(%s)\s*\}\}"
+    any_subst_target = subst_target % identifier
+
+    for key, val in flatten_dict(vars).items():
+        if any(not k.isidentifier() for k in key.split(".")):
+            raise KeyError(f"Key {key!r} contains invalid Python identifier.")
+        if not isinstance(val, (str, bool, int, float)):
+            raise ValueError(
+                f"Value must be one of str, bool, int, or float ({key!r} = {val!r})."
+            )
+        if re.search(any_subst_target, str(val)):
+            raise ValueError(
+                f"Value cannot be interpolation target ({key!r} = {val!r})."
+            )
+        s = re.sub(subst_target % key, str(val), s)
+
+    return s
