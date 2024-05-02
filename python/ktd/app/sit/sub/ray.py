@@ -10,6 +10,7 @@ import yaml
 from ray.job_submission import JobSubmissionClient
 from typer import Argument, Option
 from typing_extensions import Annotated, Optional
+from ktd.scm.git.util import list_tracked_dotfiles
 
 from ktd import PYTHON_ROOT
 from ktd.aws.ec2.util import (
@@ -143,6 +144,14 @@ RestartOpt = Annotated[
         show_default=False,
     ),
 ]
+NoSyncDotfilesOpt = Annotated[
+    bool,
+    Option(
+        "--no-sync-dotfiles",
+        help="Disable syncing dotfiles to the head node.",
+        show_default=False,
+    ),
+]
 
 
 def _resolve_input_path(input: str, root: str, extensions: list[str]) -> str:
@@ -174,6 +183,7 @@ def _ray_up(
     verbose: bool = False,
     show_output: bool = False,
     no_config_cache: bool = False,
+    sync_dotfiles: bool = False,
 ) -> None:
     cmd = [
         "ray",
@@ -204,6 +214,25 @@ def _ray_up(
     else:
         run(cmd + ["--log-color", "false"], output="file")
 
+    if sync_dotfiles:
+        files = list_tracked_dotfiles()
+        if files:
+            logger.info(f"[{cluster_name}] Syncing dotfiles to the cluster head")
+            config = yaml.load(Path(config_path).read_text(), Loader=yaml.SafeLoader)
+            ssh_user = config["auth"]["ssh_user"]
+
+            source_files = [str(Path(f"~/{f}").expanduser()) for f in files]
+            dest_files = [f"~{ssh_user}/{f}" for f in files]
+            dest_dirs = list(set(str(Path(f).parent) for f in dest_files))
+            cluster_args = [config_path, "--cluster-name", cluster_name]
+
+            run(
+                ["ray", "exec", *cluster_args, f"mkdir -p {' '.join(dest_dirs)}"],
+                output="capture",
+            )
+            for src, dest in zip(source_files, dest_files):
+                run(["ray", "rsync-up", *cluster_args, src, dest], output="capture")
+
 
 @app.command()
 def stop_jobs() -> None:
@@ -228,6 +257,7 @@ def submit(
     config: ConfigOpt = DEFAULT_CONFIG,
     cluster_name: ClusterNameOpt = None,
     restart: RestartOpt = False,
+    no_sync_dotfiles: NoSyncDotfilesOpt = False,
 ) -> None:
     """Run a job on a Ray cluster."""
     script_path = _resolve_input_path(script, SCRIPT_ROOT, ["py", "sh"])
@@ -265,6 +295,7 @@ def submit(
         cluster_name=cluster_name or Path(config_path).stem,
         no_restart=not restart,
         no_config_cache=True,
+        sync_dotfiles=not no_sync_dotfiles,
     )
 
     # run a basic job that uses the native environment and existing file(s)
@@ -295,6 +326,7 @@ def up(
     open_vscode: OpenVscodeOpt = False,
     show_output: ShowOutputOpt = False,
     no_config_cache: NoConfigCacheOpt = False,
+    no_sync_dotfiles: NoSyncDotfilesOpt = False,
 ) -> None:
     """Create or update a Ray cluster."""
     config_path = _resolve_config_path(config)
@@ -312,6 +344,7 @@ def up(
         verbose=verbose,
         show_output=show_output,
         no_config_cache=no_config_cache,
+        sync_dotfiles=not no_sync_dotfiles,
     )
 
     # 5s is usually sufficient for the minimal workers to be in the
