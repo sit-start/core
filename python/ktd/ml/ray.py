@@ -109,6 +109,7 @@ def _get_scaling_config(config: dict) -> ScalingConfig:
         num_workers=config["scale"]["num_workers"],
         use_gpu=config["scale"]["use_gpu"],
         resources_per_worker=config["scale"]["resources_per_worker"],
+        trainer_resources=config["scale"].get("trainer_resources"),
     )
 
 

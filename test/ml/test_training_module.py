@@ -2,15 +2,15 @@ from unittest.mock import ANY, call, patch
 
 import pytest
 import torch
-from pytorch_lightning.utilities.types import OptimizerLRSchedulerConfig
+
+from ktd.ml.experiments.image_multiclass_smoketest import (
+    data_module_creator,
+    training_module_creator,
+)
 
 
 @patch("ktd.ml.training_module.TrainingModule.log")
-def test_training_module(
-    log_mock,
-    smoketest_training_module_creator,
-    smoketest_data_module_creator,
-):
+def test_training_module(log_mock):
     config = {
         "optimizer": "adamw",
         "lr": 0.001,
@@ -21,24 +21,28 @@ def test_training_module(
         "min_lr": 0.0001,
     }
 
-    data_module = smoketest_data_module_creator(config)
-    data_module.setup()
+    data_module = data_module_creator(config)
+    data_module.setup(stage="fit")
     batch = next(iter(data_module.train_dataloader()))
 
-    module = smoketest_training_module_creator(config)
-    optimizer_config: OptimizerLRSchedulerConfig = module.configure_optimizers()
-
+    module = training_module_creator(config)
+    optimizer_config = module.configure_optimizers()
+    assert isinstance(optimizer_config, dict)
     assert isinstance(optimizer_config["optimizer"], torch.optim.AdamW)
     assert "lr_scheduler" in optimizer_config
+
     scheduler_config = optimizer_config["lr_scheduler"]
     assert isinstance(scheduler_config, dict)
+
     scheduler = scheduler_config["scheduler"]
     assert isinstance(scheduler, torch.optim.lr_scheduler.CosineAnnealingLR)
 
     loss = module.training_step(batch, 0)
+    assert isinstance(loss, torch.Tensor)
     assert loss.shape == torch.Size([])
 
     validation_output = module.validation_step(batch, 0)
+    assert isinstance(validation_output, dict)
     assert "val_loss" in validation_output
     assert "val_acc" in validation_output
 
@@ -50,11 +54,12 @@ def test_training_module(
     )
 
     config["optimizer"] = "sgd"
-    module = smoketest_training_module_creator(config)
+    module = training_module_creator(config)
     optimizer_config = module.configure_optimizers()
+    assert isinstance(optimizer_config, dict)
     assert isinstance(optimizer_config["optimizer"], torch.optim.SGD)
 
     config["optimizer"] = "unknown"
-    module = smoketest_training_module_creator(config)
+    module = training_module_creator(config)
     with pytest.raises(RuntimeError):
         module.configure_optimizers()
