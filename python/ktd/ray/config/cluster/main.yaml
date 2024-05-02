@@ -11,8 +11,9 @@ auth:
   ssh_private_key: ~/.ssh/rsa.pem
 available_node_types:
   m6a.xlarge:
-    max_workers: 0
-    resources: {}
+    min_workers: 0
+    max_workers: 8
+    resources: { "CPU": 4 }
     node_config:
       InstanceType: m6a.xlarge
       ImageId: ami-0c38021ff804d9342
@@ -51,7 +52,7 @@ initialization_commands: []
 setup_commands:
   # one-time setup of system files
   - |
-    [ -f ~ec2-user/.ray_sitstart_deployed ] || {
+    test -f ~ec2-user/.ray_sitstart_deployed || {
       . ~ec2-user/dev/core/system/files/etc/profile.d/sitstart.sh##os.Linux
       . ~ec2-user/dev/core/system/files/etc/profile.d/sh.local##os.Linux
       deploy_sitstart && touch ~ec2-user/.ray_sitstart_deployed
@@ -64,8 +65,7 @@ setup_commands:
   # fetch/prune so local tags on nodes don't conflict with new remote tags
   - git -C $CORE fetch --all --prune --prune-tags
   # login and configure wandb
-  - mkdir -p $WANDB_DIR
-  - wandb login
+  - test -z "$WANDB_DIR" || { mkdir -p "$WANDB_DIR" && wandb login; }
 head_setup_commands:
   # create the prometheus service file
   - |

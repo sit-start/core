@@ -26,8 +26,9 @@ from ktd.util.vscode import open_vscode_over_ssh
 DEFAULT_CONFIG = "main"
 CONFIG_ROOT = f"{PYTHON_ROOT}/ktd/ray/config/cluster"
 SCRIPT_ROOT = f"{PYTHON_ROOT}/ktd/ml/experiments"
+DASHBOARD_PORT = 8265
 FORWARDED_PORTS = {
-    "Ray Dashboard": 8265,
+    "Ray Dashboard": DASHBOARD_PORT,
     "Prometheus": 9090,
     "Grafana": 3000,
     "TensorBoard": 6006,
@@ -113,6 +114,14 @@ NoConfigCacheOpt = Annotated[
         show_default=False,
     ),
 ]
+NoPortForwardingOpt = Annotated[
+    bool,
+    Option(
+        "--no-port-forwarding",
+        help=f"Disable port forwarding for {' '.join(FORWARDED_PORTS.keys())}.",
+        show_default=False,
+    ),
+]
 WorkersOnlyOpt = Annotated[
     bool,
     Option("--workers-only", help="Only destroy workers.", show_default=False),
@@ -152,6 +161,10 @@ NoSyncDotfilesOpt = Annotated[
         show_default=False,
     ),
 ]
+
+
+def _job_submission_client() -> JobSubmissionClient:
+    return ray.job_submission.JobSubmissionClient(f"http://127.0.0.1:{DASHBOARD_PORT}")
 
 
 def _resolve_input_path(input: str, root: str, extensions: list[str]) -> str:
@@ -237,7 +250,7 @@ def _ray_up(
 @app.command()
 def stop_jobs() -> None:
     """Stop all running jobs on the active Ray cluster."""
-    client = ray.job_submission.JobSubmissionClient("http://127.0.0.1:8265")
+    client = _job_submission_client()
     for job in client.list_jobs():
         if job.status == "RUNNING":
             if not job.submission_id:
@@ -258,7 +271,7 @@ def submit(
     cluster_name: ClusterNameOpt = None,
     restart: RestartOpt = False,
     no_sync_dotfiles: NoSyncDotfilesOpt = False,
-) -> None:
+) -> str:
     """Run a job on a Ray cluster."""
     script_path = _resolve_input_path(script, SCRIPT_ROOT, ["py", "sh"])
     config_path = _resolve_config_path(config)
@@ -311,6 +324,8 @@ def submit(
         logger.info(f"Failed to submit job: {e}")
         sys.exit(-1)
 
+    return sub_id
+
 
 @app.command()
 def up(
@@ -327,6 +342,7 @@ def up(
     show_output: ShowOutputOpt = False,
     no_config_cache: NoConfigCacheOpt = False,
     no_sync_dotfiles: NoSyncDotfilesOpt = False,
+    no_port_forwarding: NoPortForwardingOpt = False,
 ) -> None:
     """Create or update a Ray cluster."""
     config_path = _resolve_config_path(config)
@@ -356,14 +372,14 @@ def up(
     )
 
     cluster_head_name = f"ray-{cluster_name}-head"
-    logger.info(
-        f"[{cluster_head_name}] Forwarding ports for "
-        f"{', '.join(FORWARDED_PORTS.keys())}"
-    )
-
     close_ssh_connection(cluster_head_name)
-    for port in FORWARDED_PORTS.values():
-        open_ssh_tunnel(cluster_head_name, port)
+    if not no_port_forwarding:
+        logger.info(
+            f"[{cluster_head_name}] Forwarding ports for "
+            f"{', '.join(FORWARDED_PORTS.keys())}"
+        )
+        for port in FORWARDED_PORTS.values():
+            open_ssh_tunnel(cluster_head_name, port)
 
     if open_vscode:
         open_vscode_over_ssh(cluster_head_name)
