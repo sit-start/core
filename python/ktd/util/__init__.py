@@ -1,3 +1,3 @@
-from ktd.util.util import is_valid_url, rgetattr, rhasattr, rsetattr
+from ktd.util.util import flatten_dict, is_valid_url, rgetattr, rhasattr, rsetattr
 
-__all__ = ["rgetattr", "rhasattr", "rsetattr", "is_valid_url"]
+__all__ = ["flatten_dict", "is_valid_url", "rgetattr", "rhasattr", "rsetattr"]

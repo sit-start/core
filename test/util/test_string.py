@@ -14,6 +14,7 @@ from ktd.util.string import (
     terminal_hyperlink,
     to_str,
     truncate,
+    verp,
 )
 
 
@@ -118,3 +119,19 @@ def test_snake_to_camel():
     assert snake_to_camel("snake_case", lowercase=True) == "snakeCase"
     assert snake_to_camel("snake_a_i") == "SnakeAI"
     assert snake_to_camel("snake_ai") == "SnakeAi"
+
+
+def test_verp():
+    assert verp("a b c", {}) == "a b c"
+    assert verp(r"${{ foo }}", {"foo": "bar"}) == "bar"
+    assert verp(r"${{ foo }}", {"foo": 1}) == "1"
+    assert verp(r"${{foo}}", {"foo": True}) == "True"
+    assert verp(r"${{ foo.bar }}", {"foo": {"bar": 22}}) == "22"
+    with pytest.raises(ValueError):
+        verp(r"${{foo}}", {"foo": [1, 2, 3]})
+    with pytest.raises(ValueError):
+        verp(r"${{foo}}", {"foo": r"${{bar}}"})
+    with pytest.raises(KeyError):
+        verp(r"${{ foo-bar }}", {"foo-bar": 12})
+    with pytest.raises(KeyError):
+        verp(r"${{foo}}", {2: "bar"})  # type: ignore
