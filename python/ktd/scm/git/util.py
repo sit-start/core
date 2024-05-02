@@ -1,4 +1,6 @@
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -7,6 +9,7 @@ from git.remote import Remote
 
 from ktd.logging import get_logger
 from ktd.util.identifier import StringIdType
+from ktd.util.run import run
 
 logger = get_logger(__name__)
 
@@ -159,3 +162,12 @@ def is_pristine(repo: str | Repo) -> bool:
         or repo.head.is_detached
         or not is_synced(repo)
     )
+
+
+def list_tracked_dotfiles() -> list[str]:
+    try:
+        out = run(["yadm", "list"], output="capture")
+        return out.stdout.decode(sys.stdout.encoding).splitlines()
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        logger.warning("Dotfile repo not found.")
+        return []

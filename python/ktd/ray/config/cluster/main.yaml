@@ -42,20 +42,11 @@ available_node_types:
             VolumeSize: 256
             VolumeType: gp3
 head_node_type: m6a.xlarge
-file_mounts: {
-    # contents of the dev repo
-    "~/dev": "~/dev",
-    # relevant contents of the dotfiles repo
-    "~/.aws/config": "~/.aws/config",
-    "~/.bash_profile": "~/.bash_profile",
-    "~/.bashrc": "~/.bashrc",
-    "~/.vscode-server/data/Machine/settings.json": "~/.vscode-server/data/Machine/settings.json",
-  }
+file_mounts: { "~/dev": "~/dev" } # $DEV -> $DEV
 cluster_synced_files: []
 file_mounts_sync_continuously: True
-rsync_exclude: []
-rsync_filter:
-  - ".gitignore"
+rsync_exclude: ["**/.venv", "**/.venv/**"]
+rsync_filter: [".gitignore"]
 initialization_commands: []
 setup_commands:
   # one-time setup of system files
