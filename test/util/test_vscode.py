@@ -1,9 +1,9 @@
 from unittest import mock
 
-from ktd.util.vscode import DEFAULT_FOLDER, DEFAULT_TARGET, open_vscode_over_ssh
+from sitstart.util.vscode import DEFAULT_FOLDER, DEFAULT_TARGET, open_vscode_over_ssh
 
 
-@mock.patch("ktd.util.vscode.run")
+@mock.patch("sitstart.util.vscode.run")
 def test_open_vscode_over_ssh(mock_run):
     hostname = "example.com"
     path = "/path/to/workspace"

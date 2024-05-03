@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ktd.util.google_drive import (
+from sitstart.util.google_drive import (
     FOLDER_TYPE,
     PAGE_SIZE,
     _resolve_file_fields,
@@ -124,7 +124,7 @@ def test_get_folder_contents():
     assert query and f"mimeType='{FOLDER_TYPE}'" in query
 
 
-@patch("ktd.util.google_drive.get_folder_contents")
+@patch("sitstart.util.google_drive.get_folder_contents")
 def test_walk(get_folder_contents_mock):
     service_mock = MagicMock()
 
@@ -164,9 +164,9 @@ def test_walk(get_folder_contents_mock):
     assert results == expected_results_bottomup
 
 
-@patch("ktd.util.google_drive.walk")
-@patch("ktd.util.google_drive.get_path")
-@patch("ktd.util.google_drive.get_file")
+@patch("sitstart.util.google_drive.walk")
+@patch("sitstart.util.google_drive.get_path")
+@patch("sitstart.util.google_drive.get_file")
 def test_get_folder_paths(get_file_mock, get_path_mock, walk_mock):
     service_mock = MagicMock()
     folders = [

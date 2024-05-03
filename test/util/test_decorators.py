@@ -4,7 +4,7 @@ from time import sleep
 
 import pytest
 
-from ktd.util.decorators import debug, memoize, timer
+from sitstart.util.decorators import debug, memoize, timer
 
 
 @pytest.mark.slow

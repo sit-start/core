@@ -5,7 +5,7 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
-        exclude: ^python/ktd/aws/cloudformation/templates
+        exclude: ^python/sitstart/aws/cloudformation/templates
         args: ["--unsafe"]
       - id: check-added-large-files
   - repo: https://github.com/pre-commit/mirrors-prettier
@@ -18,7 +18,7 @@ repos:
     rev: v0.86.1
     hooks:
       - id: cfn-python-lint
-        files: python/ktd/aws/cloudformation/templates/.*\.(json|yml|yaml)$
+        files: python/sitstart/aws/cloudformation/templates/.*\.(json|yml|yaml)$
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.3.5
     hooks:
@@ -49,5 +49,5 @@ repos:
         files: ^system/files/.*
         pass_filenames: false
         language: python
-        entry: python/ktd/scripts/push_system_files.py
+        entry: python/sitstart/scripts/push_system_files.py
         additional_dependencies: [boto3, checksumdir]

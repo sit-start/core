@@ -1,6 +1,6 @@
 import pytest
 import logging
-from ktd.logging import get_logger, Format
+from sitstart.logging import get_logger, Format
 
 
 def test_get_logger(capsys):

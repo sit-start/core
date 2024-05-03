@@ -2,7 +2,7 @@
 src = ["python"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["ktd", "sit", "sitstart"]
+known-first-party = ["sit", "sitstart"]
 
 [tool.pyright]
 venvPath = "."

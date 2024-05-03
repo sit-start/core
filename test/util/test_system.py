@@ -4,7 +4,7 @@ from unittest.mock import call, patch
 import pytest
 from callee import Regex
 
-from ktd.util.system import (
+from sitstart.util.system import (
     SYSTEM_ARCHIVE_URL,
     SYSTEM_FILE_ROOT,
     _copy_filtered_files,
@@ -44,8 +44,8 @@ def test__is_specific_system_variant():
     assert not _is_specific_system_variant({"key": "value1"}, system_attributes=attr)
 
 
-@patch("ktd.util.system._run")
-@patch("ktd.util.system._filtered_system_files")
+@patch("sitstart.util.system._run")
+@patch("sitstart.util.system._filtered_system_files")
 def test__copy_filtered_files(mock__filtered_system_files, mock__run):
     mock__filtered_system_files.return_value = [("a/b##os.Linux", "a/b"), ("c", "c")]
     _copy_filtered_files("src", "dest", "cmd")
@@ -67,7 +67,7 @@ def test__system_files(mock_isfile, mock_glob):
     assert list(_system_files("root_dir")) == ["file1", "dir2/file2"]
 
 
-@patch("ktd.util.system._system_files")
+@patch("sitstart.util.system._system_files")
 def test__filtered_system_files(mock__system_files):
     system_attributes = {"arch": "x86_64", "os": "Linux"}
 
@@ -84,13 +84,13 @@ def test__filtered_system_files(mock__system_files):
     assert result == [("a", "a")]
 
 
-@patch("ktd.util.system._run")
-@patch("ktd.util.system._system_files")
-@patch("ktd.util.system.Path.read_text")
-@patch("ktd.util.system.Path.write_text")
-@patch("ktd.util.system.NamedTemporaryFile")
-@patch("ktd.util.system.system_file_archive_url")
-@patch("ktd.util.system.sso_login")
+@patch("sitstart.util.system._run")
+@patch("sitstart.util.system._system_files")
+@patch("sitstart.util.system.Path.read_text")
+@patch("sitstart.util.system.Path.write_text")
+@patch("sitstart.util.system.NamedTemporaryFile")
+@patch("sitstart.util.system.system_file_archive_url")
+@patch("sitstart.util.system.sso_login")
 def test_push_system_files(
     mock_sso_login,
     mock_system_file_archive_url,
@@ -121,7 +121,7 @@ def test_push_system_files(
     mock_write_text.assert_called_once()
 
 
-@patch("ktd.util.system._copy_filtered_files")
+@patch("sitstart.util.system._copy_filtered_files")
 def test_deploy_system_files_from_filesystem(mock__copy_filtered_files):
     deploy_system_files_from_filesystem(src_dir="a", dest_dir="b")
     mock__copy_filtered_files.assert_called_with(
@@ -129,12 +129,12 @@ def test_deploy_system_files_from_filesystem(mock__copy_filtered_files):
     )
 
 
-@patch("ktd.util.system._run")
-@patch("ktd.util.system._copy_filtered_files")
+@patch("sitstart.util.system._run")
+@patch("sitstart.util.system._copy_filtered_files")
 @patch("os.makedirs")
-@patch("ktd.util.system.Path.read_text")
-@patch("ktd.util.system.TemporaryDirectory")
-@patch("ktd.util.system.sso_login")
+@patch("sitstart.util.system.Path.read_text")
+@patch("sitstart.util.system.TemporaryDirectory")
+@patch("sitstart.util.system.sso_login")
 def test_deploy_system_files(
     mock_sso_login,
     mock_temp_dir,
@@ -166,7 +166,7 @@ def test_deploy_system_files(
     )
 
 
-@patch("ktd.util.system._run")
+@patch("sitstart.util.system._run")
 def test_deploy_dotfiles(mock__run):
     host = "some_host"
     repo_url = "git@github.com:user/repo.git"

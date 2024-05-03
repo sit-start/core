@@ -3,13 +3,13 @@ import tempfile
 import pytest
 from ray.cluster_utils import Cluster
 
-from ktd.ml.experiments.image_multiclass_smoketest import (
+from sitstart.ml.experiments.image_multiclass_smoketest import (
     data_module_creator,
     train_with_ray_config,
     tune_with_ray_config,
     training_module_creator,
 )
-from ktd.ml.ray import train_with_ray, tune_with_ray
+from sitstart.ml.ray import train_with_ray, tune_with_ray
 
 
 @pytest.mark.slow

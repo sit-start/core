@@ -4,8 +4,8 @@ import tempfile
 
 import pytest
 
-import ktd.ml.train
-from ktd.ml.experiments.image_multiclass_smoketest import (
+import sitstart.ml.train
+from sitstart.ml.experiments.image_multiclass_smoketest import (
     data_module_creator,
     train_config,
     training_module_creator,
@@ -16,7 +16,7 @@ from ktd.ml.experiments.image_multiclass_smoketest import (
 def test_train(caplog):
     with tempfile.TemporaryDirectory() as storage_path:
         config = train_config(storage_path)
-        ktd.ml.train.train(config, training_module_creator, data_module_creator)
+        sitstart.ml.train.train(config, training_module_creator, data_module_creator)
 
         data_module = data_module_creator(config)
         data_module.setup(stage="fit")
@@ -37,7 +37,7 @@ def test_train(caplog):
 def test_test(caplog) -> None:
     with tempfile.TemporaryDirectory() as storage_path:
         config = train_config(storage_path)
-        ktd.ml.train.test(config, training_module_creator, data_module_creator)
+        sitstart.ml.train.test(config, training_module_creator, data_module_creator)
 
         log_root = f"{config['storage_path']}/lightning_logs/version_0"
         logs = [log for log in caplog.records if "test_loss" in log.message]

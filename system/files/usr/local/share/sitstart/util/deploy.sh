@@ -159,7 +159,7 @@ function deploy_sitstart() {
   echo "Deploying system files."
   PYTHONPATH="$CORE/python:$PYTHONPATH" python3 -c "$(
     join_by '; ' \
-      'from ktd.util.system import deploy_system_files' \
+      'from sitstart.util.system import deploy_system_files' \
       'deploy_system_files("/", as_root=True)'
   )" || return 1
 

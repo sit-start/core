@@ -1,6 +1,6 @@
 import pytest
 
-from ktd.util.identifier import RUN_ID, StringIdType
+from sitstart.util.identifier import RUN_ID, StringIdType
 
 
 def test_is_valid():

@@ -10,10 +10,10 @@ import pytest
 import yaml
 from ray.job_submission import JobStatus, JobSubmissionClient
 
-from ktd.app.sit.sub import ec2, ray
-from ktd.logging import get_logger
-from ktd.util.run import run
-from ktd.util.string import rand_str
+from sitstart.app.sit.sub import ec2, ray
+from sitstart.logging import get_logger
+from sitstart.util.run import run
+from sitstart.util.string import rand_str
 
 RAY_CONFIG_NAME = f"test-{ray.DEFAULT_CONFIG}-" + rand_str(
     8, string.digits + string.ascii_letters
