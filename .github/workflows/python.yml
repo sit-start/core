@@ -39,6 +39,9 @@ jobs:
       - name: Load cached Python virtual environment
         id: cache-venv
         uses: actions/cache@v4
+        env:
+          VENV_CACHE_KEY: ${{ env.VENV_CACHE_KEY }}
+          VENV_CACHE_KEY_PREFIX: ${{ env.VENV_CACHE_KEY_PREFIX }}
         with:
           path: .venv
           key: ${{ env.VENV_CACHE_KEY }}
@@ -53,6 +56,8 @@ jobs:
       - name: Save Python virtual environment
         if: steps.cache-venv.outputs.cache-hit != 'true'
         uses: actions/cache/save@v3
+        env:
+          VENV_CACHE_KEY: ${{ env.VENV_CACHE_KEY }}
         with:
           path: .venv
           key: ${{ env.VENV_CACHE_KEY }}
@@ -60,6 +65,8 @@ jobs:
         uses: pre-commit/action@v3.0.1
       - name: Save pre-commit cache
         uses: actions/cache/save@v3
+        env:
+          pythonLocation: ${{ env.pythonLocation }}
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-3|${{ env.pythonLocation }}|${{ hashFiles('**/.pre-commit-config.yaml') }}
