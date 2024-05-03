@@ -101,7 +101,7 @@ function fetch_deploy_key() {
 
 # Deploy a yadm (dotfile) repo using deploy keys.
 function deploy_yadm_repo() {
-  local repo_url repo
+  local repo_url repo yadm_config
   if [ "$#" -ne 1 ]; then
     echo "Usage: deploy_yadm_repo <repo_url>"
     return 1
@@ -114,7 +114,8 @@ function deploy_yadm_repo() {
     return 1
   fi
   with_deploy_key yadm clone "$repo_url" --no-checkout
-  yadm -C "$repo" config --local core.sshCommand "$GIT_DEPLOY_SSH_COMMAND"
+  yadm_config="$HOME/.local/share/yadm/.git/config"
+  yadm config --file "$yadm_config" core.sshCommand "$GIT_DEPLOY_SSH_COMMAND"
   yadm checkout ~
 }
 
