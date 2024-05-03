@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import TensorDataset
 
-from ktd.ml.util import hash_tensor, split_dataset
+from sitstart.ml.util import hash_tensor, split_dataset
 
 
 def test_hash_tensor():

@@ -1,0 +1,132 @@
+cluster_name: main
+max_workers: 8
+upscaling_speed: 1.0
+idle_timeout_minutes: 10
+provider:
+  type: aws
+  region: us-west-2
+  availability_zone: us-west-2a,us-west-2b,us-west-2c
+auth:
+  ssh_user: ec2-user
+  ssh_private_key: ~/.ssh/rsa.pem
+available_node_types:
+  m6a.xlarge:
+    min_workers: 0
+    max_workers: 8
+    resources: { "CPU": 4 }
+    node_config:
+      InstanceType: m6a.xlarge
+      ImageId: ami-0c38021ff804d9342
+      KeyName: rsa
+      IamInstanceProfile:
+        Arn: arn:aws:iam::960487471244:instance-profile/ray-head
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 256
+            VolumeType: gp3
+  g5.xlarge:
+    min_workers: 0
+    max_workers: 8
+    resources: { "CPU": 4, "GPU": 1 }
+    node_config:
+      InstanceType: g5.xlarge
+      InstanceMarketOptions:
+        MarketType: spot
+      ImageId: ami-0c38021ff804d9342
+      KeyName: rsa
+      IamInstanceProfile:
+        Arn: arn:aws:iam::960487471244:instance-profile/ray-worker
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 256
+            VolumeType: gp3
+head_node_type: m6a.xlarge
+file_mounts: { "~/dev": "~/dev" } # $DEV -> $DEV
+cluster_synced_files: []
+file_mounts_sync_continuously: True
+rsync_exclude: ["**/.venv", "**/.venv/**"]
+rsync_filter: [".gitignore"]
+initialization_commands: []
+setup_commands:
+  # one-time setup of system files
+  - |
+    test -f ~ec2-user/.ray_sitstart_deployed || {
+      . ~ec2-user/dev/core/system/files/etc/profile.d/sitstart.sh##os.Linux
+      . ~ec2-user/dev/core/system/files/etc/profile.d/sh.local##os.Linux
+      deploy_sitstart && touch ~ec2-user/.ray_sitstart_deployed
+    }
+  # file mounts will overwrite ~/dev/core/.git/config, so ensure the default
+  # SSH command setting persists
+  - |
+    with_deploy_key git -C $CORE config --local \
+      core.sshCommand "$GIT_DEPLOY_SSH_COMMAND"
+  # fetch/prune so local tags on nodes don't conflict with new remote tags
+  - git -C $CORE fetch --all --prune --prune-tags
+  # login and configure wandb
+  - test -z "$WANDB_DIR" || { mkdir -p "$WANDB_DIR" && wandb login; }
+head_setup_commands:
+  # create the prometheus service file
+  - |
+    sudo cp "$CORE/python/sitstart/ray/config/aux/prometheus.service" \
+      /etc/systemd/system/prometheus.service
+  # update the fluent-bit config
+  - |
+    sudo mkdir -p /etc/fluent-bit &&
+      sudo cp "$CORE/python/sitstart/ray/config/aux/fluent-bit-head.conf" \
+        /etc/fluent-bit/fluent-bit.conf
+  # update the grafana service file to ensure grafana can acccess Ray
+  # config files in /tmp/ray
+  - |
+    sudo sed -i 's/^PrivateTmp=true/PrivateTmp=false/g' \
+      /usr/lib/systemd/system/grafana-server.service
+  # update the grafana service config
+  - |
+    sudo test -f /etc/grafana/grafana.ini.ray-bak || (
+      sudo cp /etc/grafana/grafana.ini /etc/grafana/grafana.ini.ray-bak &&
+        sudo cp "$CORE/python/sitstart/ray/config/aux/grafana.ini" \
+          /etc/grafana/grafana.ini)
+  # create the tensorboard service
+  - |
+    sudo $CORE/python/sitstart/ray/config/aux/create-tensorboard-service.sh \
+      $USER
+  # install loki TODO: move to AMI
+  - |
+    yum list installed loki >/dev/null 2>&1 ||
+      sudo -- bash -c '. /usr/local/share/sitstart/util/install.sh; \
+        install_components loki'
+worker_setup_commands: []
+head_start_ray_commands:
+  # restart ray
+  - ray stop
+  - |
+    ray start --head --port=6379 --object-manager-port=8076 \
+      --autoscaling-config=~/ray_bootstrap_config.yaml \
+      --dashboard-host=0.0.0.0 --ray-debugger-external
+  # add loki dashboard and datasource to grafana
+  - |
+    cp "$CORE/python/sitstart/ray/config/aux/loki_grafana_datasource.yml" \
+      /tmp/ray/session_latest/metrics/grafana/provisioning/datasources
+    cp "$CORE/python/sitstart/ray/config/aux/loki_grafana_dashboard.json" \
+      /tmp/ray/session_latest/metrics/grafana/dashboards/
+
+  # restart services
+  - sudo systemctl restart grafana-server
+  - sudo systemctl restart prometheus
+  - sudo systemctl restart fluent-bit
+  - sudo systemctl restart loki
+  - sudo systemctl restart tensorboard
+worker_start_ray_commands:
+  # restart ray
+  - ray stop
+  - |
+    ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076 \
+      --ray-debugger-external
+  # update the fluent-bit config with $RAY_HEAD_IP
+  - |
+    sudo mkdir -p /etc/fluent-bit &&
+      cat "$CORE/python/sitstart/ray/config/aux/fluent-bit-worker.conf" |
+        envsubst | sudo tee /etc/fluent-bit/fluent-bit.conf
+  # restart the fluent-bit service
+  - sudo systemctl restart fluent-bit

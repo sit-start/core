@@ -3,17 +3,17 @@ from unittest import mock
 
 from callee.strings import Regex
 
-from ktd.scm.github import create_private_fork, get_ssh_url, get_user, _run
+from sitstart.scm.github import create_private_fork, get_ssh_url, get_user, _run
 
 
-@mock.patch("ktd.scm.github.run")
+@mock.patch("sitstart.scm.github.run")
 def test__run(run_mock):
     cmd = "command"
     _run(cmd)
     run_mock.assert_called_once_with(["command"], output="capture")
 
 
-@mock.patch("ktd.scm.github._run")
+@mock.patch("sitstart.scm.github._run")
 def test_get_user(_run_mock):
     _run_mock.return_value = SimpleNamespace(stdout='{"login": "user"}')
     assert get_user() == "user"
@@ -23,7 +23,7 @@ def test_get_ssh_url():
     assert get_ssh_url("user", "repo") == "git@github.com:user/repo.git"
 
 
-@mock.patch("ktd.scm.github._run")
+@mock.patch("sitstart.scm.github._run")
 def test_create_private_fork(_run_mock):
     repo = "repo"
     account = "org"

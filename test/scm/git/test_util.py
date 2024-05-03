@@ -4,7 +4,7 @@ from time import sleep
 import pytest
 from git import GitCommandError
 
-from ktd.scm.git.util import (
+from sitstart.scm.git.util import (
     create_tag_with_type,
     diff_vs_commit,
     fetch_tags,
@@ -19,7 +19,7 @@ from ktd.scm.git.util import (
     sync_tags,
     update_to_ref,
 )
-from ktd.util.identifier import RUN_ID
+from sitstart.util.identifier import RUN_ID
 
 
 def test_get_repo(repo):

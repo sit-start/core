@@ -1,6 +1,6 @@
 import pytest
 
-from ktd.util import rgetattr, rhasattr, rsetattr
+from sitstart.util import rgetattr, rhasattr, rsetattr
 
 
 @pytest.fixture

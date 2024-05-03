@@ -3,13 +3,13 @@ from unittest.mock import ANY, call, patch
 import pytest
 import torch
 
-from ktd.ml.experiments.image_multiclass_smoketest import (
+from sitstart.ml.experiments.image_multiclass_smoketest import (
     data_module_creator,
     training_module_creator,
 )
 
 
-@patch("ktd.ml.training_module.TrainingModule.log")
+@patch("sitstart.ml.training_module.TrainingModule.log")
 def test_training_module(log_mock):
     config = {
         "optimizer": "adamw",

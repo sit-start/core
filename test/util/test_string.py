@@ -2,7 +2,7 @@ import string
 
 import pytest
 
-from ktd.util.string import (
+from sitstart.util.string import (
     camel_to_snake,
     int_to_str,
     is_from_alphabet,

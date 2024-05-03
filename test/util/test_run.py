@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from ktd.util.run import Output, run
+from sitstart.util.run import Output, run
 
 
 def test_run_with_std_output(capfd):

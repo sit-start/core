@@ -5,8 +5,8 @@ from tempfile import TemporaryDirectory
 
 from git import Repo
 
-from ktd.scm.git.repo_state import RepoState
-from ktd.util.run import run
+from sitstart.scm.git.repo_state import RepoState
+from sitstart.util.run import run
 
 
 def test_repo_state_from_repo(repo):

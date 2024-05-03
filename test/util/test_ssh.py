@@ -5,7 +5,7 @@ from unittest import mock
 
 import pytest
 
-from ktd.util.ssh import (
+from sitstart.util.ssh import (
     _get_control_path,
     close_ssh_connection,
     get_github_ssh_keys,
@@ -89,7 +89,7 @@ def test_update_ssh_config():
         )
 
 
-@mock.patch("ktd.util.ssh.run")
+@mock.patch("sitstart.util.ssh.run")
 def test_open_ssh_tunnel(run_mock):
     control_path = _get_control_path(make_dir=False)
     dest = "dest"
@@ -107,7 +107,7 @@ def test_open_ssh_tunnel(run_mock):
     )
 
 
-@mock.patch("ktd.util.ssh.run")
+@mock.patch("sitstart.util.ssh.run")
 def test_close_ssh_connection(run_mock):
     control_path = _get_control_path(make_dir=False)
     dest = "dest"
@@ -120,7 +120,7 @@ def test_close_ssh_connection(run_mock):
     )
 
 
-@mock.patch("ktd.util.ssh.run")
+@mock.patch("sitstart.util.ssh.run")
 def test_wait_for_connection(run_mock):
     wait_for_connection("dest", max_attempts=10)
     run_mock.assert_called_once_with(
@@ -132,7 +132,7 @@ def test_wait_for_connection(run_mock):
     )
 
 
-@mock.patch("ktd.util.ssh.CloudPath")
+@mock.patch("sitstart.util.ssh.CloudPath")
 def test_get_github_ssh_keys(cloud_path_mock):
     cloud_path_instance = cloud_path_mock.return_value
     cloud_path_instance.read_text.return_value = '{"ssh_keys": ["key1", "key2"]}'
