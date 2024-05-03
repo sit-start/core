@@ -160,10 +160,12 @@ def start(
         logger.info(f"[{instance_name}] Instance in {'/'.join(states)} state not found")
         return
 
-    for instance in instances:
-        ec2_client = session.client("ec2")
-        ec2_client.start_instances(InstanceIds=[instance.id])  # type: ignore
-        wait_for_instance_with_id(instance.id, session=session)  # type: ignore
+    ec2_client = session.client("ec2")
+    instance_ids = [instance.id for instance in instances]  # type: ignore
+    ec2_client.start_instances(InstanceIds=instance_ids)
+
+    for instance_id in instance_ids:
+        wait_for_instance_with_id(instance_id, session=session)
 
     update_ssh_config_for_instances_with_name(session, instance_name)
 
