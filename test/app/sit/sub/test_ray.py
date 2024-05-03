@@ -1,4 +1,3 @@
-import os
 import string
 import subprocess
 import tempfile
@@ -18,7 +17,6 @@ from sitstart.util.string import rand_str
 RAY_CONFIG_NAME = f"test-{ray.DEFAULT_CONFIG}-" + rand_str(
     8, string.digits + string.ascii_letters
 )
-IS_LOCAL_TEST = not os.getenv("GITHUB_ACTIONS", False)
 TEST_SCRIPT = "image_multiclass_smoketest"
 SSH_CONFIG = """CanonicalizeHostname yes
 Host *.compute.amazonaws.com
@@ -46,32 +44,7 @@ def _wait_for_job_status(
 
 
 @pytest.fixture(scope="module")
-def ssh_config():
-    ssh_config_path = Path("~/.ssh/config").expanduser()
-    use_existing_config = IS_LOCAL_TEST and ssh_config_path.exists()
-
-    if use_existing_config:
-        logger.warning(
-            "Skipping SSH config setup for local test and using the existing "
-            f"config '{ssh_config_path}'. Any test failure could be due to a "
-            f"mismatch with the target test config:\n{SSH_CONFIG}"
-        )
-    else:
-        assert not ssh_config_path.exists()
-        logger.info(f"Creating SSH config '{ssh_config_path}'.")
-        ssh_config_path.parent.mkdir(mode=0o700, exist_ok=True)
-        ssh_config_path.write_text(SSH_CONFIG)
-        ssh_config_path.chmod(0o600)
-
-    yield
-
-    if not use_existing_config:
-        logger.info(f"Removing SSH config '{ssh_config_path}'.")
-        ssh_config_path.unlink()
-
-
-@pytest.fixture(scope="module")
-def ray_config():
+def ray_config(is_local_test):
     with tempfile.TemporaryDirectory() as temp_dir:
         original_config_path = ray._resolve_config_path(ray.DEFAULT_CONFIG)
         config = yaml.load(
@@ -81,7 +54,7 @@ def ray_config():
 
         config_path = f"{temp_dir}/{RAY_CONFIG_NAME}.yaml"
 
-        if not IS_LOCAL_TEST:
+        if not is_local_test:
             # `ray submit` requires that this repo is in the config's
             # file mounts, but, since we can't control the absolute path
             # of the repo in GH Actions, or how Ray rsyncs symlinked
@@ -107,10 +80,10 @@ def ray_config():
 
 
 @pytest.fixture(scope="module")
-def ray_cluster(ssh_config, ray_config):
+def ray_cluster(ssh_config, ray_config, is_local_test):
     try:
         logger.info(f"Starting Ray cluster with config {ray_config!r}.")
-        ray.up(config=ray_config, show_output=True, no_port_forwarding=IS_LOCAL_TEST)
+        ray.up(config=ray_config, show_output=True, no_port_forwarding=is_local_test)
     except Exception as e:
         logger.error(f"Failed to start Ray cluster: {e}")
         ec2.kill(f"*{RAY_CONFIG_NAME}*")
