@@ -10,11 +10,11 @@ def ray_cluster():
     cluster = Cluster(
         initialize_head=True,
         connect=True,
-        head_node_args={"resources": {"num_cpus": 1}},
+        head_node_args={"num_cpus": 1},
         shutdown_at_exit=True,
     )
-    cluster.add_node(resources={"num_cpus": 2}, num_cpus=2)
-    cluster.add_node(resources={"num_cpus": 2}, num_cpus=2)
+    cluster.add_node(num_cpus=2)
+    cluster.add_node(num_cpus=2)
 
     yield cluster
 
