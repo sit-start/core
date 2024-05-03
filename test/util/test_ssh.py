@@ -71,7 +71,6 @@ def test_update_ssh_config():
 
         update_ssh_config("host", path=conf_file.name, no_overwrite=True, User="user-1")
         update_ssh_config("host", path=conf_file.name, no_overwrite=True, User="user-2")
-        print(Path(conf_file.name).read_text().strip())
         assert Path(conf_file.name).read_text().strip() == "\n".join(
             [
                 "Host host",
