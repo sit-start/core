@@ -12,7 +12,7 @@ from checksumdir import dirhash
 from sitstart import REPO_ROOT
 from sitstart.aws.util import sso_login
 from sitstart.logging import get_logger
-from sitstart.util import is_valid_url
+from sitstart.util.general import is_valid_url
 from sitstart.util.run import run
 
 SYSTEM_FILE_ROOT = f"{REPO_ROOT}/system/files"

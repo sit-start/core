@@ -3,7 +3,7 @@ import re
 import string
 from typing import Any, Callable
 
-from sitstart.util import flatten_dict
+from sitstart.util.general import flatten_dict
 
 
 def strip_ansi_codes(s: str) -> str:
