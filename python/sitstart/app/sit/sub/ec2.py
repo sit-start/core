@@ -33,7 +33,7 @@ from sitstart.util.vscode import (
 )
 
 CF_TEMPLATE_PATH = f"{PYTHON_ROOT}/sitstart/aws/cloudformation/templates/dev.yaml"
-DEFAULT_INSTANCE_TYPE = "g5.xlarge"
+DEFAULT_INSTANCE_TYPE = "m6a.2xlarge"
 DEFAULT_DOTFILES_REPO = DEFAULT_DOTFILES_REPO_URL.format(user=getpass.getuser())
 
 app = typer.Typer()
