@@ -68,17 +68,14 @@ def wait_for_instance_with_id(
     session: boto3.Session | None = None,
     delay_sec: int = 15,
     max_attempts: int = 20,
+    wait_on: str = "instance_status_ok",
 ) -> None:
     session = session or boto3.Session()
     ec2_client = session.client("ec2")
-    waiter = ec2_client.get_waiter("instance_status_ok")
-    waiter.wait(
-        InstanceIds=[instance_id],
-        WaiterConfig={
-            "Delay": delay_sec,
-            "MaxAttempts": max_attempts,
-        },  # timeout of 15s x 20 = 5 minutes w/ default values
-    )
+    waiter = ec2_client.get_waiter(wait_on)
+    # timeout of 15s x 20 = 5 minutes w/ default values
+    waiter_config = {"Delay": delay_sec, "MaxAttempts": max_attempts}
+    waiter.wait(InstanceIds=[instance_id], WaiterConfig=waiter_config)
 
 
 def wait_for_cloud_init(instance: ServiceResource):

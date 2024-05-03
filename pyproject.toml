@@ -25,4 +25,4 @@ markers = [
   "slow: mark test as slow to run",
   "integration: mark test as integration test",
 ]
-addopts = ["--import-mode=importlib"]
+addopts = ["--import-mode=importlib", "--tb=short"]
