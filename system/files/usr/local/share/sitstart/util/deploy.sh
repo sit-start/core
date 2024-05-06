@@ -63,7 +63,10 @@ function create_deploy_key() {
     --secret-string "$secret" >/dev/null 2>&1 ||
     aws secretsmanager update-secret --secret-id "$key_secrets_name" \
       --secret-string "$secret" >/dev/null 2>&1 ||
-    (echo "Failed to update AWS Secrets Manager" && return 1)
+    {
+      echo "Failed to update AWS Secrets Manager"
+      return 1
+    }
 
   # add the key as a read-only deploy key on GitHub
   # shellcheck disable=SC2207
@@ -96,7 +99,34 @@ function fetch_deploy_key() {
       jq --raw-output .private >"$key_path" &&
       chmod go-rwx "$key_path" &&
       echo "Fetched deploy key $key_path for $repo_url.") ||
-    (echo "Failed to fetch deploy key for $repo_url." && return 1)
+    {
+      echo "Failed to fetch deploy key for $repo_url."
+      return 1
+    }
+}
+
+function install_precommit_hooks() {
+  if [ "$#" -gt 1 ]; then
+    echo "Usage: install_precommit {repo:-.}"
+    return 1
+  fi
+
+  local repo config
+  repo="${1:-.}"
+  config="$repo/.pre-commit-config"
+
+  if ! [ -f "$config".yaml ] && ! [ -f "$config".yml ]; then
+    echo "No pre-commit config found in $repo. Skipping pre-commit hook install."
+    return 0
+  fi
+
+  if ! command -v pre-commit >/dev/null 2>&1; then
+    echo "Installing pre-commit."
+    pip install --quiet --disable-pip-version-check pre-commit || return 1
+  fi
+
+  echo "Installing pre-commit hooks."
+  (cd "$repo" && pre-commit install)
 }
 
 # Deploy a yadm (dotfile) repo using deploy keys.
@@ -133,8 +163,11 @@ function deploy_repo() {
     echo "Repo $repo already exists, skipping clone."
     return 1
   fi
-  with_deploy_key git clone "$repo_url"
+
+  echo "Cloning $repo_url into $repo."
+  with_deploy_key git clone --quiet "$repo_url"
   git -C "$repo" config --local core.sshCommand "$GIT_DEPLOY_SSH_COMMAND"
+  install_precommit_hooks "$repo"
 }
 
 # Deploy the core repo and update system files and settings.
