@@ -39,6 +39,7 @@ fi
 # Python. Activate venv only after all modifications to PATH, as the next
 # activation will drop any changes made since.
 export PYTHONPATH="$CORE/python:$PYTHONPATH"
+deactivate_py_env
 activate_default_py_env
 
 # GFlags

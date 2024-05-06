@@ -22,9 +22,12 @@ export LSCOLORS=ExFxBxDxCxegedabagacad
 alias grep='grep --color=auto'
 alias egrep='egrep --color=auto'
 
-# Set prompt, and reactivate venv to update the prompt.
-PS1='\[\e]0;\u@\h:\W\a\]\u@\h:\W $(_dotfiles_scm_info)\$ '
-reactivate_py_env
+# Set prompt. Disable venv prompt update and include it here
+export VIRTUAL_ENV_DISABLE_PROMPT=1
+# shellcheck disable=SC2016
+venv_prompt='${VIRTUAL_ENV:+($(basename "$VIRTUAL_ENV")) }'
+PS1="$venv_prompt"'\u@\h:\W $(_dotfiles_scm_info)\$ '
+unset venv_prompt
 
 # Setup aliases for nice git/yadm logs.
 GIT_LOG_ARGS=$(join_by ' ' \
