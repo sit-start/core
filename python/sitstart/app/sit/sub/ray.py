@@ -2,6 +2,7 @@ import sys
 from os.path import expanduser, realpath
 from pathlib import Path
 from time import sleep
+from typing import Any
 
 import git
 import ray
@@ -10,7 +11,6 @@ import yaml
 from ray.job_submission import JobSubmissionClient
 from typer import Argument, Option
 from typing_extensions import Annotated, Optional
-from sitstart.scm.git.util import list_tracked_dotfiles
 
 from sitstart import PYTHON_ROOT
 from sitstart.aws.ec2.util import (
@@ -19,6 +19,7 @@ from sitstart.aws.ec2.util import (
 )
 from sitstart.aws.util import get_aws_session
 from sitstart.logging import get_logger
+from sitstart.scm.git.util import DOTFILES_REPO_PATH, list_tracked_dotfiles
 from sitstart.util.run import run
 from sitstart.util.ssh import close_ssh_connection, open_ssh_tunnel
 from sitstart.util.vscode import open_vscode_over_ssh
@@ -234,17 +235,29 @@ def _ray_up(
             config = yaml.load(Path(config_path).read_text(), Loader=yaml.SafeLoader)
             ssh_user = config["auth"]["ssh_user"]
 
-            source_files = [str(Path(f"~/{f}").expanduser()) for f in files]
-            dest_files = [f"~{ssh_user}/{f}" for f in files]
-            dest_dirs = list(set(str(Path(f).parent) for f in dest_files))
-            cluster_args = [config_path, "--cluster-name", cluster_name]
+            # we'll also sync the dotfiles .git directory separately,
+            # since it's not in the repo root directory
+            home = str(Path.home())
+            repo_path = str(Path(DOTFILES_REPO_PATH).expanduser().relative_to(home))
 
-            run(
-                ["ray", "exec", *cluster_args, f"mkdir -p {' '.join(dest_dirs)}"],
-                output="capture",
-            )
-            for src, dest in zip(source_files, dest_files):
-                run(["ray", "rsync-up", *cluster_args, src, dest], output="capture")
+            # get mappings from source to destination
+            src_to_dst = {f"{home}/{f}": f"~{ssh_user}/{f}" for f in files}
+            src_to_dst[f"{home}/{repo_path}/"] = f"~{ssh_user}/{repo_path}"
+            dst_dirs = list(set(str(Path(f).parent) for f in src_to_dst.values()))
+            cluster_args = [config_path, "--cluster-name", cluster_name]
+            kwargs: dict[str, Any] = {"output": "capture"}
+
+            # create directories at the destination and sync files; use `ray exec`
+            # here and below since we may not have updated the SSH config
+            cmd = f"mkdir -p {' '.join(dst_dirs)}"
+            run(["ray", "exec", *cluster_args, cmd], **kwargs)
+            for src, dest in src_to_dst.items():
+                run(["ray", "rsync-up", *cluster_args, src, dest], **kwargs)
+
+            # update the git/yadm config to use the ssh user's home directory
+            conf_path = f"~{ssh_user}/{repo_path}/config"
+            cmd = f"git config --file {conf_path} core.worktree /home/{ssh_user}"
+            run(["ray", "exec", *cluster_args, cmd], **kwargs)
 
 
 @app.command()
