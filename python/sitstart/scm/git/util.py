@@ -11,6 +11,8 @@ from sitstart.logging import get_logger
 from sitstart.util.identifier import StringIdType
 from sitstart.util.run import run
 
+DOTFILES_REPO_PATH = "~/.local/share/yadm/repo.git"
+
 logger = get_logger(__name__)
 
 

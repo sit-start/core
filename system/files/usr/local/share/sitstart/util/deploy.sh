@@ -144,7 +144,7 @@ function deploy_yadm_repo() {
     return 1
   fi
   with_deploy_key yadm clone "$repo_url" --no-checkout
-  yadm_config="$HOME/.local/share/yadm/.git/config"
+  yadm_config="$HOME/.local/share/yadm/repo.git/config"
   yadm config --file "$yadm_config" core.sshCommand "$GIT_DEPLOY_SSH_COMMAND"
   yadm checkout ~
 }
