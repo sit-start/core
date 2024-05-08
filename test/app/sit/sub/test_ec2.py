@@ -49,7 +49,7 @@ def _get_state_for_instance_with_name(
 
 
 @pytest.fixture(scope="module")
-def running_instance(ssh_config):
+def running_instance(ssh_config, aws_session):
     if not (instance := _get_unique_instance_with_name(INSTANCE_NAME, require=False)):
         logger.info(f"Creating instance {INSTANCE_NAME}")
         ec2.create(INSTANCE_NAME, instance_type=INSTANCE_TYPE, no_dotfiles=True)
