@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from sitstart.logging import get_logger
+from sitstart.aws.util import get_aws_session
 
 SSH_CONFIG = """CanonicalizeHostname yes
 Host *.compute.amazonaws.com
@@ -42,3 +43,9 @@ def ssh_config(is_local_test):
     if not use_existing_config:
         logger.info(f"Removing SSH config '{ssh_config_path}'.")
         ssh_config_path.unlink()
+
+
+@pytest.fixture(scope="module")
+def aws_session():
+    # ensure we have an active session for local testing; uses the default profile
+    return get_aws_session(profile=None)

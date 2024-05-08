@@ -80,7 +80,7 @@ def ray_config(is_local_test):
 
 
 @pytest.fixture(scope="module")
-def ray_cluster(ssh_config, ray_config, is_local_test):
+def ray_cluster(ssh_config, ray_config, aws_session, is_local_test):
     try:
         logger.info(f"Starting Ray cluster with config {ray_config!r}.")
         ray.up(config=ray_config, show_output=True, no_port_forwarding=is_local_test)
