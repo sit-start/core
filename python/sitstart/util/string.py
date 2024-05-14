@@ -3,7 +3,7 @@ import re
 import string
 from typing import Any, Callable
 
-from sitstart.util.general import flatten_dict
+from sitstart.util.container import flatten
 
 
 def strip_ansi_codes(s: str) -> str:
@@ -141,7 +141,7 @@ def verp(s: str, vars: dict[str, Any]) -> str:
     subst_target = r"\$\{\{\s*(%s)\s*\}\}"
     any_subst_target = subst_target % identifier
 
-    for key, val in flatten_dict(vars).items():
+    for key, val in flatten(vars, list_types=[]).items():
         if any(not k.isidentifier() for k in key.split(".")):
             raise KeyError(f"Key {key!r} contains invalid Python identifier.")
         if not isinstance(val, (str, bool, int, float)):
