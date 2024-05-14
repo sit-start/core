@@ -17,6 +17,7 @@ logger = get_logger(__name__)
 
 
 def get_repo(path: str) -> Repo:
+    path = str(Path(path).expanduser().resolve())
     return Repo(path, search_parent_directories=True)
 
 

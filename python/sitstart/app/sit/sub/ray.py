@@ -1,5 +1,5 @@
+import re
 import sys
-from os.path import expanduser, realpath
 from pathlib import Path
 from time import sleep
 from typing import Any
@@ -25,8 +25,9 @@ from sitstart.util.ssh import close_ssh_connection, open_ssh_tunnel
 from sitstart.util.vscode import open_vscode_over_ssh
 
 DEFAULT_CONFIG = "main"
-CONFIG_ROOT = f"{PYTHON_ROOT}/sitstart/ray/config/cluster"
+CLUSTER_CONFIG_ROOT = f"{PYTHON_ROOT}/sitstart/ray/config/cluster"
 SCRIPT_ROOT = f"{PYTHON_ROOT}/sitstart/ml/experiments"
+JOB_CONFIG_DIR = "conf"
 DASHBOARD_PORT = 8265
 FORWARDED_PORTS = {
     "Ray Dashboard": DASHBOARD_PORT,
@@ -44,7 +45,8 @@ logger = get_logger(__name__, format="simple")
 ConfigOpt = Annotated[
     str,
     Option(
-        help=f"The Ray cluster config path, or filename or stem in {CONFIG_ROOT!r}."
+        help="The Ray cluster config path, or filename or stem in "
+        f"{CLUSTER_CONFIG_ROOT!r}."
     ),
 ]
 ProfileOpt = Annotated[
@@ -146,6 +148,14 @@ ScriptArg = Annotated[
         show_default=False,
     ),
 ]
+JobConfigOpt = Annotated[
+    Optional[str],
+    Option(
+        help="The job config path, or filename or stem in the "
+        f"{JOB_CONFIG_DIR!r} directory adjacent to the script.",
+        show_default=False,
+    ),
+]
 RestartOpt = Annotated[
     bool,
     Option(
@@ -168,13 +178,17 @@ def _job_submission_client() -> JobSubmissionClient:
     return ray.job_submission.JobSubmissionClient(f"http://127.0.0.1:{DASHBOARD_PORT}")
 
 
-def _resolve_input_path(input: str, root: str, extensions: list[str]) -> str:
-    for path in [
-        f"{root}/{input}",
-        *[f"{root}/{input}.{ext}" for ext in extensions],
-        input,
-    ]:
-        if Path(path).expanduser().exists():
+def _resolve_path(
+    input: str, root: str | None = None, extensions: list[str] = []
+) -> Path:
+    candidates = [input]
+    if root is not None:
+        candidates += [f"{root}/{input}"]
+    if extensions:
+        candidates += [f"{root}/{input}.{ext}" for ext in extensions]
+    for candidate in candidates:
+        path = Path(candidate).expanduser().resolve()
+        if path.exists():
             return path
     raise FileNotFoundError(
         f"File/stem {input!r} not found in {root!r} with extensions "
@@ -182,12 +196,24 @@ def _resolve_input_path(input: str, root: str, extensions: list[str]) -> str:
     )
 
 
-def _resolve_config_path(config: str) -> str:
-    return _resolve_input_path(config, CONFIG_ROOT, ["yaml", "yml"])
+def _resolve_cluster_config_path(config: str) -> Path:
+    return _resolve_path(config, CLUSTER_CONFIG_ROOT, ["yaml", "yml"])
+
+
+def _expand_user(path: str, user: str, user_root: str = "/home") -> Path:
+    return Path(re.sub(r"^~/", f"{user_root}/{user}/", path))
+
+
+def _resolve_file_mounts(config_path: Path) -> dict[Path, Path]:
+    config = yaml.load(config_path.read_text(), Loader=yaml.SafeLoader)
+    user = config["auth"]["ssh_user"]
+    mounts = config["file_mounts"]
+
+    return {_expand_user(dst, user): _resolve_path(src) for dst, src in mounts.items()}
 
 
 def _ray_up(
-    config_path: str,
+    config_path: Path,
     cluster_name: str,
     min_workers: int | None = None,
     max_workers: int | None = None,
@@ -202,7 +228,8 @@ def _ray_up(
     cmd = [
         "ray",
         "up",
-        config_path,
+        str(config_path),
+        "--verbose",
         "--disable-usage-stats",
         "--cluster-name",
         cluster_name,
@@ -232,7 +259,7 @@ def _ray_up(
         files = list_tracked_dotfiles()
         if files:
             logger.info(f"[{cluster_name}] Syncing dotfiles to the cluster head")
-            config = yaml.load(Path(config_path).read_text(), Loader=yaml.SafeLoader)
+            config = yaml.load(config_path.read_text(), Loader=yaml.SafeLoader)
             ssh_user = config["auth"]["ssh_user"]
 
             # we'll also sync the dotfiles .git directory separately,
@@ -244,20 +271,20 @@ def _ray_up(
             src_to_dst = {f"{home}/{f}": f"~{ssh_user}/{f}" for f in files}
             src_to_dst[f"{home}/{repo_path}/"] = f"~{ssh_user}/{repo_path}"
             dst_dirs = list(set(str(Path(f).parent) for f in src_to_dst.values()))
-            cluster_args = [config_path, "--cluster-name", cluster_name]
+            cluster_args = [str(config_path), "--cluster-name", cluster_name]
             kwargs: dict[str, Any] = {"output": "capture"}
 
             # create directories at the destination and sync files; use `ray exec`
             # here and below since we may not have updated the SSH config
             cmd = f"mkdir -p {' '.join(dst_dirs)}"
-            run(["ray", "exec", *cluster_args, cmd], **kwargs)
+            run(["ray", "exec", *cluster_args, "--verbose", cmd], **kwargs)
             for src, dest in src_to_dst.items():
                 run(["ray", "rsync-up", *cluster_args, src, dest], **kwargs)
 
             # update the git/yadm config to use the ssh user's home directory
             conf_path = f"~{ssh_user}/{repo_path}/config"
             cmd = f"git config --file {conf_path} core.worktree /home/{ssh_user}"
-            run(["ray", "exec", *cluster_args, cmd], **kwargs)
+            run(["ray", "exec", *cluster_args, "--verbose", cmd], **kwargs)
 
 
 @app.command()
@@ -275,43 +302,58 @@ def stop_jobs() -> None:
             client.stop_job(job.submission_id)
 
 
-# TODO: control env vars here as well; use ray envs
-# TODO: support additional user-specified repos on local+remote hosts
 @app.command()
 def submit(
     script: ScriptArg,
     config: ConfigOpt = DEFAULT_CONFIG,
     cluster_name: ClusterNameOpt = None,
+    profile: ProfileOpt = None,
+    job_config: JobConfigOpt = None,
     restart: RestartOpt = False,
     no_sync_dotfiles: NoSyncDotfilesOpt = False,
 ) -> str:
     """Run a job on a Ray cluster."""
-    script_path = _resolve_input_path(script, SCRIPT_ROOT, ["py", "sh"])
-    config_path = _resolve_config_path(config)
-
-    def _resolve(path: str) -> str:
-        return realpath(expanduser(path))
-
-    script_path = Path(_resolve(script_path or f"{SCRIPT_ROOT}/{script}"))
+    _ = get_aws_session(profile=profile)
+    # resolve input paths
+    config_path = _resolve_cluster_config_path(config)
+    script_path = _resolve_path(script, SCRIPT_ROOT, ["py", "sh"])
+    job_config_root = str(script_path.parent / JOB_CONFIG_DIR)
+    job_config_path = (
+        _resolve_path(job_config, job_config_root, ["yaml", "yml"])
+        if job_config
+        else None
+    )
 
     # get the script path's containing repo
     try:
         repo = git.Repo(script_path, search_parent_directories=True)
     except git.InvalidGitRepositoryError:
-        logger.error(f"No git repository found for {script_path!r}; exiting")
+        logger.error(f"No git repository found for {str(script_path)!r}; exiting")
+        sys.exit(-1)
+    repo_path = Path(repo.working_dir)
+
+    # make sure the job config is also in the repo
+    if job_config_path and not job_config_path.is_relative_to(repo.working_dir):
+        logger.error(f"Job config {str(job_config_path)!r} not in repository; exiting")
         sys.exit(-1)
 
-    # ensure the repo is in the cluster config's `file_mounts`, which maps
-    # cluster paths to local paths for syncing local -> head -> worker
-    config_data = yaml.load(Path(config_path).read_text(), Loader=yaml.SafeLoader)
-    repo_path = Path(repo.working_dir)
-    mounts = {dst: _resolve(src) for dst, src in config_data["file_mounts"].items()}
+    # ensure the repo is in the cluster config's `file_mounts`, which
+    # map cluster paths to local paths for syncing local -> head ->
+    # worker
+    mounts = _resolve_file_mounts(config_path)
     mount = next((m for m in mounts.items() if repo_path.is_relative_to(m[1])), None)
     if not mount:
         msg = f"Repo {repo.working_dir!r} not in file_mounts and cannot be synced."
         logger.error(msg)
         sys.exit(-1)
-    cluster_script_path = f"{mount[0]}/{str(script_path.relative_to(mount[1]))}"
+
+    # setup remote command, w/ hydra config args if job_config was provided
+    cluster_script_path = Path(mount[0]) / script_path.relative_to(mount[1])
+    cmd = ["python", str(cluster_script_path)]
+    if job_config_path:
+        job_config_path = Path(mount[0]) / job_config_path.relative_to(mount[1])
+        cmd.append(f"--config-path={str(job_config_path.parent)}")
+        cmd.append(f"--config-name={job_config_path.stem}")
 
     # invoke ray-up, syncing file mounts and running setup commands
     # even if the config hasn't changed
@@ -324,9 +366,13 @@ def submit(
         sync_dotfiles=not no_sync_dotfiles,
     )
 
-    # run a basic job that uses the native environment and existing file(s)
+    # submit the job; note that disallowing user-specified parameters,
+    # aside from an optional job config that's part of the repository,
+    # goes a long way to ensuring reproducibility from only the cached
+    # repository state
+    # TODO: control env vars here as well w/ ray envs
     client = JobSubmissionClient("http://127.0.0.1:8265")
-    entrypoint = f"python {cluster_script_path}"
+    entrypoint = " ".join(cmd)
     try:
         logger.info(f"Submitting job with entrypoint {entrypoint!r}")
         sub_id = client.submit_job(entrypoint=entrypoint)
@@ -358,8 +404,9 @@ def up(
     no_port_forwarding: NoPortForwardingOpt = False,
 ) -> None:
     """Create or update a Ray cluster."""
-    config_path = _resolve_config_path(config)
-    cluster_name = cluster_name or Path(config_path).stem
+    session = get_aws_session(profile)
+    config_path = _resolve_cluster_config_path(config)
+    cluster_name = cluster_name or config_path.stem
 
     # invoke ray up
     _ray_up(
@@ -379,7 +426,6 @@ def up(
     # 5s is usually sufficient for the minimal workers to be in the
     # running state after the Ray cluster is up
     sleep(5)
-    session = get_aws_session(profile)
     update_ssh_config_for_instances_with_name(
         session, instance_name=f"ray-{cluster_name}-*"
     )
@@ -411,9 +457,10 @@ def down(
     show_output: ShowOutputOpt = False,
 ) -> None:
     """Tear down a Ray cluster."""
-    config_path = _resolve_config_path(config)
-    cluster_name = cluster_name or Path(config_path).stem
-    cmd = ["ray", "down", config_path, "--cluster-name", cluster_name]
+    session = get_aws_session(profile)
+    config_path = _resolve_cluster_config_path(config)
+    cluster_name = cluster_name or config_path.stem
+    cmd = ["ray", "down", str(config_path), "--cluster-name", cluster_name]
     if workers_only:
         cmd.append("--workers-only")
     if keep_min_workers:
@@ -430,7 +477,6 @@ def down(
     else:
         run(cmd + ["--log-color", "false"], output="file")
 
-    session = get_aws_session(profile)
     instance_names = (
         f"ray-{cluster_name}-worker" if workers_only else f"ray-{cluster_name}-*"
     )
@@ -447,7 +493,7 @@ def down(
 @app.command()
 def monitor(config: ConfigOpt = DEFAULT_CONFIG) -> None:
     """Monitor autoscaling on a Ray cluster."""
-    config_path = _resolve_config_path(config)
+    config_path = str(_resolve_cluster_config_path(config))
     log_path = "/tmp/ray/session_latest/logs/monitor*"
     cmd = [
         "ray",
