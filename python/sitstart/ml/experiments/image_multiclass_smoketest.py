@@ -7,7 +7,7 @@ import ray.tune
 import torch.nn.functional as F
 from torch import nn
 
-from sitstart.ml.data.smoke_test import SmokeTest
+from sitstart.ml.data.fake import Fake2d
 from sitstart.ml.ray import tune_with_ray
 from sitstart.ml.training_module import TrainingModule
 
@@ -35,7 +35,7 @@ def training_module_creator(config: dict[str, Any]) -> pl.LightningModule:
 
 
 def data_module_creator(config: dict[str, Any]) -> pl.LightningDataModule:
-    return SmokeTest(
+    return Fake2d(
         batch_size=config.get("batch_size", 10),
         num_train=20,
         num_test=10,

@@ -12,6 +12,7 @@ from torchvision.transforms import (
 )
 
 from sitstart.logging import get_logger
+from sitstart.ml.data import DEFAULT_DATASET_ROOT
 from sitstart.ml.util import split_dataset
 
 logger = get_logger(__name__)
@@ -23,7 +24,7 @@ class CIFAR10(pl.LightningDataModule):
     def __init__(
         self,
         batch_size=128,
-        data_dir: str | os.PathLike[str] | None = None,
+        data_dir: str | os.PathLike[str] | None = DEFAULT_DATASET_ROOT,
         train_split: float = 0.8,
         augment: bool = True,
         n_workers: int = 8,

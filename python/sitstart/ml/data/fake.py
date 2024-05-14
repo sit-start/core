@@ -4,38 +4,35 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import ToTensor
 
 
-class SmokeTest(pl.LightningDataModule):
+class Fake2d(pl.LightningDataModule):
     def __init__(
         self,
-        batch_size: int = 128,
-        num_train: int = 1280,
-        train_split: float = 0.8,
-        num_test: int = 128,
+        batch_size: int = 10,
+        num_train: int = 30,
+        num_val: int = 10,
+        num_test: int = 10,
         num_classes: int = 10,
         img_shape: tuple[int, int, int] = (3, 32, 32),
     ):
         super().__init__()
         self.batch_size = batch_size
         self.num_train = num_train
-        self.train_split = train_split
+        self.num_val = num_val
         self.num_test = num_test
         self.prepare_data_per_node = False
         self.num_classes = num_classes
         self.img_shape = img_shape
 
     def setup(self, stage: str | None = None):
-        num_train = int(self.num_train * self.train_split)
-        num_val = self.num_train - num_train
-
         self.train = torchvision.datasets.FakeData(
-            num_train,
+            self.num_train,
             self.img_shape,
             num_classes=self.num_classes,
             transform=ToTensor(),
             random_offset=0,
         )
         self.val = torchvision.datasets.FakeData(
-            num_val,
+            self.num_val,
             self.img_shape,
             num_classes=self.num_classes,
             transform=ToTensor(),
