@@ -1,19 +1,8 @@
-#!/usr/bin/env python
-import logging
-import os
-from typing import Any
-
-import ray
 import torch.nn as nn
 import torch.nn.functional as F
-from pytorch_lightning import LightningDataModule, LightningModule
 
-from sitstart.logging import get_logger
-from sitstart.ml.data.cifar10 import CIFAR10
-from sitstart.ml.ray import tune_with_ray
-from sitstart.ml.training_module import TrainingModule
-
-logger = get_logger(format="bare", level=logging.INFO)
+# Adapted from:
+# @source https://github.com/kuangliu/pytorch-cifar/blob/master/models/resnet.py
 
 
 class BasicBlock(nn.Module):
@@ -109,85 +98,3 @@ def ResNet18(num_classes: int, dropout_p: float, with_batchnorm: bool = True):
         dropout_p=dropout_p,
         with_batchnorm=with_batchnorm,
     )
-
-
-def main():
-    config = {
-        "debug": False,
-        # specifying this shouldn't be necessary, but the wandb project
-        # for resnet18_cifar10 seems to be corrupted
-        "project_name": "resnet18_cifar10_1",
-        "torch": {
-            "backend": "nccl",
-        },
-        "tune": {
-            "num_samples": 1,
-            "long_trial_names": True,
-        },
-        "schedule": {
-            "max_num_epochs": 75,
-            "grace_period": 15,
-        },
-        "scale": {
-            "num_workers": 1,
-            "use_gpu": True,
-            "resources_per_worker": {"GPU": 1},
-        },
-        "checkpoint": {
-            "num_to_keep": 2,
-            "checkpoint_score_attribute": "val_loss",
-            "checkpoint_score_order": "min",
-        },
-        "train": {
-            "seed": None,
-            "augment_training_data": True,
-            "weight_decay": 5e-4,
-            "lr": 5e-2,
-            "min_lr": 0.0,
-            "momentum": 0.9,
-            "dampening": 0.0,
-            "optimizer": "sgd",
-            "batch_size": 128,
-            "dropout_p": 0.25,
-            "float32_matmul_precision": "medium",
-            "log_every_n_steps": 100,
-            "sync_batchnorm": False,
-            "with_batchnorm": True,
-        },
-        "wandb": {
-            "enabled": True,
-        },
-    }
-
-    def training_module_creator(config: dict[str, Any]) -> LightningModule:
-        model = ResNet18(
-            num_classes=CIFAR10.NUM_CLASSES,
-            dropout_p=config["dropout_p"],
-            with_batchnorm=config["with_batchnorm"],
-        )
-        if config["sync_batchnorm"]:
-            model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
-        return TrainingModule(config, model=model)
-
-    def data_module_creator(config: dict[str, Any]) -> LightningDataModule:
-        data_dir = os.path.expanduser("~/datasets/cifar10")
-        os.makedirs(data_dir, exist_ok=True)
-
-        return CIFAR10(
-            data_dir=data_dir,
-            batch_size=config["batch_size"],
-            augment=config["augment_training_data"],
-        )
-
-    ray_logging_level = logging.INFO
-    if config["debug"]:
-        os.environ["RAY_BACKEND_LOG_LEVEL"] = "debug"
-        ray_logging_level = logging.DEBUG
-
-    ray.init(logging_level=ray_logging_level)
-
-    tune_with_ray(config, training_module_creator, data_module_creator)
-
-
-if __name__ == "__main__":
-    main()
