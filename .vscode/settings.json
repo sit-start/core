@@ -24,6 +24,9 @@
     "editor.defaultFormatter": "foxundermoon.shell-format",
     "editor.rulers": [80]
   },
+  "[yaml]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
   "C_Cpp.clang_format_fallbackStyle": "Google",
   "editor.tabSize": 2,
   "files.associations": {
