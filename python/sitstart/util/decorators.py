@@ -33,6 +33,9 @@ def memoize(func):
     return wrapper
 
 
+once = memoize
+
+
 def debug(func):
     level = logger.level
 
