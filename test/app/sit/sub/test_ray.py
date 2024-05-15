@@ -1,16 +1,16 @@
 import string
 import subprocess
 import tempfile
-import time
 from pathlib import Path
 
 import git
 import pytest
 import yaml
-from ray.job_submission import JobStatus, JobSubmissionClient
+from ray.job_submission import JobStatus
 
 from sitstart.app.sit.sub import ec2, ray
 from sitstart.logging import get_logger
+from sitstart.ray.cluster import get_job_submission_client, wait_for_job_status
 from sitstart.util.run import run
 from sitstart.util.string import rand_str
 
@@ -27,21 +27,6 @@ Host *.compute.amazonaws.com
 """
 
 logger = get_logger(__name__)
-
-
-def _wait_for_job_status(
-    client: JobSubmissionClient,
-    sub_id: str,
-    target_status: JobStatus,
-    timeout_sec=60,
-) -> JobStatus:
-    start_time_sec = time.time()
-    while (
-        client.get_job_status(sub_id) != target_status
-        and time.time() - start_time_sec < timeout_sec
-    ):
-        time.sleep(1)
-    return client.get_job_status(sub_id)
 
 
 @pytest.fixture(scope="module")
@@ -73,9 +58,7 @@ def ray_config(is_local_test):
                     config["file_mounts"].pop(mount)
             config["file_mounts"]["~/dev/core"] = repo.working_dir
 
-            Path(config_path).write_text(yaml.dump(config))
-        else:
-            Path(config_path).write_text(Path(original_config_path).read_text())
+        Path(config_path).write_text(yaml.dump(config))
 
         yield config_path
 
@@ -111,27 +94,27 @@ def test_up(ray_cluster, run_on_head):
 @pytest.mark.integration
 @pytest.mark.slow
 def test_submit(ray_cluster, ray_config):
-    client = ray._job_submission_client()
+    client = get_job_submission_client()
 
     sub_id = ray.submit(TEST_SCRIPT, config=ray_config, job_config=TEST_JOB_CONFIG)
-    status = _wait_for_job_status(client, sub_id, JobStatus.RUNNING)
+    status = wait_for_job_status(client, sub_id, JobStatus.RUNNING)
     assert status == JobStatus.RUNNING
 
-    status = _wait_for_job_status(client, sub_id, JobStatus.SUCCEEDED, timeout_sec=600)
+    status = wait_for_job_status(client, sub_id, JobStatus.SUCCEEDED, timeout_sec=600)
     assert status == JobStatus.SUCCEEDED
 
 
 @pytest.mark.integration
 @pytest.mark.slow
 def test_stop_jobs(ray_cluster, ray_config):
-    client = ray._job_submission_client()
+    client = get_job_submission_client()
 
     sub_id = ray.submit(TEST_SCRIPT, config=ray_config, job_config=TEST_JOB_CONFIG)
-    status = _wait_for_job_status(client, sub_id, JobStatus.RUNNING)
+    status = wait_for_job_status(client, sub_id, JobStatus.RUNNING)
     assert status == JobStatus.RUNNING
 
     ray.stop_jobs()
-    status = _wait_for_job_status(client, sub_id, JobStatus.STOPPED)
+    status = wait_for_job_status(client, sub_id, JobStatus.STOPPED)
     assert status == JobStatus.STOPPED
 
 
@@ -140,4 +123,4 @@ def test_stop_jobs(ray_cluster, ray_config):
 def test_down(ray_cluster, ray_config, run_on_head):
     ray.down(config=ray_config, show_output=True)
     with pytest.raises(subprocess.CalledProcessError):
-        run_on_head("echo OK")
+        run_on_head("echo")
