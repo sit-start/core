@@ -1,0 +1,30 @@
+defaults:
+  - _defaults_
+  - data/fake2d
+  - model/test2d
+  - _self_
+max_num_epochs: 2
+param_space:
+  scaling_config:
+    num_workers: 2
+    resources_per_worker:
+      CPU: 2
+      GPU: 0
+    trainer_resources:
+      CPU: 0
+  train_loop_config:
+    batch_size: 10
+    dampening: 0.0
+    logging_interval: 1
+    lr: 5e-2
+    min_lr: 0.0
+    momentum: 0.9
+    optimizer: sgd
+    weight_decay: 5e-4
+save_repo_state: false
+seed: 42
+storage_path: /tmp
+torch:
+  distributed_backend: gloo
+wandb:
+  enabled: false

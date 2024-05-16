@@ -1,0 +1,61 @@
+checkpoint:
+  _partial_: true
+  _target_: ray.train.CheckpointConfig
+  checkpoint_score_attribute: ${eval.metric}
+  checkpoint_score_order: ${eval.mode}
+  num_to_keep: 2
+data:
+  img_shape: ${model.img_shape}
+  module:
+    _defer_: true
+    _partial_: true
+    _target_: ???
+  num_classes: ???
+debug: false
+eval:
+  metric: val_loss
+  mode: min
+hydra:
+  run:
+    dir: ${oc.env:HOME}/.local/share/hydra/outputs/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
+max_num_epochs: 1
+model:
+  img_shape: ???
+  model:
+    _defer_: true
+    _partial_: true
+    _target_: ???
+name: ${hydra:job.config_name}
+logging_interval: 100
+param_space:
+  scaling_config:
+    _partial_: true
+    _target_: ray.train.ScalingConfig
+    num_workers: 1
+    resources_per_worker:
+      GPU: 1
+    use_gpu: ${gt:${.resources_per_worker.GPU},0}
+  train_loop_config:
+    batch_size: 1
+    float32_matmul_precision: medium
+    logging_interval: ${logging_interval}
+    max_num_epochs: ${max_num_epochs}
+    optimizer: sgd
+    seed: ${seed}
+    storage_path: ${storage_path}
+    use_gpu: ${..scaling_config.use_gpu}
+save_repo_state: true
+seed: null
+storage_path: s3://ktd-ray/runs
+torch:
+  distributed_backend: nccl
+tune:
+  long_trial_names: true
+  num_samples: 1
+  scheduler:
+    _target_: ray.tune.schedulers.ASHAScheduler
+    grace_period: ${max:1,${floordiv:${.max_t},5}}
+    max_t: ${max_num_epochs}
+    reduction_factor: 2
+wandb:
+  enabled: true

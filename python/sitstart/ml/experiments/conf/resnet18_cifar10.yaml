@@ -1,0 +1,20 @@
+defaults:
+  - _defaults_
+  - data/cifar10
+  - model/resnet18
+  - _self_
+max_num_epochs: 75
+name: resnet18_cifar10_1 # '_1' suffix to avoid corrupted wandb project
+param_space:
+  train_loop_config:
+    dampening: 0.0
+    augment_training_data: true
+    batch_size: 128
+    dropout_p: 0.25
+    lr: 5e-2
+    min_lr: 0.0
+    momentum: 0.9
+    optimizer: sgd
+    sync_batchnorm: false
+    weight_decay: 5e-4
+    with_batchnorm: true

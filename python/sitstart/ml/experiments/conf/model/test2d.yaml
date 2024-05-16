@@ -1,0 +1,4 @@
+img_shape: [3, 8, 8]
+model:
+  _partial_: true
+  _target_: sitstart.ml.models.test.TestConvNet2d
