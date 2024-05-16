@@ -1,0 +1,7 @@
+img_shape: [3, 32, 32]
+model:
+  _partial_: true
+  _target_: sitstart.ml.models.resnet18.ResNet18
+  dropout_p: ${param_space.train_loop_config.dropout_p}
+  num_classes: ${data.num_classes}
+  with_batchnorm: ${param_space.train_loop_config.with_batchnorm}
