@@ -1,3 +1,4 @@
+import copy
 import os
 from pathlib import Path
 from typing import Any, Callable
@@ -9,7 +10,6 @@ from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.strategies import Strategy
 
 from sitstart.logging import get_logger
-
 from sitstart.ml.callbacks import LoggerCallback
 
 TrainingModuleCreator = Callable[[dict[str, Any]], pl.LightningModule]
@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 
 
 def train(
-    config,
+    config: dict[str, Any],
     training_module_creator: TrainingModuleCreator,
     data_module_creator: DataModuleCreator,
     wandb_enabled: bool = False,
@@ -45,7 +45,7 @@ def train(
     torch.set_float32_matmul_precision(config["float32_matmul_precision"])
 
     if with_ray and (train_context := ray.train.get_context()):
-        config = config.copy()
+        config = copy.deepcopy(config)
         batch_size = config["batch_size"]
         config["batch_size"] //= train_context.get_world_size()
         logger.info(
@@ -65,7 +65,7 @@ def train(
         plugins = [RayLightningEnvironment()]
         callbacks.append(RayTrainReportCallback())
     else:
-        callbacks.append(LoggerCallback(logger, interval=config["log_every_n_steps"]))
+        callbacks.append(LoggerCallback(logger, interval=config["logging_interval"]))
         if wandb_enabled:
             pl_logger = WandbLogger(project=config["project"])
             pl_logger.watch(training_module, log="all")
@@ -80,7 +80,7 @@ def train(
         logger=pl_logger,
         enable_progress_bar=False,
         max_epochs=config["max_num_epochs"],
-        log_every_n_steps=config["log_every_n_steps"],
+        log_every_n_steps=config["logging_interval"],
         enable_checkpointing=not with_ray,
         default_root_dir=config.get("storage_path", None) if not with_ray else None,
     )

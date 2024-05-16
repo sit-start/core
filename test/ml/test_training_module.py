@@ -1,34 +1,27 @@
+from typing import Any
 from unittest.mock import ANY, call, patch
 
 import pytest
 import torch
 
-from sitstart.ml.experiments.image_multiclass_smoketest import (
-    data_module_creator,
-    training_module_creator,
-)
+from sitstart.ml.train import DataModuleCreator, TrainingModuleCreator
 
 
 @patch("sitstart.ml.training_module.TrainingModule.log")
-def test_training_module(log_mock):
-    config = {
-        "optimizer": "adamw",
-        "lr": 0.001,
-        "weight_decay": 0.01,
-        "momentum": 0.9,
-        "dampening": 0,
-        "max_num_epochs": 100,
-        "min_lr": 0.0001,
-    }
-
-    data_module = data_module_creator(config)
+def test_training_module(
+    log_mock,
+    train_loop_config: dict[str, Any],
+    training_module_creator: TrainingModuleCreator,
+    data_module_creator: DataModuleCreator,
+) -> None:
+    data_module = data_module_creator(train_loop_config)
     data_module.setup(stage="fit")
     batch = next(iter(data_module.train_dataloader()))
 
-    module = training_module_creator(config)
+    module = training_module_creator(train_loop_config)
     optimizer_config = module.configure_optimizers()
     assert isinstance(optimizer_config, dict)
-    assert isinstance(optimizer_config["optimizer"], torch.optim.AdamW)
+    assert isinstance(optimizer_config["optimizer"], torch.optim.SGD)
     assert "lr_scheduler" in optimizer_config
 
     scheduler_config = optimizer_config["lr_scheduler"]
@@ -53,13 +46,13 @@ def test_training_module(log_mock):
         [call("val_loss", ANY, sync_dist=True), call("val_acc", ANY, sync_dist=True)]
     )
 
-    config["optimizer"] = "sgd"
-    module = training_module_creator(config)
+    train_loop_config["optimizer"] = "adamw"
+    module = training_module_creator(train_loop_config)
     optimizer_config = module.configure_optimizers()
     assert isinstance(optimizer_config, dict)
-    assert isinstance(optimizer_config["optimizer"], torch.optim.SGD)
+    assert isinstance(optimizer_config["optimizer"], torch.optim.AdamW)
 
-    config["optimizer"] = "unknown"
-    module = training_module_creator(config)
+    train_loop_config["optimizer"] = "unknown"
+    module = training_module_creator(train_loop_config)
     with pytest.raises(RuntimeError):
         module.configure_optimizers()
