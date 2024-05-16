@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
+import sys
 
 try:
     from sitstart.app.sit.sit import app
 except ImportError:
     print(
-        "Error: sit app not found. "
-        "Clone git@github.com:sit-start/core.git and "
-        "ensure core is in your PYTHONPATH."
+        "Error: sit app not found. Clone git@github.com:sit-start/core.git "
+        "and ensure core/python is in PYTHONPATH."
     )
+    sys.exit(1)
 
 if __name__ == "__main__":
     app()
