@@ -17,7 +17,8 @@ from sitstart.util.string import rand_str
 RAY_CONFIG_NAME = f"test-{ray.DEFAULT_CONFIG}-" + rand_str(
     8, string.digits + string.ascii_letters
 )
-TEST_SCRIPT = "image_multiclass_smoketest"
+TEST_SCRIPT = "tune"
+TEST_JOB_CONFIG = "test2d"
 SSH_CONFIG = """CanonicalizeHostname yes
 Host *.compute.amazonaws.com
     User ec2-user
@@ -46,7 +47,7 @@ def _wait_for_job_status(
 @pytest.fixture(scope="module")
 def ray_config(is_local_test):
     with tempfile.TemporaryDirectory() as temp_dir:
-        original_config_path = ray._resolve_config_path(ray.DEFAULT_CONFIG)
+        original_config_path = ray._resolve_cluster_config_path(ray.DEFAULT_CONFIG)
         config = yaml.load(
             Path(original_config_path).read_text(), Loader=yaml.SafeLoader
         )
@@ -112,7 +113,7 @@ def test_up(ray_cluster, run_on_head):
 def test_submit(ray_cluster, ray_config):
     client = ray._job_submission_client()
 
-    sub_id = ray.submit(TEST_SCRIPT, config=ray_config)
+    sub_id = ray.submit(TEST_SCRIPT, config=ray_config, job_config=TEST_JOB_CONFIG)
     status = _wait_for_job_status(client, sub_id, JobStatus.RUNNING)
     assert status == JobStatus.RUNNING
 
@@ -125,7 +126,7 @@ def test_submit(ray_cluster, ray_config):
 def test_stop_jobs(ray_cluster, ray_config):
     client = ray._job_submission_client()
 
-    sub_id = ray.submit(TEST_SCRIPT, config=ray_config)
+    sub_id = ray.submit(TEST_SCRIPT, config=ray_config, job_config=TEST_JOB_CONFIG)
     status = _wait_for_job_status(client, sub_id, JobStatus.RUNNING)
     assert status == JobStatus.RUNNING
 
