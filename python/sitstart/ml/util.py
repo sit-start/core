@@ -8,7 +8,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, ListConfig
 from torch import nn, randperm
 from torch.nn.parameter import Parameter
-from torch.utils.data import Dataset, Subset
+from torch.utils.data import Dataset, Sampler, Subset, WeightedRandomSampler
 from torchvision.datasets import VisionDataset
 from torchvision.datasets.vision import StandardTransform
 from torchvision.models import get_weight
@@ -374,3 +374,18 @@ def split_dataset(
     val = Subset(dataset, val_indices)
 
     return train, val
+
+
+def rebalancing_sampler(
+    element_class: list[Any] | torch.Tensor, generator: torch.Generator | None = None
+) -> Sampler:
+    """Returns a WeightedRandomSampler that rebalances the given classes."""
+    el_cls = element_class
+    el_cls = el_cls.flatten().tolist() if isinstance(el_cls, torch.Tensor) else el_cls
+
+    classes = list(dict.fromkeys(el_cls))
+    class_counts = [el_cls.count(c) for c in classes]
+    class_inv_freq = [len(el_cls) / count for count in class_counts]
+    el_inv_freq = [class_inv_freq[classes.index(c)] for c in el_cls]
+
+    return WeightedRandomSampler(el_inv_freq, len(el_cls), generator=generator)
