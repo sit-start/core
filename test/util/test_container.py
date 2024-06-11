@@ -81,6 +81,7 @@ def test_get():
         (([0, 1, {"a": 2}], "2.a"), 2),
         (({}, "a.1.b", 0), 0),
         (([0, 1, {"a": 2}], "2.a"), 2),
+        (({"a": 1}, "a.b", None), None),
     ]
 
     for type_args in TYPE_ARGS:
@@ -91,6 +92,3 @@ def test_get():
             result = get(input, *args, **type_args)
 
             assert type_args and input is not None and result == expected_result
-
-    with pytest.raises(KeyError):
-        assert get({"a": 1}, "a.b")
