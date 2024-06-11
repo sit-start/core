@@ -6,6 +6,7 @@ import imageio
 import imageio_ffmpeg  # noqa: F401
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 import tqdm
 from IPython.display import display
 from ipywidgets import Video
@@ -32,18 +33,31 @@ def imresize(arr: np.ndarray, size: tuple[int, int], **kwargs) -> np.ndarray:
 
 
 # @source: https://github.com/znah/notebooks/blob/master/external_colab_snippets.ipynb
-def imtile(arr: np.ndarray, cols: int | None = None):
-    N, H, W, _ = arr.shape
-    arr = np.asarray(arr)
+def imtile(images: np.ndarray | torch.Tensor, cols: int | None = None):
+    # TODO: implement in torch so it stays on the device
+    is_torch = isinstance(images, torch.Tensor)
+    device = None
+    if is_torch:
+        device = images.device
+        images = images.permute(0, 2, 3, 1).cpu().numpy()
+
+    N, H, W, _ = images.shape
+    images = np.asarray(images)
     if cols is None:
         cols = int(np.ceil(np.sqrt(N)))
-    H, W = arr.shape[1:3]
+    H, W = images.shape[1:3]
     pad = (cols - N) % cols
-    arr = np.pad(arr, np.array([(0, pad)] + [(0, 0)] * (arr.ndim - 1)), "constant")
-    rows = len(arr) // cols
-    arr = arr.reshape(rows, cols, *arr.shape[1:])
-    arr = np.moveaxis(arr, 2, 1).reshape(H * rows, W * cols, *arr.shape[4:])
-    return arr
+    images = np.pad(
+        images, np.array([(0, pad)] + [(0, 0)] * (images.ndim - 1)), "constant"
+    )
+    rows = len(images) // cols
+    images = images.reshape(rows, cols, *images.shape[1:])
+    images = np.moveaxis(images, 2, 1).reshape(H * rows, W * cols, *images.shape[4:])
+
+    if is_torch:
+        images = torch.from_numpy(images).permute(2, 0, 1).to(device=device)
+
+    return images
 
 
 def implay(arr: np.ndarray, fps: float = 30.0, scale: float = 1.0) -> None:
