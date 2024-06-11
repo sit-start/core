@@ -69,7 +69,7 @@ def submit_job(
     cluster_name: str,
     job_config_path: Path | None = None,
     restart: bool = False,
-    do_sync_dotfiles: bool = True,
+    do_sync_dotfiles: bool = False,
 ) -> str:
     # get the script path's containing repo
     try:
@@ -172,7 +172,7 @@ def cluster_up(
     verbose: bool = False,
     show_output: bool = False,
     no_config_cache: bool = False,
-    do_sync_dotfiles: bool = True,
+    do_sync_dotfiles: bool = False,
 ) -> None:
     cmd = [
         "ray",
