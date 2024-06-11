@@ -3,9 +3,8 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Callable, cast
 
-import pytorch_lightning as pl
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from ray.air.integrations.wandb import WandbLoggerCallback
@@ -16,7 +15,7 @@ from ray.tune.experiment.trial import Trial
 
 from sitstart.logging import get_logger
 from sitstart.ml.experiments.util import get_search_alg, resolve
-from sitstart.ml.train import DataModuleCreator, TrainingModuleCreator, train
+from sitstart.ml.train import train
 from sitstart.scm.git.repo_state import RepoState, get_repo
 from sitstart.util.hydra import register_omegaconf_resolvers
 from sitstart.util.string import to_str
@@ -101,19 +100,14 @@ def _get_callbacks(config: DictConfig) -> list:
     return callbacks
 
 
-def _get_module_creators(
-    config: DictConfig,
-) -> tuple[TrainingModuleCreator, DataModuleCreator]:
-    def get_trial_config(train_loop_config: dict[str, Any]) -> DictConfig:
-        # update the config with the trial's train_loop_config and instantiate
+def _get_train_loop_per_worker(config: DictConfig) -> Callable[[dict[str, Any]], None]:
+    def train_loop_per_worker(train_loop_config: dict[str, Any]) -> None:
         register_omegaconf_resolvers()
         config_for_trial = copy.deepcopy(config)
         config_for_trial.param_space.train_loop_config = train_loop_config
-        return instantiate(config_for_trial.trial)
+        trial_config = instantiate(config_for_trial.trial)
 
-    def training_module_creator(train_loop_conf: dict[str, Any]) -> pl.LightningModule:
-        trial_config = get_trial_config(train_loop_conf)
-        return trial_config.training_module(
+        training_module = trial_config.training_module(
             loss_fn=trial_config.loss_fn,
             lr_scheduler=trial_config.lr_scheduler,
             metrics=trial_config.metrics,
@@ -121,8 +115,6 @@ def _get_module_creators(
             optimizer=trial_config.optimizer,
         )
 
-    def data_module_creator(train_loop_conf: dict[str, Any]) -> pl.LightningDataModule:
-        trial_config = get_trial_config(train_loop_conf)
         batch_size = trial_config.data.batch_size
         worker_batch_size = batch_size
         if train_context := get_context():
@@ -130,9 +122,23 @@ def _get_module_creators(
             logger.info(
                 f"Batch size: {batch_size} (global), {worker_batch_size} (worker)"
             )
-        return trial_config.data.module(batch_size=worker_batch_size)
+        data_module = trial_config.data.module(batch_size=worker_batch_size)
 
-    return training_module_creator, data_module_creator
+        train(
+            data_module=data_module,
+            training_module=training_module,
+            float32_matmul_precision=config.float32_matmul_precision,
+            logging_interval=config.logging_interval,
+            max_num_epochs=config.max_num_epochs,
+            project_name=_get_project_name(config),
+            seed=config.seed,
+            storage_path=config.storage_path,
+            use_gpu=config.param_space.scaling_config.use_gpu,
+            wandb_enabled=config.wandb.enabled,
+            with_ray=True,
+        )
+
+    return train_loop_per_worker
 
 
 def _get_ray_trainer(
@@ -149,14 +155,6 @@ def _get_ray_trainer(
         failure_config=FailureConfig(max_failures=3),
     )
 
-    def train_loop_per_worker(train_loop_config: dict[str, Any]) -> None:
-        train(
-            train_loop_config,
-            *_get_module_creators(config),
-            wandb_enabled=config.wandb.enabled,
-            with_ray=True,
-        )
-
     param_space = {} if tuning else instantiate(config.param_space)
     metadata = dict(
         config=OmegaConf.to_container(config, resolve=False),
@@ -164,7 +162,7 @@ def _get_ray_trainer(
     )
 
     return TorchTrainer(
-        train_loop_per_worker=train_loop_per_worker,
+        train_loop_per_worker=_get_train_loop_per_worker(config),
         run_config=run_config,
         **cast(dict[str, Any], param_space),
         metadata=metadata,
@@ -174,6 +172,7 @@ def _get_ray_trainer(
 
 def train_with_ray(config: DictConfig) -> None:
     repo_state = _get_repo_state_and_add_to_config(config)
+    logger.info(f"Training with config:\n{OmegaConf.to_yaml(config)}")
     resolve(config)
 
     trainer = _get_ray_trainer(config, repo_state=repo_state)

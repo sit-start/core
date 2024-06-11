@@ -1,34 +1,43 @@
 import glob
 import os
-from typing import Any
 
 import pytest
+import pytorch_lightning as pl
+from omegaconf import DictConfig, OmegaConf
 
 from sitstart.ml import train
-from sitstart.ml.train import DataModuleCreator, TrainingModuleCreator
+from sitstart.util.hydra import register_omegaconf_resolvers
+
+register_omegaconf_resolvers()
 
 
 @pytest.mark.slow
 def test_train(
     caplog,
-    train_loop_config: dict[str, Any],
-    training_module_creator: TrainingModuleCreator,
-    data_module_creator: DataModuleCreator,
+    config: DictConfig,
+    data_module: pl.LightningDataModule,
+    training_module: pl.LightningModule,
 ) -> None:
-    config = train_loop_config
-    train.train(config, training_module_creator, data_module_creator)
-    data_module = data_module_creator(config)
-    data_module.setup(stage="fit")
-    train_data = getattr(data_module, "train", None)
+    OmegaConf.resolve(config)
+    train.train(
+        data_module,
+        training_module,
+        ckpt_path=config.restore.checkpoint_path,
+        float32_matmul_precision=config.float32_matmul_precision,
+        logging_interval=config.logging_interval,
+        max_num_epochs=config.max_num_epochs,
+        project_name=config.name,
+        seed=config.seed,
+        storage_path=config.storage_path,
+        use_gpu=config.param_space.scaling_config.use_gpu,
+        wandb_enabled=config.wandb.enabled,
+        with_ray=False,
+    )
 
-    assert train_data
-
-    num_batches = (len(train_data) - 1) // config["batch_size"] + 1
-    log_root = f"{config['storage_path']}/lightning_logs/version_0"
+    log_root = f"{config.storage_path}/lightning_logs/version_0"
     logs = [log for log in caplog.records if "train_loss" in log.message]
 
-    assert len(logs) == num_batches * config["max_num_epochs"]
-    assert any(all(k in msg for k in config.keys()) for msg in caplog.messages)
+    assert len(logs) == config.max_num_epochs
     assert os.path.exists(f"{log_root}/hparams.yaml")
     assert glob.glob(f"{log_root}/events.out.tfevents.*")
     assert glob.glob(f"{log_root}/checkpoints/*.ckpt")
@@ -37,14 +46,19 @@ def test_train(
 @pytest.mark.slow
 def test_test(
     caplog,
-    train_loop_config: dict[str, Any],
-    training_module_creator: TrainingModuleCreator,
-    data_module_creator: DataModuleCreator,
+    config: DictConfig,
+    data_module: pl.LightningDataModule,
+    training_module: pl.LightningModule,
 ) -> None:
-    config = train_loop_config
-    train.test(config, training_module_creator, data_module_creator)
+    OmegaConf.resolve(config)
+    train.test(
+        data_module,
+        training_module,
+        storage_path=config.storage_path,
+        use_gpu=config.param_space.scaling_config.use_gpu,
+    )
 
-    log_root = f"{config['storage_path']}/lightning_logs/version_0"
+    log_root = f"{config.storage_path}/lightning_logs/version_0"
     logs = [log for log in caplog.records if "test_loss" in log.message]
 
     assert len(logs) == 1
