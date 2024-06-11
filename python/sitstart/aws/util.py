@@ -51,3 +51,28 @@ def sso_login(profile_name=None) -> None:
 def get_aws_session(profile: str | None = None) -> boto3.Session:
     sso_login(profile_name=profile)
     return boto3.Session(profile_name=profile)
+
+
+def update_env(
+    session: boto3.Session | None = None, profile: str | None = None
+) -> None:
+    """Update AWS environment variables.
+
+    Useful for components like pyarrow that rely on environment
+    variables for AWS credentials.
+    """
+    if session and profile:
+        raise ValueError("Only one of session or profile should be provided.")
+
+    if not session or profile is not None:
+        session = get_aws_session(profile=profile)
+    credentials = session.get_credentials()
+
+    if credentials.access_key:
+        os.environ["AWS_ACCESS_KEY_ID"] = credentials.access_key
+    if credentials.secret_key:
+        os.environ["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
+    if credentials.token:
+        os.environ["AWS_SESSION_TOKEN"] = credentials.token
+    if session.region_name:
+        os.environ["AWS_DEFAULT_REGION"] = session.region_name

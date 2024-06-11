@@ -8,11 +8,12 @@ from typing import Any, Callable, cast
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from ray.air.integrations.wandb import WandbLoggerCallback
-from ray.train import FailureConfig, RunConfig, get_context
+from ray.train import FailureConfig, Result, RunConfig, get_context
 from ray.train.torch import TorchConfig, TorchTrainer
 from ray.tune import TuneConfig, Tuner
 from ray.tune.experiment.trial import Trial
 
+from sitstart.aws.util import update_env
 from sitstart.logging import get_logger
 from sitstart.ml.experiments.util import get_search_alg, resolve
 from sitstart.ml.train import train
@@ -100,6 +101,38 @@ def _get_callbacks(config: DictConfig) -> list:
     return callbacks
 
 
+def _get_ckpt_path(cfg: DictConfig) -> str | None:
+    if cfg.restore.checkpoint_path:
+        return cfg.restore.checkpoint_path
+    if not cfg.restore.run.group or not cfg.restore.run.trial_id:
+        return None
+
+    select = cfg.restore.run.get("select", "last")
+    if select not in ("best", "last"):
+        raise ValueError(
+            f"Invalid restore.run.select value; should be 'best' or 'last' ({select})."
+        )
+
+    if cfg.storage_path.startswith("s3://"):
+        update_env()
+
+    project_path = f"{cfg.storage_path}/{_get_project_name(cfg)}"
+    run_path = f"{project_path}_{cfg.restore.run.group}/{cfg.restore.run.trial_id}"
+    result = Result.from_path(run_path)
+
+    last_ckpt = result.checkpoint
+    best_ckpt = result.get_best_checkpoint(cfg.eval.select.metric, cfg.eval.select.mode)
+    ckpt = last_ckpt if select == "last" else best_ckpt
+
+    fs_prefix = {"s3": "s3://", "gcs": "gs://"}
+    if ckpt:
+        fs = ckpt.filesystem
+        prefix = fs_prefix.get(fs.type_name, "") if fs else ""
+        return prefix + ckpt.path
+
+    return None
+
+
 def _get_train_loop_per_worker(config: DictConfig) -> Callable[[dict[str, Any]], None]:
     def train_loop_per_worker(train_loop_config: dict[str, Any]) -> None:
         register_omegaconf_resolvers()
@@ -127,6 +160,7 @@ def _get_train_loop_per_worker(config: DictConfig) -> Callable[[dict[str, Any]],
         train(
             data_module=data_module,
             training_module=training_module,
+            ckpt_path=_get_ckpt_path(config),
             float32_matmul_precision=config.float32_matmul_precision,
             logging_interval=config.logging_interval,
             max_num_epochs=config.max_num_epochs,
