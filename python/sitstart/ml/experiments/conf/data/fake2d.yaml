@@ -1,7 +1,0 @@
-module:
-  _partial_: true
-  _target_: sitstart.ml.data.fake.Fake2d
-  batch_size: ${param_space.train_loop_config.batch_size}
-  img_shape: ${model.img_shape}
-  num_classes: ${..num_classes}
-num_classes: 4

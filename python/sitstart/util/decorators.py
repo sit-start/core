@@ -33,7 +33,19 @@ def memoize(func):
     return wrapper
 
 
-once = memoize
+def once(func):
+    ran = False
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        nonlocal ran
+        if ran:
+            logger.warning(f"Function {func.__name__!r} already ran once. Skipping.")
+            return None
+        ran = True
+        return func(*args, **kwargs)
+
+    return wrapper
 
 
 def debug(func):
