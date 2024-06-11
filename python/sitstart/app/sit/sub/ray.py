@@ -161,11 +161,11 @@ RestartOpt = Annotated[
         show_default=False,
     ),
 ]
-NoSyncDotfilesOpt = Annotated[
+SyncDotfilesOpt = Annotated[
     bool,
     Option(
-        "--no-sync-dotfiles",
-        help="Disable syncing dotfiles to the head node.",
+        "--sync-dotfiles",
+        help="Sync dotfiles to the head node.",
         show_default=False,
     ),
 ]
@@ -207,7 +207,7 @@ def submit(
     profile: ProfileOpt = None,
     job_config: JobConfigOpt = None,
     restart: RestartOpt = False,
-    no_sync_dotfiles: NoSyncDotfilesOpt = False,
+    sync_dotfiles: SyncDotfilesOpt = False,
 ) -> str:
     """Run a job on a Ray cluster."""
     _ = get_aws_session(profile=profile)
@@ -228,7 +228,7 @@ def submit(
             cluster_name=cluster_name,
             job_config_path=job_config_path,
             restart=restart,
-            do_sync_dotfiles=not no_sync_dotfiles,
+            do_sync_dotfiles=sync_dotfiles,
         )
     except RuntimeError as e:
         logger.error(f"Failed to submit job: {e}")
@@ -249,7 +249,7 @@ def up(
     open_vscode: OpenVscodeOpt = False,
     show_output: ShowOutputOpt = False,
     no_config_cache: NoConfigCacheOpt = False,
-    no_sync_dotfiles: NoSyncDotfilesOpt = False,
+    sync_dotfiles: SyncDotfilesOpt = False,
     no_port_forwarding: NoPortForwardingOpt = False,
 ) -> None:
     """Create or update a Ray cluster."""
@@ -268,7 +268,7 @@ def up(
         verbose=verbose,
         show_output=show_output,
         no_config_cache=no_config_cache,
-        do_sync_dotfiles=not no_sync_dotfiles,
+        do_sync_dotfiles=sync_dotfiles,
     )
 
     # 5s is usually sufficient for the minimal workers to be in the

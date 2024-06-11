@@ -43,7 +43,13 @@ available_node_types:
             VolumeSize: 256
             VolumeType: gp3
 head_node_type: m6a.xlarge
-file_mounts: { "~/dev": "~/dev" } # $DEV -> $DEV
+file_mounts:
+  # $DEV -> $DEV
+  ~/dev: ~/dev
+  # minimal set of dotfiles
+  ~/.bashrc: ~/.bashrc
+  ~/.bash_profile: ~/.bash_profile
+  ~/.gitconfig: ~/.gitconfig
 cluster_synced_files: []
 file_mounts_sync_continuously: True
 rsync_exclude: ["**/.venv", "**/.venv/**"]
@@ -65,7 +71,7 @@ setup_commands:
   # fetch/prune so local tags on nodes don't conflict with new remote tags
   - git -C $CORE fetch --all --prune --prune-tags
   # login and configure wandb
-  - test -z "$WANDB_DIR" || { mkdir -p "$WANDB_DIR" && wandb login; }
+  - test -z "$WANDB_DIR" || { mkdir -p "$WANDB_DIR"; wandb login; }
 head_setup_commands:
   # create the prometheus service file
   - |
