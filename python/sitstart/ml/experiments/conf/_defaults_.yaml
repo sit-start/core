@@ -4,6 +4,7 @@ checkpoint:
   checkpoint_score_order: ${eval.select.mode}
   num_to_keep: 2
 debug: false
+float32_matmul_precision: high
 eval:
   train:
     metrics:
@@ -26,13 +27,7 @@ param_space:
     resources_per_worker:
       GPU: 1
     use_gpu: ${gt:${.resources_per_worker.GPU},0}
-  train_loop_config:
-    float32_matmul_precision: medium
-    logging_interval: ${logging_interval}
-    max_num_epochs: ${max_num_epochs}
-    seed: ${seed}
-    storage_path: ${storage_path}
-    use_gpu: ${..scaling_config.use_gpu}
+  train_loop_config: {}
 restore:
   checkpoint_path: null
   run:

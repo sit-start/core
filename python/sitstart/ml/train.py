@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import pytorch_lightning as pl
 import torch
@@ -12,27 +12,47 @@ from sitstart.ml import DEFAULT_CHECKPOINT_ROOT
 from sitstart.logging import get_logger
 from sitstart.ml.callbacks import LoggerCallback
 
-TrainingModuleCreator = Callable[[dict[str, Any]], pl.LightningModule]
-DataModuleCreator = Callable[[dict[str, Any]], pl.LightningDataModule]
 
 logger = get_logger(__name__)
 
 
 def train(
-    config: dict[str, Any],
-    training_module_creator: TrainingModuleCreator,
-    data_module_creator: DataModuleCreator,
-    wandb_enabled: bool = False,
-    # local ckpt file, or local or remote ckpt dir if with_ray=True
+    data_module: pl.LightningDataModule,
+    training_module: pl.LightningModule,
+    *,
     ckpt_path: str | os.PathLike[str] | None = None,
-    **kwargs: Any,
+    float32_matmul_precision: str = "default",
+    logging_interval: int = 100,
+    max_num_epochs: int = 100,
+    project_name: str | None = None,
+    seed: int | None = None,
+    storage_path: os.PathLike[str] | None = None,
+    use_gpu: bool = False,
+    wandb_enabled: bool = False,
+    with_ray: bool = False,
 ) -> None:
-    logger.info(f"Training with config: {config}")
+    """Train a PyTorch Lightning model.
 
-    if config.get("seed", None):
-        pl.seed_everything(config["seed"])
+    Args:
+        data_module: PyTorch Lightning data module.
+        training_module: PyTorch Lightning training module.
+        ckpt_path: Path to a checkpoint from which to resume training.
+            Must be a local path if _with_ray=False.
+        float32_matmul_precision: Precision for matrix multiplication.
+        logging_interval: Logging interval.
+        max_num_epochs: Maximum number of epochs.
+        project_name: Name of the project.
+        seed: Random seed.
+        storage_path: Path to save results. Must be a local path if
+            _with_ray=False.
+        use_gpu: Whether to use the GPU.
+        wandb_enabled: Whether to enable Weights & Biases logging.
+        with_ray: Whether train() is invoked from a Ray training or
+            tuning run.
+    """
+    if seed is not None:
+        pl.seed_everything(seed)
 
-    with_ray = kwargs.get("with_ray", False)
     if with_ray:
         import ray
         import ray.train
@@ -43,10 +63,7 @@ def train(
             prepare_trainer,
         )
 
-    torch.set_float32_matmul_precision(config["float32_matmul_precision"])
-
-    training_module = training_module_creator(config)
-    data_module = data_module_creator(config)
+    torch.set_float32_matmul_precision(float32_matmul_precision)
 
     strategy: str | Strategy = "auto"
     plugins: list[Any] | None = None
@@ -57,25 +74,27 @@ def train(
         plugins = [RayLightningEnvironment()]
         callbacks.append(RayTrainReportCallback())
     else:
-        callbacks.append(LoggerCallback(logger, interval=config["logging_interval"]))
+        callbacks.append(LoggerCallback(logger))
         if wandb_enabled:
             pl_logger = WandbLogger(
-                project=config["project"], save_dir=config.get("storage_path", None)
+                project=project_name,
+                save_dir=str(storage_path) if storage_path else ".",
             )
 
     # TODO: address warning re: missing tensorboard logging directory
+    root_dir = str(storage_path) if storage_path else None
     trainer = pl.Trainer(
         devices="auto",
-        accelerator="gpu" if config.get("use_gpu") else "cpu",
+        accelerator="gpu" if use_gpu else "cpu",
         strategy=strategy,
         plugins=plugins,
         callbacks=callbacks,
         logger=pl_logger,
         enable_progress_bar=False,
-        max_epochs=config["max_num_epochs"],
-        log_every_n_steps=config["logging_interval"],
+        max_epochs=max_num_epochs,
+        log_every_n_steps=logging_interval,
         enable_checkpointing=not with_ray,
-        default_root_dir=config.get("storage_path", None) if not with_ray else None,
+        default_root_dir=root_dir if not with_ray else None,
     )
 
     if with_ray:
@@ -102,18 +121,18 @@ def train(
 
 
 def test(
-    config,
-    training_module_creator: TrainingModuleCreator,
-    data_module_creator: DataModuleCreator,
+    data_module: pl.LightningDataModule,
+    training_module: pl.LightningModule,
+    storage_path: os.PathLike[str] | None = None,
+    use_gpu: bool = False,
+    with_ray: bool = False,
 ) -> None:
-    training_module = training_module_creator(config)
-    data_module = data_module_creator(config)
-
+    root_dir = str(storage_path) if storage_path else None
     trainer = pl.Trainer(
         devices="auto",
-        accelerator="gpu" if config.get("use_gpu") else "cpu",
+        accelerator="gpu" if use_gpu else "cpu",
         enable_progress_bar=False,
-        default_root_dir=config.get("storage_path", None),
+        default_root_dir=root_dir if not with_ray else None,
     )
     output = trainer.test(training_module, datamodule=data_module)
     logger.info(output)

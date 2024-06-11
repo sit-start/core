@@ -1,13 +1,10 @@
-from typing import Any
-
 import pytest
+import pytorch_lightning as pl
 from hydra.utils import instantiate
 from omegaconf import Container, DictConfig
 from ray.cluster_utils import Cluster
 
 from sitstart.ml.experiments.util import load_experiment_config
-from sitstart.ml.ray import _get_module_creators
-from sitstart.ml.train import DataModuleCreator, TrainingModuleCreator
 
 TEST_CONFIG = "test2d"
 
@@ -37,17 +34,17 @@ def config() -> Container:
 
 
 @pytest.fixture(scope="function")
-def train_loop_config(config: DictConfig) -> dict[str, Any]:
-    return instantiate(
-        config.param_space.train_loop_config, _defer_=False, _convert_="full"
+def training_module(config: DictConfig) -> pl.LightningModule:
+    trial_config = instantiate(config.trial)
+    return trial_config.training_module(
+        loss_fn=trial_config.loss_fn,
+        lr_scheduler=trial_config.lr_scheduler,
+        metrics=trial_config.metrics,
+        model=trial_config.model.module,
+        optimizer=trial_config.optimizer,
     )
 
 
 @pytest.fixture(scope="function")
-def training_module_creator(config: DictConfig) -> TrainingModuleCreator:
-    return _get_module_creators(config)[0]
-
-
-@pytest.fixture(scope="function")
-def data_module_creator(config: DictConfig) -> DataModuleCreator:
-    return _get_module_creators(config)[1]
+def data_module(config: DictConfig) -> pl.LightningDataModule:
+    return instantiate(config.trial.data.module)()
