@@ -1,6 +1,0 @@
-module:
-  _partial_: true
-  _target_: sitstart.ml.data.cifar10.CIFAR10
-  batch_size: ${param_space.train_loop_config.batch_size}
-  augment: ${param_space.train_loop_config.augment_training_data}
-num_classes: 10
