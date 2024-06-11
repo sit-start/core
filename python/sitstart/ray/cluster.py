@@ -9,6 +9,11 @@ import yaml
 from ray.job_submission import JobStatus, JobSubmissionClient
 
 from sitstart.logging import get_logger
+from sitstart.ml.experiments import CONFIG_ROOT
+from sitstart.ml.experiments.util import (
+    get_experiment_wandb_url,
+    load_experiment_config,
+)
 from sitstart.scm.git.util import DOTFILES_REPO_PATH, list_tracked_dotfiles
 from sitstart.util.run import run
 
@@ -36,6 +41,10 @@ def wait_for_job_status(
     return client.get_job_status(sub_id)
 
 
+def _resolve_path(path: str | Path) -> Path:
+    return Path(path).expanduser().resolve()
+
+
 def get_file_mounts(config_path: Path, user_root: str = "/home") -> dict[Path, Path]:
     config = yaml.load(config_path.read_text(), Loader=yaml.SafeLoader)
     user = config["auth"]["ssh_user"]
@@ -44,10 +53,7 @@ def get_file_mounts(config_path: Path, user_root: str = "/home") -> dict[Path, P
     def expand_user(path: str, user: str) -> Path:
         return Path(re.sub(r"^~/", f"{user_root}/{user}/", path))
 
-    def resolve_path(path: str) -> Path:
-        return Path(path).expanduser().resolve()
-
-    return {expand_user(dst, user): resolve_path(src) for dst, src in mounts.items()}
+    return {expand_user(dst, user): _resolve_path(src) for dst, src in mounts.items()}
 
 
 def stop_all_jobs() -> None:
@@ -98,9 +104,9 @@ def submit_job(
     cluster_script_path = Path(mount[0]) / script_path.relative_to(mount[1])
     cmd = ["python", str(cluster_script_path)]
     if job_config_path:
-        job_config_path = Path(mount[0]) / job_config_path.relative_to(mount[1])
-        cmd.append(f"--config-path={str(job_config_path.parent)}")
-        cmd.append(f"--config-name={job_config_path.stem}")
+        remote_job_config_path = Path(mount[0]) / job_config_path.relative_to(mount[1])
+        cmd.append(f"--config-path={str(remote_job_config_path.parent)}")
+        cmd.append(f"--config-name={remote_job_config_path.stem}")
 
     # invoke ray-up, syncing file mounts and running setup commands
     # even if the config hasn't changed
@@ -122,9 +128,14 @@ def submit_job(
     entrypoint = " ".join(cmd)
     logger.info(f"Submitting job with entrypoint {entrypoint!r}")
     sub_id = client.submit_job(entrypoint=entrypoint)
+
     logger.info(f"Job {sub_id} submitted")
-    logger.info("See logs at http://localhost:3000/d/ray_logs_dashboard")
-    logger.info("See Ray dashboard at http://localhost:8265")
+    logger.info("Logs: http://localhost:3000/d/ray_logs_dashboard")
+    logger.info("Ray dashboard: http://localhost:8265")
+    if job_config_path and _resolve_path(job_config_path).is_relative_to(CONFIG_ROOT):
+        exp_config = load_experiment_config(job_config_path.stem)
+        if wandb_url := get_experiment_wandb_url(exp_config):
+            logger.info(f"W&B project: {wandb_url}")
 
     return sub_id
 

@@ -3,6 +3,7 @@ from os.path import dirname, realpath, relpath
 from typing import Any, cast
 
 import hydra
+import wandb
 from hydra.utils import instantiate
 from omegaconf import Container, DictConfig, OmegaConf, open_dict
 from ray.tune.experiment import Experiment
@@ -45,6 +46,18 @@ def load_experiment_config(name: str, overrides: list[str] | None = None) -> Con
             config.name = name
 
     return config
+
+
+def get_experiment_wandb_url(config: Container) -> str | None:
+    """Get the Weights & Biases URL for the experiment config."""
+    proj_name = OmegaConf.select(config, "name", default=None)
+    wandb_enabled = OmegaConf.select(config, "wandb.enabled", default=False)
+    wandb_entity = wandb.api.default_entity
+
+    if proj_name and wandb_enabled and wandb_entity:
+        return f"https://wandb.ai/{wandb_entity}/{proj_name}"
+
+    return None
 
 
 def get_search_alg(
