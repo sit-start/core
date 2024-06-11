@@ -97,7 +97,9 @@ def update(
     dict_types=[dict],
     list_types=[list],
 ) -> None:
-    """update() with keylist notation for nested dict- and list-like objects"""
+    """update() with keylist notation for nested dict- and list-like objects."""
+    keylist = keylist.strip(sep)
+
     keys = keylist.split(sep)
     if not keys:
         raise KeyError("key cannot be empty.")
@@ -126,25 +128,21 @@ def get(
     dict_types=[dict],
     list_types=[list],
 ) -> Any:
-    """get() with keylist notation for nested dict- and list-like objects"""
+    """get() with keylist notation for nested dict- & list-like objects"""
+    keylist = keylist.strip(sep)
+
     if not keylist:
         return obj
 
-    keys = keylist.split(sep)
-
-    for i, k in enumerate(keys):
+    for k in keylist.split(sep):
         try:
             if type(obj) in list_types:
-                k = int(k)
-                if k >= len(obj):
-                    return default
+                obj = obj[int(k)]
             elif type(obj) in dict_types:
-                if k not in obj:
-                    return default
+                obj = obj[k]
             else:
-                raise ValueError("object is not a container")
-            obj = obj[k]
-        except Exception as e:
-            raise KeyError(f"invalid key {sep.join(keys[:i+1])!r}") from e
+                return default
+        except (IndexError, KeyError):
+            return default
 
     return obj
