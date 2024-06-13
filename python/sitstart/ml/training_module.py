@@ -1,98 +1,109 @@
-from typing import Any
+import copy
+from typing import Any, Callable
 
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
-import torch.optim as optim
 from pytorch_lightning.utilities.types import OptimizerLRSchedulerConfig
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import ConstantLR, LRScheduler
+from torcheval.metrics import Metric
 
 
 class TrainingModule(pl.LightningModule):
     def __init__(
         self,
-        config: dict,
+        loss_fn: nn.Module,
+        lr_scheduler: LRScheduler | Callable[[Optimizer], LRScheduler] | None,
+        metrics: dict[str, Metric],
         model: nn.Module,
+        optimizer: Optimizer | Callable[[Any], Optimizer],
     ) -> None:
         super().__init__()
 
-        self.config = config.copy()
-        self.model = model
-        self.loss_fn = nn.CrossEntropyLoss()  # TODO: hardcoded
-        self.acc_fn = lambda y_hat, y: (y_hat.argmax(1) == y).mean(dtype=float)
+        if isinstance(optimizer, Callable):
+            optimizer = optimizer(model.parameters())
+        if isinstance(lr_scheduler, Callable):
+            lr_scheduler = lr_scheduler(optimizer)
+        if lr_scheduler is None:
+            lr_scheduler = ConstantLR(optimizer, factor=1.0, total_iters=0)
 
-        self.loss = {"val": [], "test": []}
-        self.acc = {"val": [], "test": []}
+        self.model = model
+        self.loss_fn = loss_fn
+        self.optimizer = optimizer
+        self.lr_scheduler = lr_scheduler
+
+        self.metrics = {stage: {} for stage in ["train", "val", "test"]}
+        for stage in self.metrics:
+            for key, metric in metrics.items():
+                self.metrics[stage][key] = copy.deepcopy(metric)
+        self._update_metrics_device()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model.forward(x)
 
     def training_step(self, batch: Any, _: int) -> torch.Tensor:
-        x, y = batch
-        y_hat = self.forward(x)
-        loss = self.loss_fn(y_hat, y)
-        self.log("train_loss", loss)
-
+        inputs, targets = batch
+        outputs = self.forward(inputs)
+        loss = self.loss_fn(outputs, targets)
+        self._log_step("train", loss, outputs, targets)
         return loss
 
-    def _val_test_step(
-        self, target: str, batch: Any, _: int
-    ) -> dict[str, torch.Tensor]:
-        x, y = batch
-        y_hat = self.forward(x)
-        loss = self.loss_fn(y_hat, y)
-        accuracy = self.acc_fn(y_hat, y)
-        self.loss[target].append(loss)
-        self.acc[target].append(accuracy)
-        return {f"{target}_loss": loss, f"{target}_acc": accuracy}
+    def validation_step(self, batch: Any, batch_idx: int) -> None:
+        self._val_test_step("val", batch, batch_idx)
 
-    def _on_val_test_epoch_end(self, target: str):
-        avg_loss = torch.stack(self.loss[target]).mean()
-        avg_acc = torch.stack(self.acc[target]).mean()
-        self.log(f"{target}_loss", avg_loss, sync_dist=True)
-        self.log(f"{target}_acc", avg_acc, sync_dist=True)
-        self.loss[target].clear()
-        self.acc[target].clear()
+    def test_step(self, batch: Any, batch_idx: int) -> None:
+        self._val_test_step("test", batch, batch_idx)
 
-    def validation_step(self, batch: Any, batch_idx: int) -> dict[str, torch.Tensor]:
-        return self._val_test_step("val", batch, batch_idx)
+    def on_train_epoch_start(self) -> None:
+        self._log_start("train")
 
-    def on_validation_epoch_end(self):
-        self._on_val_test_epoch_end("val")
+    def on_validation_epoch_start(self) -> None:
+        self._log_start("val")
 
-    def test_step(self, batch: Any, batch_idx: int) -> dict[str, torch.Tensor]:
-        return self._val_test_step("test", batch, batch_idx)
-
-    def on_test_epoch_end(self):
-        self._on_val_test_epoch_end("test")
+    def on_test_epoch_start(self) -> None:
+        self._log_start("test")
 
     def configure_optimizers(self) -> OptimizerLRSchedulerConfig:
-        if self.config["optimizer"] == "sgd":
-            optimizer = optim.SGD(
-                params=self.model.parameters(),
-                lr=self.config["lr"],
-                weight_decay=self.config["weight_decay"],
-                momentum=self.config["momentum"],
-                dampening=self.config["dampening"],
-            )
-        elif self.config["optimizer"] == "adamw":
-            optimizer = optim.AdamW(
-                params=self.model.parameters(),
-                lr=self.config["lr"],
-                weight_decay=self.config["weight_decay"],
-            )
-        else:
-            raise RuntimeError(f"Optimizer f{self.config['optimizer']} not recognized")
-
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer,
-            T_max=self.config["max_num_epochs"],
-            eta_min=self.config["min_lr"],
-        )
         return {
-            "optimizer": optimizer,
+            "optimizer": self.optimizer,
             "lr_scheduler": {
-                "scheduler": lr_scheduler,
+                "scheduler": self.lr_scheduler,
                 "interval": "epoch",
                 "frequency": 1,
             },
         }
+
+    def _log_start(self, stage: str):
+        for _, metric in self.metrics[stage].items():
+            metric.reset()
+
+    def _log_step(
+        self, stage: str, loss: torch.Tensor, output: torch.Tensor, target: torch.Tensor
+    ) -> None:
+        sync_dist = True  # TODO: eval penalty for sync_dist on each step
+        self.log(
+            f"{stage}_loss", loss, on_step=False, on_epoch=True, sync_dist=sync_dist
+        )
+        for key, metric in self.metrics[stage].items():
+            val = metric.update(output, target).compute()
+            self.log(
+                f"{stage}_{key}", val, on_step=False, on_epoch=True, sync_dist=sync_dist
+            )
+
+    def _val_test_step(self, stage: str, batch: Any, _: int) -> None:
+        inputs, targets = batch
+        outputs = self.forward(inputs)
+        loss = self.loss_fn(outputs, targets)
+
+        self._log_step(stage, loss, outputs, targets)
+
+    def _update_metrics_device(self) -> None:
+        for stage in self.metrics:
+            for metric in self.metrics[stage].values():
+                metric.to(self.device)
+
+    def to(self, *args, **kwargs) -> "TrainingModule":
+        super().to(*args, **kwargs)
+        self._update_metrics_device()
+        return self

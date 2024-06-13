@@ -1,4 +1,3 @@
-import copy
 import os
 from pathlib import Path
 from typing import Any, Callable
@@ -9,6 +8,7 @@ from pytorch_lightning.callbacks import Callback
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.strategies import Strategy
 
+from sitstart.ml import DEFAULT_CHECKPOINT_ROOT
 from sitstart.logging import get_logger
 from sitstart.ml.callbacks import LoggerCallback
 
@@ -23,6 +23,7 @@ def train(
     training_module_creator: TrainingModuleCreator,
     data_module_creator: DataModuleCreator,
     wandb_enabled: bool = False,
+    # local ckpt file, or local or remote ckpt dir if with_ray=True
     ckpt_path: str | os.PathLike[str] | None = None,
     **kwargs: Any,
 ) -> None:
@@ -44,15 +45,6 @@ def train(
 
     torch.set_float32_matmul_precision(config["float32_matmul_precision"])
 
-    if with_ray and (train_context := ray.train.get_context()):
-        config = copy.deepcopy(config)
-        batch_size = config["batch_size"]
-        config["batch_size"] //= train_context.get_world_size()
-        logger.info(
-            "Using per-worker and global batch sizes of "
-            f"{config['batch_size']}, {batch_size}, resp."
-        )
-
     training_module = training_module_creator(config)
     data_module = data_module_creator(config)
 
@@ -67,8 +59,9 @@ def train(
     else:
         callbacks.append(LoggerCallback(logger, interval=config["logging_interval"]))
         if wandb_enabled:
-            pl_logger = WandbLogger(project=config["project"])
-            pl_logger.watch(training_module, log="all")
+            pl_logger = WandbLogger(
+                project=config["project"], save_dir=config.get("storage_path", None)
+            )
 
     # TODO: address warning re: missing tensorboard logging directory
     trainer = pl.Trainer(
@@ -88,19 +81,24 @@ def train(
     if with_ray:
         trainer = prepare_trainer(trainer)
 
-    if with_ray and (ckpt := ray.train.get_checkpoint()):
-        assert (
-            ckpt_path is None
-        ), "Cannot load both trial- and user-specified checkpoints."
-        with ckpt.as_directory() as ckpt_dir:
+        if ckpt := ray.train.get_checkpoint():
+            assert (
+                ckpt_path is None
+            ), "Cannot load both trial- and user-specified checkpoints."
+        elif ckpt_path:
+            ckpt = ray.train.Checkpoint(ckpt_path)
+        if ckpt:
+            ckpt_dir = ckpt.to_directory(f"{DEFAULT_CHECKPOINT_ROOT}/ckpt")
             ckpt_path = Path(ckpt_dir) / "checkpoint.ckpt"
-            trainer.fit(training_module, datamodule=data_module, ckpt_path=ckpt_path)
-    else:
-        trainer.fit(
-            training_module,
-            datamodule=data_module,
-            ckpt_path=ckpt_path,  # type: ignore
-        )
+
+    if ckpt_path:
+        logger.info(f"Loading checkpoint from: {ckpt_path}")
+
+    trainer.fit(
+        training_module,
+        datamodule=data_module,
+        ckpt_path=ckpt_path,  # type: ignore
+    )
 
 
 def test(

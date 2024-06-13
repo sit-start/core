@@ -1,15 +1,16 @@
 from typing import Any
 from unittest.mock import ANY, call, patch
 
-import pytest
 import torch
 
 from sitstart.ml.train import DataModuleCreator, TrainingModuleCreator
 
 
+@patch("torcheval.metrics.metric.Metric.reset")
 @patch("sitstart.ml.training_module.TrainingModule.log")
 def test_training_module(
     log_mock,
+    metric_reset_mock,
     train_loop_config: dict[str, Any],
     training_module_creator: TrainingModuleCreator,
     data_module_creator: DataModuleCreator,
@@ -28,31 +29,27 @@ def test_training_module(
     assert isinstance(scheduler_config, dict)
 
     scheduler = scheduler_config["scheduler"]
-    assert isinstance(scheduler, torch.optim.lr_scheduler.CosineAnnealingLR)
+    assert isinstance(scheduler, torch.optim.lr_scheduler.ConstantLR)
 
+    log_mock.reset_mock()
     loss = module.training_step(batch, 0)
     assert isinstance(loss, torch.Tensor)
     assert loss.shape == torch.Size([])
-
-    validation_output = module.validation_step(batch, 0)
-    assert isinstance(validation_output, dict)
-    assert "val_loss" in validation_output
-    assert "val_acc" in validation_output
-
-    module.on_validation_epoch_end()
-    assert module.loss["val"] == []
-    assert module.acc["val"] == []
     log_mock.assert_has_calls(
-        [call("val_loss", ANY, sync_dist=True), call("val_acc", ANY, sync_dist=True)]
+        [call("train_loss", ANY, on_step=False, on_epoch=True, sync_dist=True)]
+    )
+    log_mock.assert_has_calls(
+        [call("train_acc", ANY, on_step=False, on_epoch=True, sync_dist=True)]
     )
 
-    train_loop_config["optimizer"] = "adamw"
-    module = training_module_creator(train_loop_config)
-    optimizer_config = module.configure_optimizers()
-    assert isinstance(optimizer_config, dict)
-    assert isinstance(optimizer_config["optimizer"], torch.optim.AdamW)
+    module.on_validation_epoch_start()
+    metric_reset_mock.assert_has_calls([call()])
 
-    train_loop_config["optimizer"] = "unknown"
-    module = training_module_creator(train_loop_config)
-    with pytest.raises(RuntimeError):
-        module.configure_optimizers()
+    log_mock.reset_mock()
+    module.validation_step(batch, 0)
+    log_mock.assert_has_calls(
+        [call("val_loss", ANY, on_step=False, on_epoch=True, sync_dist=True)]
+    )
+    log_mock.assert_has_calls(
+        [call("val_acc", ANY, on_step=False, on_epoch=True, sync_dist=True)]
+    )

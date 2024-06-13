@@ -6,37 +6,20 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytorch_lightning as pl
+from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from ray.air.integrations.wandb import WandbLoggerCallback
-from ray.train import FailureConfig, RunConfig
+from ray.train import FailureConfig, RunConfig, get_context
 from ray.train.torch import TorchConfig, TorchTrainer
 from ray.tune import TuneConfig, Tuner
 from ray.tune.experiment.trial import Trial
 
 from sitstart.logging import get_logger
+from sitstart.ml.experiments.util import get_search_alg, resolve
 from sitstart.ml.train import DataModuleCreator, TrainingModuleCreator, train
-from sitstart.ml.training_module import TrainingModule
 from sitstart.scm.git.repo_state import RepoState, get_repo
-from sitstart.util.container import walk
-from sitstart.util.hydra import instantiate, register_omegaconf_resolvers
+from sitstart.util.hydra import register_omegaconf_resolvers
 from sitstart.util.string import to_str
-
-# https://docs.ray.io/en/latest/tune/api/search_space.html
-TUNE_SEARCH_SPACE_API = [
-    "ray.tune.uniform",
-    "ray.tune.quniform",
-    "ray.tune.loguniform",
-    "ray.tune.qloguniform",
-    "ray.tune.randn",
-    "ray.tune.qrandn",
-    "ray.tune.randint",
-    "ray.tune.qrandint",
-    "ray.tune.lograndint",
-    "ray.tune.qlograndint",
-    "ray.tune.choice",
-    "ray.tune.sample_from",
-    "ray.tune.grid_search",
-]
 
 register_omegaconf_resolvers()
 
@@ -121,26 +104,33 @@ def _get_callbacks(config: DictConfig) -> list:
 def _get_module_creators(
     config: DictConfig,
 ) -> tuple[TrainingModuleCreator, DataModuleCreator]:
-    def get_trial_and_train_loop_configs(train_loop_config: dict[str, Any]):
-        # update the config with the trial's train_loop_config, and
-        # instantiate/resolve any deferred config nodes
+    def get_trial_config(train_loop_config: dict[str, Any]) -> DictConfig:
+        # update the config with the trial's train_loop_config and instantiate
         register_omegaconf_resolvers()
-        input_config = copy.deepcopy(config)
-        input_config.param_space.train_loop_config = train_loop_config
-        trial_config = instantiate(input_config, _defer_=False)
-
-        return trial_config, cast(
-            dict[str, Any],
-            OmegaConf.to_container(trial_config.param_space.train_loop_config),
-        )
+        config_for_trial = copy.deepcopy(config)
+        config_for_trial.param_space.train_loop_config = train_loop_config
+        return instantiate(config_for_trial.trial)
 
     def training_module_creator(train_loop_conf: dict[str, Any]) -> pl.LightningModule:
-        trial_conf, train_loop_conf = get_trial_and_train_loop_configs(train_loop_conf)
-        return TrainingModule(train_loop_conf, model=trial_conf.model.model())
+        trial_config = get_trial_config(train_loop_conf)
+        return trial_config.training_module(
+            loss_fn=trial_config.loss_fn,
+            lr_scheduler=trial_config.lr_scheduler,
+            metrics=trial_config.metrics,
+            model=trial_config.model.module,
+            optimizer=trial_config.optimizer,
+        )
 
     def data_module_creator(train_loop_conf: dict[str, Any]) -> pl.LightningDataModule:
-        trial_conf, _ = get_trial_and_train_loop_configs(train_loop_conf)
-        return trial_conf.data.module()
+        trial_config = get_trial_config(train_loop_conf)
+        batch_size = trial_config.data.batch_size
+        worker_batch_size = batch_size
+        if train_context := get_context():
+            worker_batch_size = batch_size // train_context.get_world_size()
+            logger.info(
+                f"Batch size: {batch_size} (global), {worker_batch_size} (worker)"
+            )
+        return trial_config.data.module(batch_size=worker_batch_size)
 
     return training_module_creator, data_module_creator
 
@@ -152,7 +142,7 @@ def _get_ray_trainer(
 ):
     run_config = RunConfig(
         name="_".join([_get_project_name(config), _get_group_name()]),
-        checkpoint_config=config.checkpoint(),
+        checkpoint_config=instantiate(config.checkpoint),
         storage_path=config.storage_path,
         callbacks=_get_callbacks(config),
         log_to_file=True,  # NOTE: doesn't work in Jupyter notebook
@@ -167,32 +157,24 @@ def _get_ray_trainer(
             with_ray=True,
         )
 
-    param_space = {} if tuning else instantiate(config.param_space, _convert_="full")
+    param_space = {} if tuning else instantiate(config.param_space)
+    metadata = dict(
+        config=OmegaConf.to_container(config, resolve=False),
+        repo_state=repo_state.__dict__ if repo_state else None,
+    )
 
     return TorchTrainer(
         train_loop_per_worker=train_loop_per_worker,
         run_config=run_config,
         **cast(dict[str, Any], param_space),
-        metadata=dict(repo_state=repo_state.__dict__) if repo_state else None,
+        metadata=metadata,
         torch_config=TorchConfig(backend=config.torch.distributed_backend),
     )
 
 
-def _validate_config(config: DictConfig) -> None:
-    for top, _, obj_keys in walk(OmegaConf.to_container(config, resolve=False)):
-        if "_target_" in obj_keys and not top.startswith("param_space."):
-            class_name = OmegaConf.select(config, top + "._target_")
-            if class_name in TUNE_SEARCH_SPACE_API:
-                raise ValueError(
-                    "All parameter search spaces must be under "
-                    "`param_space` in the config."
-                )
-
-
 def train_with_ray(config: DictConfig) -> None:
     repo_state = _get_repo_state_and_add_to_config(config)
-    _validate_config(config)
-    config = instantiate(config)
+    resolve(config)
 
     trainer = _get_ray_trainer(config, repo_state=repo_state)
 
@@ -202,9 +184,10 @@ def train_with_ray(config: DictConfig) -> None:
 
 def tune_with_ray(config: DictConfig) -> None:
     repo_state = _get_repo_state_and_add_to_config(config)
-    _validate_config(config)
     logger.info(f"Tuning with config:\n{OmegaConf.to_yaml(config)}")
-    config = instantiate(config)
+    # we postpone resolution of the trial node until the Tuner has
+    # selected values from the parameter space for the trial.
+    resolve(config, exclude=["trial"])
 
     trainer = _get_ray_trainer(config, repo_state=repo_state, tuning=True)
     trial_name_args = dict(incl_params=config.tune.long_trial_names)
@@ -212,19 +195,20 @@ def tune_with_ray(config: DictConfig) -> None:
     tuner = Tuner(
         trainer,
         tune_config=TuneConfig(
-            metric=config.eval.metric,
-            mode=config.eval.mode,
             num_samples=config.tune.num_samples,
-            scheduler=config.tune.scheduler,
+            scheduler=instantiate(config.tune.scheduler),
             trial_name_creator=lambda trial: _get_trial_name(trial, **trial_name_args),
             trial_dirname_creator=_get_trial_dirname,
+            search_alg=get_search_alg(config),
         ),
-        param_space=instantiate(config.param_space, _convert_="full"),
+        param_space=instantiate(config.param_space),
     )
 
     results = tuner.fit()
 
-    best_result = results.get_best_result(config.eval.metric, config.eval.mode)
+    best_result = results.get_best_result(
+        config.eval.select.metric, config.eval.select.mode
+    )
     logger.info(f"Best trial config: {best_result.config}")
     if not best_result.metrics:
         logger.warning("No metrics found in best trial result")

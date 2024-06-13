@@ -1,20 +1,18 @@
+# resnet18, training on CIFAR10
 defaults:
   - _defaults_
-  - data/cifar10
-  - model/resnet18
+  - trial/data: cifar10
+  - trial/lr_scheduler: cosine_annealing
+  - trial/model: resnet18_s_do
   - _self_
 max_num_epochs: 75
-name: resnet18_cifar10_1 # '_1' suffix to avoid corrupted wandb project
-param_space:
-  train_loop_config:
-    dampening: 0.0
-    augment_training_data: true
+trial:
+  data:
     batch_size: 128
+  model:
     dropout_p: 0.25
+  optimizer:
+    dampening: 0.0
     lr: 5e-2
-    min_lr: 0.0
     momentum: 0.9
-    optimizer: sgd
-    sync_batchnorm: false
     weight_decay: 5e-4
-    with_batchnorm: true

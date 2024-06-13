@@ -1,10 +1,12 @@
 defaults:
   - _defaults_
-  - data/fake2d
-  - model/test2d
+  - trial/data/fake2d
+  - trial/model/test2d
   - _self_
+logging_interval: 1
 max_num_epochs: 2
 param_space:
+  # single CPU node training, for local or remote testing
   scaling_config:
     num_workers: 2
     resources_per_worker:
@@ -12,19 +14,25 @@ param_space:
       GPU: 0
     trainer_resources:
       CPU: 0
-  train_loop_config:
-    batch_size: 10
-    dampening: 0.0
-    logging_interval: 1
-    lr: 5e-2
-    min_lr: 0.0
-    momentum: 0.9
-    optimizer: sgd
-    weight_decay: 5e-4
+# skipping due to race condition with reading local ckpt metadata
 save_repo_state: false
 seed: 42
-storage_path: /tmp
+# local log/ckpt storage
+storage_path: /tmp/test2d/${now:%Y-%m-%d_%H-%M-%S}
+# required for CPU worker
 torch:
   distributed_backend: gloo
+trial:
+  data:
+    batch_size: 10
+    module:
+      img_shape: ${trial.model.dims}
+    num_classes: 4
+  optimizer:
+    dampening: 0.0
+    lr: 5e-2
+    momentum: 0.9
+    weight_decay: 5e-4
+# w&b disabled for test runs
 wandb:
   enabled: false

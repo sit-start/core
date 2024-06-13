@@ -1,0 +1,7 @@
+defaults:
+  - augment/transforms/square_crop
+  - augment/transforms/hflip
+dims: [3, 32, 32]
+module:
+  _target_: sitstart.ml.data.modules.cifar10.CIFAR10
+num_classes: 10

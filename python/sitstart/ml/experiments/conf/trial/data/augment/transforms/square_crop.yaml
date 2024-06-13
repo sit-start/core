@@ -1,0 +1,5 @@
+square_crop:
+  _convert_: all
+  _target_: torchvision.transforms.RandomCrop
+  size: ${trial.model.target_size.crop}
+  padding: ${floordiv:${.size},8}

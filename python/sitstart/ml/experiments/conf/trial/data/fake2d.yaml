@@ -1,0 +1,4 @@
+module:
+  _target_: sitstart.ml.data.modules.fake.Fake2d
+  batch_size: ${..batch_size}
+  num_classes: ${..num_classes}
