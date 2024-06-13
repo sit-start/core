@@ -1,17 +1,14 @@
-from os.path import dirname, realpath, relpath
 from typing import Any
 
-import hydra
 import pytest
-from omegaconf import DictConfig
+from omegaconf import Container, DictConfig
 from ray.cluster_utils import Cluster
 
-from sitstart.ml.experiments import CONFIG_ROOT, HYDRA_VERSION_BASE
+from sitstart.ml.experiments.util import load_experiment_config
 from sitstart.ml.ray import _get_module_creators
 from sitstart.ml.train import DataModuleCreator, TrainingModuleCreator
 from sitstart.util.hydra import instantiate
 
-CONFIG_PATH = relpath(CONFIG_ROOT, realpath(dirname(__file__)))
 TEST_CONFIG = "test2d"
 
 
@@ -35,19 +32,8 @@ def ray_cluster():
 
 
 @pytest.fixture(scope="function")
-def config(request: pytest.FixtureRequest) -> DictConfig:
-    # replace any values that interpolate values from the hydra config
-    # node, since the HydraConfig singleton isn't available
-    test_name = request.node.name
-    overrides = [f"name={test_name}"]
-
-    with hydra.initialize(version_base=HYDRA_VERSION_BASE, config_path=CONFIG_PATH):
-        config = hydra.compose(config_name=TEST_CONFIG, overrides=overrides)
-
-    # sanity check the config
-    instantiate(config)
-
-    return config
+def config() -> Container:
+    return load_experiment_config(TEST_CONFIG)
 
 
 @pytest.fixture(scope="function")

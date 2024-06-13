@@ -6,10 +6,20 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from hydra.utils import instantiate as instantiate_config
+from omegaconf import OmegaConf
 from typer import Argument, Option
 
 from sitstart import PYTHON_ROOT, REPO_ROOT
 from sitstart.logging import get_logger
+from sitstart.ml.experiments import CONFIG_ROOT
+from sitstart.ml.experiments.util import (
+    load_experiment_config,
+    resolve,
+    validate_experiment_config,
+)
+from sitstart.util.container import walk
+from sitstart.util.hydra import register_omegaconf_resolvers
 from sitstart.util.run import run
 
 app = typer.Typer()
@@ -56,3 +66,86 @@ def update_requirements(
         except RuntimeError as e:
             logger.error(f"Failed to update {package!r} to {entry!r}: {e}")
     Path(requirements_path).write_text(requirements)
+
+
+@app.command()
+def test_config(
+    name: Annotated[
+        str,
+        Argument(
+            help=f"Name of the experiment config in {CONFIG_ROOT}.",
+            show_default=False,
+        ),
+    ],
+    no_resolve: Annotated[
+        bool,
+        Option(
+            "--no-resolve",
+            help="Don't resolve the config.",
+            show_default=False,
+        ),
+    ] = False,
+    exclude: Annotated[
+        list[str],
+        Option(
+            help="Exclude a node from resolution.",
+            show_default=True,
+        ),
+    ] = [],
+    tune: Annotated[
+        bool,
+        Option(
+            "--tune",
+            help="Test a tuning config. Adds --sample-params if instantiating "
+            "and --exclude=trial otherwise",
+            show_default=False,
+        ),
+    ] = False,
+    sample_params: Annotated[
+        bool,
+        Option(
+            "--sample-params",
+            help="Sample the parameter search space to resolve the param_space node.",
+            show_default=False,
+        ),
+    ] = False,
+    instantiate: Annotated[
+        bool,
+        Option(
+            "--instantiate",
+            help="Instantiate the config.",
+            show_default=False,
+        ),
+    ] = False,
+) -> None:
+    """Test loading, resolving, and instantiating a Hydra experiment config."""
+    register_omegaconf_resolvers()
+    config = load_experiment_config(name)
+    validate_experiment_config(config)
+
+    if tune:
+        if instantiate:
+            if not sample_params:
+                logger.info(
+                    "Setting --sample-params=True for tuning config instantiation."
+                )
+            sample_params = True
+        elif "trial" not in exclude:
+            logger.info("Adding 'trial' to --exclude for tuning config resolution.")
+            exclude.append("trial")
+
+    if not no_resolve:
+        resolve(config, exclude=exclude or [], sample_params=sample_params)
+
+    logger.info(f"Config {name!r}:\n{OmegaConf.to_yaml(config)}")
+
+    if instantiate:
+        container = OmegaConf.to_container(config)
+        instantiated = []
+        for top, _, obj_keys in walk(container, topdown=True):
+            if "_target_" in obj_keys:
+                if not any(top.startswith(node) for node in instantiated):
+                    logger.info(f"Instantiating {top!r}.")
+                    obj = instantiate_config(OmegaConf.select(config, top))
+                    instantiated.append(top)
+                    logger.info(f"Instantiated {top!r}:\n{obj}")

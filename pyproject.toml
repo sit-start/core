@@ -20,6 +20,7 @@ filterwarnings = [
   'ignore: You are trying to `self.log\(\)`',
   "ignore: GPU available but not used",
   "ignore: .*Consider increasing the value of the `num_workers` argument",
+  "ignore: `get_world_size` is meant to only be called",
 ]
 markers = [
   "slow: mark test as slow to run",

@@ -11,6 +11,15 @@
       "justMyCode": false
     },
     {
+      "name": "Python Debugger: sit",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "python/sitstart/app/sit/sit.py",
+      "console": "integratedTerminal",
+      "args": "${command:pickArgs}",
+      "justMyCode": false
+    },
+    {
       "name": "PyTest Debugger: Current File",
       "type": "debugpy",
       "request": "launch",
