@@ -1,0 +1,19 @@
+# resnet18 for a small, low-resolution dataset, e.g., CIFAR10
+defaults:
+  - resnet18_do
+  - _self_
+module:
+  replace:
+    # smaller kernel+stride/no pooling to preserve spatial info deeper
+    conv1:
+      _target_: torch.nn.Conv2d
+      in_channels: 3
+      out_channels: 64
+      kernel_size: 3
+      padding: 1
+      bias: false
+    maxpool:
+      _target_: torch.nn.Identity
+target_size:
+  crop: 32
+  resize: 32

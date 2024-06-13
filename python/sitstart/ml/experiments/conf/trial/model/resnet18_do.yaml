@@ -1,0 +1,20 @@
+defaults:
+  - transforms: image_classification
+  - _self_
+dropout: 0.25
+module:
+  _convert_: none
+  _recursive_: false
+  _target_: sitstart.ml.util.update_module
+  module:
+    _target_: torchvision.models.resnet18
+    num_classes: ${trial.data.num_classes}
+  append:
+    # dropout before residual-add for regularization
+    layer*.*.bn2:
+      _target_: torch.nn.Dropout2d
+      p: ${trial.model.dropout}
+target_size:
+  crop: 224
+  resize: 256
+weights: ResNet18_Weights.DEFAULT
