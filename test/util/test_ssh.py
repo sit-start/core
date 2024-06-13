@@ -91,16 +91,16 @@ def test_update_ssh_config():
 @mock.patch("sitstart.util.ssh.run")
 def test_open_ssh_tunnel(run_mock):
     control_path = _get_control_path(make_dir=False)
-    dest = "dest"
-    port = 8000
-    bind_address = "localhost"
+    ssh_addr = "dest"
+    remote_port = 80
+    local_port = 8080
 
-    open_ssh_tunnel(dest, port, bind_address)
+    open_ssh_tunnel(ssh_addr, remote_port, local_port=local_port)
     run_mock.assert_called_once_with(
         shlex.split(
             f"ssh '-o ControlMaster=auto' '-o ControlPath={control_path}' "
-            f"'-o ExitOnForwardFailure=yes' -fN -L {bind_address}:{port}:"
-            f"localhost:{port} {dest}"
+            f"'-o ExitOnForwardFailure=yes' -fN -L localhost:{local_port}:"
+            f"localhost:{remote_port} {ssh_addr}"
         ),
         output="capture",
     )
