@@ -1,7 +1,60 @@
 import torch
 from torchvision.datasets import VisionDataset
 
-from sitstart.ml.util import hash_tensor, split_dataset
+from sitstart.ml.util import hash_tensor, split_dataset, update_module
+
+
+def test_update_submodule():
+    torch.manual_seed(42)
+
+    class TestModel(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.hidden_layers = torch.nn.ModuleList(
+                [torch.nn.Conv2d(3, 3, 3), torch.nn.Linear(3, 3)]
+            )
+            self.fc1 = torch.nn.Linear(3, 3)
+            self.fc2 = torch.nn.Linear(3, 1)
+
+        def forward(self, x):
+            x = self.hidden_layers[0](x).flatten()
+            x = self.hidden_layers[1](x)
+            x = self.fc1(x)
+            return self.fc2(x)
+
+    model = TestModel()
+    update_module(model, freeze=["hidden_layers.0"])
+
+    assert all(not p.requires_grad for p in model.hidden_layers[0].parameters())
+    assert all(p.requires_grad for p in model.hidden_layers[1].parameters())
+
+    model = TestModel()
+    for layer in model.hidden_layers:
+        with torch.no_grad():
+            for param in layer.parameters():
+                param *= 0.0
+    update_module(model, init={"hidden_layers.0": None})
+
+    for param in model.hidden_layers[0].parameters():
+        assert param.ne(0.0).any()
+    for param in model.hidden_layers[1].parameters():
+        assert param.eq(0.0).all()
+
+    model = TestModel()
+    update_module(
+        model,
+        replace={
+            "hidden_layers.0": torch.nn.Linear(3, 5),
+            "fc*": torch.nn.Linear(5, 5),
+        },
+    )
+    assert model.hidden_layers[0].out_features == 5
+    assert model.fc1 is not model.fc2
+    assert model.fc1.in_features == model.fc1.out_features == 5
+    assert model.fc2.in_features == model.fc2.out_features == 5
+
+    model = TestModel()
+    update_module(model, replace={"fc*": torch.nn.Linear(3, 5)})
 
 
 def test_split_dataset():
