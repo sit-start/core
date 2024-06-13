@@ -17,6 +17,7 @@ from sitstart.util.string import rand_str
 RAY_CONFIG_NAME = f"test-{ray.DEFAULT_CONFIG}-" + rand_str(
     8, string.digits + string.ascii_letters
 )
+TEST_DASHBOARD_PORT = 8266
 TEST_SCRIPT = "tune"
 TEST_JOB_CONFIG = "test2d"
 SSH_CONFIG = """CanonicalizeHostname yes
@@ -64,10 +65,15 @@ def ray_config(is_local_test):
 
 
 @pytest.fixture(scope="module")
-def ray_cluster(ssh_config, ray_config, aws_session, is_local_test):
+def ray_cluster(ssh_config, ray_config, aws_session):
     try:
         logger.info(f"Starting Ray cluster with config {ray_config!r}.")
-        ray.up(config=ray_config, show_output=True, no_port_forwarding=is_local_test)
+        ray.up(
+            config=ray_config,
+            show_output=True,
+            no_port_forwarding=True,
+            forward_port=[f"Ray Dashboard,{TEST_DASHBOARD_PORT}"],
+        )
     except Exception as e:
         logger.error(f"Failed to start Ray cluster: {e}")
         ec2.kill(f"*{RAY_CONFIG_NAME}*")
@@ -94,9 +100,14 @@ def test_up(ray_cluster, run_on_head):
 @pytest.mark.integration
 @pytest.mark.slow
 def test_submit(ray_cluster, ray_config):
-    client = get_job_submission_client()
+    client = get_job_submission_client(dashboard_port=TEST_DASHBOARD_PORT)
 
-    sub_id = ray.submit(TEST_SCRIPT, config=ray_config, job_config=TEST_JOB_CONFIG)
+    sub_id = ray.submit(
+        TEST_SCRIPT,
+        config=ray_config,
+        job_config=TEST_JOB_CONFIG,
+        dashboard_port=TEST_DASHBOARD_PORT,
+    )
     status = wait_for_job_status(client, sub_id, JobStatus.RUNNING)
     assert status == JobStatus.RUNNING
 
@@ -107,13 +118,18 @@ def test_submit(ray_cluster, ray_config):
 @pytest.mark.integration
 @pytest.mark.slow
 def test_stop_jobs(ray_cluster, ray_config):
-    client = get_job_submission_client()
+    client = get_job_submission_client(dashboard_port=TEST_DASHBOARD_PORT)
 
-    sub_id = ray.submit(TEST_SCRIPT, config=ray_config, job_config=TEST_JOB_CONFIG)
+    sub_id = ray.submit(
+        TEST_SCRIPT,
+        config=ray_config,
+        job_config=TEST_JOB_CONFIG,
+        dashboard_port=TEST_DASHBOARD_PORT,
+    )
     status = wait_for_job_status(client, sub_id, JobStatus.RUNNING)
     assert status == JobStatus.RUNNING
 
-    ray.stop_jobs()
+    ray.stop_jobs(dashboard_port=TEST_DASHBOARD_PORT)
     status = wait_for_job_status(client, sub_id, JobStatus.STOPPED)
     assert status == JobStatus.STOPPED
 

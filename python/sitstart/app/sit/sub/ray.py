@@ -28,7 +28,7 @@ DEFAULT_CONFIG = "main"
 CLUSTER_CONFIG_ROOT = f"{PYTHON_ROOT}/sitstart/ray/config/cluster"
 SCRIPT_ROOT = f"{PYTHON_ROOT}/sitstart/ml/experiments"
 JOB_CONFIG_DIR = "conf"
-FORWARDED_PORTS = {
+FORWARDED_PORTS = {  # (service, remote port) pairs
     "Ray Dashboard": DASHBOARD_PORT,
     "Prometheus": 9090,
     "Grafana": 3000,
@@ -118,9 +118,25 @@ NoPortForwardingOpt = Annotated[
     bool,
     Option(
         "--no-port-forwarding",
-        help=f"Disable port forwarding for {' '.join(FORWARDED_PORTS.keys())}.",
+        help=f"Disable port forwarding for {', '.join(FORWARDED_PORTS.keys())}.",
         show_default=False,
     ),
+]
+ForwardPortOpt = Annotated[
+    Optional[list[str]],
+    Option(
+        help=(
+            "Forward a local port for one of "
+            f"{', '.join(FORWARDED_PORTS.keys())}, "
+            "e.g., 'Ray Dashboard,8266'. Overrides --no-port-forwarding. "
+            "Use a negative port to disable."
+        ),
+        show_default=False,
+    ),
+]
+DashboardPortOpt = Annotated[
+    int,
+    Option(help="The local port for the Ray dashboard used for submitting the job."),
 ]
 WorkersOnlyOpt = Annotated[
     bool,
@@ -194,9 +210,11 @@ def _resolve_cluster_config_path(config: str) -> Path:
 
 
 @app.command()
-def stop_jobs() -> None:
+def stop_jobs(
+    dashboard_port: DashboardPortOpt = DASHBOARD_PORT,
+) -> None:
     """Stop all running jobs on the active Ray cluster."""
-    stop_all_jobs()
+    stop_all_jobs(dashboard_port=dashboard_port)
 
 
 @app.command()
@@ -208,6 +226,7 @@ def submit(
     job_config: JobConfigOpt = None,
     restart: RestartOpt = False,
     sync_dotfiles: SyncDotfilesOpt = False,
+    dashboard_port: DashboardPortOpt = DASHBOARD_PORT,
 ) -> str:
     """Run a job on a Ray cluster."""
     _ = get_aws_session(profile=profile)
@@ -229,6 +248,7 @@ def submit(
             job_config_path=job_config_path,
             restart=restart,
             do_sync_dotfiles=sync_dotfiles,
+            dashboard_port=dashboard_port,
         )
     except RuntimeError as e:
         logger.error(f"Failed to submit job: {e}")
@@ -251,6 +271,7 @@ def up(
     no_config_cache: NoConfigCacheOpt = False,
     sync_dotfiles: SyncDotfilesOpt = False,
     no_port_forwarding: NoPortForwardingOpt = False,
+    forward_port: ForwardPortOpt = None,
 ) -> None:
     """Create or update a Ray cluster."""
     session = get_aws_session(profile)
@@ -280,13 +301,34 @@ def up(
 
     cluster_head_name = f"ray-{cluster_name}-head"
     close_ssh_connection(cluster_head_name)
-    if not no_port_forwarding:
+
+    services = FORWARDED_PORTS.keys()
+    local_forwarded_ports = {} if no_port_forwarding else FORWARDED_PORTS.copy()
+
+    for el in forward_port if forward_port else []:
+        service_port = el.split(",")
+        if not (
+            len(service_port) == 2 and service_port[0] and service_port[1].isdigit()
+        ):
+            logger.error(f"Invalid port forwarding specification: {el!r}.")
+            sys.exit(-1)
+        service, port = service_port
+        if service not in services:
+            logger.error(f"Invalid service name: {service!r}.")
+            sys.exit(-1)
+        local_forwarded_ports[service] = int(port)
+
+    if local_forwarded_ports:
         logger.info(
             f"[{cluster_head_name}] Forwarding ports for "
-            f"{', '.join(FORWARDED_PORTS.keys())}"
+            f"{', '.join(local_forwarded_ports.keys())}"
         )
-        for port in FORWARDED_PORTS.values():
-            open_ssh_tunnel(cluster_head_name, port)
+        for service in local_forwarded_ports:
+            open_ssh_tunnel(
+                cluster_head_name,
+                FORWARDED_PORTS[service],
+                local_port=local_forwarded_ports[service],
+            )
 
     if open_vscode:
         open_vscode_over_ssh(cluster_head_name)

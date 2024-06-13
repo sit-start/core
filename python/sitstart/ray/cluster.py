@@ -22,8 +22,8 @@ DASHBOARD_PORT = 8265
 logger = get_logger(__name__)
 
 
-def get_job_submission_client() -> JobSubmissionClient:
-    return JobSubmissionClient(f"http://127.0.0.1:{DASHBOARD_PORT}")
+def get_job_submission_client(dashboard_port=DASHBOARD_PORT) -> JobSubmissionClient:
+    return JobSubmissionClient(f"http://127.0.0.1:{dashboard_port}")
 
 
 def wait_for_job_status(
@@ -56,8 +56,8 @@ def get_file_mounts(config_path: Path, user_root: str = "/home") -> dict[Path, P
     return {expand_user(dst, user): _resolve_path(src) for dst, src in mounts.items()}
 
 
-def stop_all_jobs() -> None:
-    client = get_job_submission_client()
+def stop_all_jobs(dashboard_port=DASHBOARD_PORT) -> None:
+    client = get_job_submission_client(dashboard_port)
     for job in client.list_jobs():
         if job.status == "RUNNING":
             if not job.submission_id:
@@ -76,6 +76,7 @@ def submit_job(
     job_config_path: Path | None = None,
     restart: bool = False,
     do_sync_dotfiles: bool = False,
+    dashboard_port: int = DASHBOARD_PORT,
 ) -> str:
     # get the script path's containing repo
     try:
@@ -124,7 +125,7 @@ def submit_job(
     # goes a long way to ensuring reproducibility from only the cached
     # repository state
     # TODO: control env vars here as well w/ ray envs
-    client = get_job_submission_client()
+    client = get_job_submission_client(dashboard_port=dashboard_port)
     entrypoint = " ".join(cmd)
     logger.info(f"Submitting job with entrypoint {entrypoint!r}")
     sub_id = client.submit_job(entrypoint=entrypoint)
