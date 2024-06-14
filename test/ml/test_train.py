@@ -24,6 +24,8 @@ def test_train(
         training_module,
         ckpt_path=config.restore.checkpoint_path,
         float32_matmul_precision=config.float32_matmul_precision,
+        gradient_clip_val=config.gradient_clip.value,
+        gradient_clip_algorithm=config.gradient_clip.algorithm,
         logging_interval=config.logging_interval,
         max_num_epochs=config.max_num_epochs,
         project_name=config.name,
