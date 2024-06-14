@@ -12,7 +12,6 @@ from sitstart.ml import DEFAULT_CHECKPOINT_ROOT
 from sitstart.logging import get_logger
 from sitstart.ml.callbacks import LoggerCallback
 
-
 logger = get_logger(__name__)
 
 
@@ -22,6 +21,8 @@ def train(
     *,
     ckpt_path: str | os.PathLike[str] | None = None,
     float32_matmul_precision: str = "default",
+    gradient_clip_val: float | None = None,
+    gradient_clip_algorithm: str | None = None,
     logging_interval: int = 100,
     max_num_epochs: int = 100,
     project_name: str | None = None,
@@ -84,17 +85,19 @@ def train(
     # TODO: address warning re: missing tensorboard logging directory
     root_dir = str(storage_path) if storage_path else None
     trainer = pl.Trainer(
-        devices="auto",
         accelerator="gpu" if use_gpu else "cpu",
-        strategy=strategy,
-        plugins=plugins,
         callbacks=callbacks,
-        logger=pl_logger,
-        enable_progress_bar=False,
-        max_epochs=max_num_epochs,
-        log_every_n_steps=logging_interval,
-        enable_checkpointing=not with_ray,
         default_root_dir=root_dir if not with_ray else None,
+        devices="auto",
+        enable_checkpointing=not with_ray,
+        enable_progress_bar=False,
+        gradient_clip_val=gradient_clip_val,
+        gradient_clip_algorithm=gradient_clip_algorithm,
+        logger=pl_logger,
+        log_every_n_steps=logging_interval,
+        max_epochs=max_num_epochs,
+        plugins=plugins,
+        strategy=strategy,
     )
 
     if with_ray:
