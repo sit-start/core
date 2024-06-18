@@ -1,28 +1,51 @@
-# 87.4% val acc: https://wandb.ai/kevdale/swin_v2_t_ham10k/runs/65b69_00003
+# 92.0% val acc: https://wandb.ai/kevdale/swin_v2_t_ham10k/runs/9ef03_00000
 defaults:
   - _defaults_
   - trial/data: ham10k
   - trial/model: swin_v2_t
+  - override trial/model/transforms: null
   - _self_
-max_num_epochs: 200
+max_num_epochs: 20
 param_space:
   train_loop_config:
-    loss_fn: { _target_: ray.tune.grid_search, values: [focal] }
+    loss_fn: { _target_: ray.tune.grid_search, values: [focal] } # note
     gamma: { _target_: ray.tune.grid_search, values: [1.0] }
-    weighted_loss: { _target_: ray.tune.grid_search, values: [1] }
-    rebalance: { _target_: ray.tune.grid_search, values: [1] }
+    weighted_loss: { _target_: ray.tune.grid_search, values: [0] }
+    rebalance: { _target_: ray.tune.grid_search, values: [0] }
     lr: { _target_: ray.tune.grid_search, values: [3e-5] }
     dedupe: { _target_: ray.tune.grid_search, values: [1] }
+    contrast: { _target_: ray.tune.grid_search, values: [2.0] }
+    test_as_val: { _target_: ray.tune.grid_search, values: [0] }
+    full_res: { _target_: ray.tune.grid_search, values: [1] } # note
+    augment: { _target_: ray.tune.grid_search, values: [0] }
+    attention_dropout: { _target_: ray.tune.grid_search, values: [0.0] }
+    dropout: { _target_: ray.tune.grid_search, values: [0.05] }
 trial:
   data:
     batch_size: 12
     module:
       rebalance: ${param_space.train_loop_config.rebalance}
       dedupe: ${param_space.train_loop_config.dedupe}
+      augment: ${if:${param_space.train_loop_config.augment},${trial.data.augment.transform},null}
   loss_fn:
     _target_: sitstart.ml.losses.FocalLoss
     weight: ${if:${param_space.train_loop_config.weighted_loss},${trial.data.inv_class_freq},null}
     gamma: ${param_space.train_loop_config.gamma}
+  model:
+    attention_dropout: ${param_space.train_loop_config.attention_dropout}
+    dropout: ${param_space.train_loop_config.dropout}
+    target_size:
+      crop: 443
+      resize: 450
+    transforms:
+      _convert_: all
+      _target_: torchvision.transforms.Compose
+      transforms:
+        - _target_: sitstart.ml.transforms.AdjustContrast
+          factor: ${param_space.train_loop_config.contrast}
+        - _target_: torchvision.transforms._presets.ImageClassification
+          crop_size: ${trial.model.target_size.crop}
+          resize_size: ${trial.model.target_size.resize}
   optimizer:
     _partial_: true
     _target_: torch.optim.AdamW
