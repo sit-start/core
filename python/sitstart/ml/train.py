@@ -40,7 +40,7 @@ def train(
         ckpt_path: Path to a checkpoint from which to resume training.
             Must be a local path if _with_ray=False.
         float32_matmul_precision: Precision for matrix multiplication.
-        logging_interval: Logging interval.
+        logging_interval: Logging interval in batches.
         max_num_epochs: Maximum number of epochs.
         project_name: Name of the project.
         seed: Random seed.

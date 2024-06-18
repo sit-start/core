@@ -1,0 +1,3 @@
+contrast:
+  _target_: sitstart.ml.transforms.AdjustContrast
+  factor: 1.0
