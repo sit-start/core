@@ -1,5 +1,4 @@
 defaults:
-  - augment/transforms/rotate
   - augment/transforms/square_crop
   - augment/transforms/vflip
   - augment/transforms/hflip
