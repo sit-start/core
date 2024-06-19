@@ -129,7 +129,7 @@ def test_stop_jobs(ray_cluster, ray_config):
     status = wait_for_job_status(client, sub_id, JobStatus.RUNNING)
     assert status == JobStatus.RUNNING
 
-    ray.stop_jobs(dashboard_port=TEST_DASHBOARD_PORT)
+    ray.stop_job([sub_id], dashboard_port=TEST_DASHBOARD_PORT)
     status = wait_for_job_status(client, sub_id, JobStatus.STOPPED)
     assert status == JobStatus.STOPPED
 

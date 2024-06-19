@@ -6,7 +6,7 @@ from typing import Any
 
 import git
 import yaml
-from ray.job_submission import JobStatus, JobSubmissionClient
+from ray.job_submission import JobDetails, JobStatus, JobSubmissionClient
 
 from sitstart.logging import get_logger
 from sitstart.ml.experiments import CONFIG_ROOT
@@ -45,6 +45,31 @@ def _resolve_path(path: str | Path) -> Path:
     return Path(path).expanduser().resolve()
 
 
+def _stop_job(
+    job: JobDetails, delete: bool = False, dashboard_port=DASHBOARD_PORT
+) -> None:
+    logger.info(f"Stopping job {job.submission_id} ({job.job_id})")
+    if not job.submission_id:
+        logger.warning(
+            f"Running {job.job_id} has no submission ID and cannot be stopped"
+        )
+        return
+
+    client = get_job_submission_client(dashboard_port)
+    try:
+        if job.status == JobStatus.RUNNING:
+            client.stop_job(job.submission_id)
+            if delete:
+                wait_for_job_status(
+                    client, job.submission_id, JobStatus.STOPPED, timeout_sec=10
+                )
+        if delete:
+            client.delete_job(job.submission_id)
+    except Exception as e:
+        logger.error(f"Error stopping job {job.submission_id}: {e}")
+        return
+
+
 def get_file_mounts(config_path: Path, user_root: str = "/home") -> dict[Path, Path]:
     config = yaml.load(config_path.read_text(), Loader=yaml.SafeLoader)
     user = config["auth"]["ssh_user"]
@@ -56,17 +81,41 @@ def get_file_mounts(config_path: Path, user_root: str = "/home") -> dict[Path, P
     return {expand_user(dst, user): _resolve_path(src) for dst, src in mounts.items()}
 
 
-def stop_all_jobs(dashboard_port=DASHBOARD_PORT) -> None:
+def stop_job(sub_id: str, delete: bool = False, dashboard_port=DASHBOARD_PORT) -> None:
+    if sub_id == "all":
+        stop_all_jobs(delete=delete, dashboard_port=dashboard_port)
+        return
+
+    logger.info(f"Stopping job with submission ID {sub_id}.")
+    client = get_job_submission_client(dashboard_port)
+    try:
+        job = client.get_job_info(sub_id)
+    except Exception as e:
+        logger.error(f"Error getting job info for {sub_id}: {e}")
+    _stop_job(job, delete=delete, dashboard_port=dashboard_port)
+
+
+def stop_all_jobs(delete: bool = False, dashboard_port=DASHBOARD_PORT) -> None:
+    logger.info("Stopping all jobs.")
     client = get_job_submission_client(dashboard_port)
     for job in client.list_jobs():
-        if job.status == "RUNNING":
-            if not job.submission_id:
-                logger.warning(
-                    f"Running {job.job_id} has no submission ID and cannot be stopped"
-                )
-                continue
-            logger.info(f"Stopping job {job.job_id} / {job.submission_id}")
-            client.stop_job(job.submission_id)
+        _stop_job(job, delete=delete, dashboard_port=dashboard_port)
+
+
+def list_jobs(dashboard_port=DASHBOARD_PORT) -> None:
+    client = get_job_submission_client(dashboard_port)
+    start = "\n" + "-" * 50 + "\n"
+    message = "Listing all jobs."
+    for job in client.list_jobs():
+        entrypoint = job.entrypoint.replace(" ", " \\\n    ")
+        description = job.metadata.get("description", None) if job.metadata else None
+        message += (
+            f"{start}{job.job_id} / {job.submission_id}:"
+            + (f"\n- description: {description}" if description else "")
+            + (f"\n- status: {job.status}")
+            + (f"\n- entrypoint: {entrypoint}")
+        )
+    logger.info(message)
 
 
 def submit_job(
@@ -74,6 +123,7 @@ def submit_job(
     config_path: Path,
     cluster_name: str,
     job_config_path: Path | None = None,
+    description: str | None = None,
     restart: bool = False,
     do_sync_dotfiles: bool = False,
     dashboard_port: int = DASHBOARD_PORT,
@@ -127,8 +177,9 @@ def submit_job(
     # TODO: control env vars here as well w/ ray envs
     client = get_job_submission_client(dashboard_port=dashboard_port)
     entrypoint = " ".join(cmd)
+    metadata = {"description": description} if description else None
     logger.info(f"Submitting job with entrypoint {entrypoint!r}")
-    sub_id = client.submit_job(entrypoint=entrypoint)
+    sub_id = client.submit_job(entrypoint=entrypoint, metadata=metadata)
 
     logger.info(f"Job {sub_id} submitted")
     logger.info("Logs: http://localhost:3000/d/ray_logs_dashboard")
