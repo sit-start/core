@@ -9,3 +9,6 @@ class AdjustContrast(torch.nn.Module):
 
     def forward(self, img: torch.Tensor) -> torch.Tensor:
         return adjust_contrast(img, self.factor)
+
+    def __repr__(self) -> str:
+        return f"AdjustContrast(factor={self.factor})"

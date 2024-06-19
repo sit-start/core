@@ -3,7 +3,6 @@ defaults:
   - _defaults_
   - trial/data: ham10k
   - trial/model: swin_v2_t
-  - override trial/model/transforms: null
   - _self_
 max_num_epochs: 20
 param_space:
@@ -38,14 +37,8 @@ trial:
       crop: 443
       resize: 450
     transforms:
-      _convert_: all
-      _target_: torchvision.transforms.Compose
-      transforms:
-        - _target_: sitstart.ml.transforms.AdjustContrast
-          factor: ${param_space.train_loop_config.contrast}
-        - _target_: torchvision.transforms._presets.ImageClassification
-          crop_size: ${trial.model.target_size.crop}
-          resize_size: ${trial.model.target_size.resize}
+      contrast:
+        factor: ${param_space.train_loop_config.contrast}
   optimizer:
     _partial_: true
     _target_: torch.optim.AdamW

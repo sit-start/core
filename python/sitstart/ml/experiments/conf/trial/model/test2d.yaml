@@ -1,3 +1,6 @@
+defaults:
+  - transforms/convert
+  - _self_
 dims: [3, 8, 8]
 module:
   _target_: sitstart.ml.models.test.TestConvNet2d

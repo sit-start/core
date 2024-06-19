@@ -58,7 +58,7 @@ trial:
       _target_: ???
       augment: ${trial.data.augment.transform}
       batch_size: ${..batch_size}
-      transform: ${trial.model.transforms}
+      transform: ${trial.model.transform}
   loss_fn:
     _target_: torch.nn.CrossEntropyLoss
   lr_scheduler: null
@@ -69,7 +69,11 @@ trial:
     target_size:
       crop: null
       resize: null
-    transforms: null
+    transforms: {}
+    transform:
+      _convert_: all
+      _target_: torchvision.transforms.Compose
+      transforms: ${oc.dict.values:..transforms}
   metrics: ${eval.train.metrics}
   optimizer:
     _partial_: true

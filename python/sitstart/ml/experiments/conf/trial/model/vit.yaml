@@ -1,5 +1,5 @@
 defaults:
-  - transforms: image_classification
+  - transforms/image_classification
   - _self_
 module:
   _convert_: none
