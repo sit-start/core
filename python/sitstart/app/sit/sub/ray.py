@@ -17,7 +17,8 @@ from sitstart.ray.cluster import (
     DASHBOARD_PORT,
     cluster_down,
     cluster_up,
-    stop_all_jobs,
+    list_jobs as _list_jobs,
+    stop_job as _stop_job,
     submit_job,
 )
 from sitstart.util.run import run
@@ -169,6 +170,25 @@ JobConfigOpt = Annotated[
         show_default=False,
     ),
 ]
+DescriptionOpt = Annotated[
+    Optional[str],
+    Option(help="A description for the job.", show_default=False),
+]
+SubmissionIdArg = Annotated[
+    str,
+    Argument(
+        help="The submission ID of the job to stop or 'all' to stop all jobs.",
+        show_default=False,
+    ),
+]
+DeleteOpt = Annotated[
+    bool,
+    Option(
+        "--delete",
+        help="Delete the job after stopping it.",
+        show_default=False,
+    ),
+]
 RestartOpt = Annotated[
     bool,
     Option(
@@ -210,11 +230,21 @@ def _resolve_cluster_config_path(config: str) -> Path:
 
 
 @app.command()
-def stop_jobs(
+def stop_job(
+    submission_id: SubmissionIdArg,
+    delete: DeleteOpt = False,
     dashboard_port: DashboardPortOpt = DASHBOARD_PORT,
 ) -> None:
-    """Stop all running jobs on the active Ray cluster."""
-    stop_all_jobs(dashboard_port=dashboard_port)
+    """Stops a job on the active Ray cluster."""
+    _stop_job(sub_id=submission_id, delete=delete, dashboard_port=dashboard_port)
+
+
+@app.command()
+def list_jobs(
+    dashboard_port: DashboardPortOpt = DASHBOARD_PORT,
+) -> None:
+    """List all jobs on the active Ray cluster."""
+    _list_jobs(dashboard_port=dashboard_port)
 
 
 @app.command()
@@ -227,6 +257,7 @@ def submit(
     restart: RestartOpt = False,
     sync_dotfiles: SyncDotfilesOpt = False,
     dashboard_port: DashboardPortOpt = DASHBOARD_PORT,
+    description: DescriptionOpt = None,
 ) -> str:
     """Run a job on a Ray cluster."""
     _ = get_aws_session(profile=profile)
@@ -249,6 +280,7 @@ def submit(
             restart=restart,
             do_sync_dotfiles=sync_dotfiles,
             dashboard_port=dashboard_port,
+            description=description,
         )
     except RuntimeError as e:
         logger.error(f"Failed to submit job: {e}")
