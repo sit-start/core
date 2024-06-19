@@ -8,13 +8,14 @@ from typing import Any, Callable, cast
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from ray.air.integrations.wandb import WandbLoggerCallback
-from ray.train import FailureConfig, Result, RunConfig, get_context
+from ray.train import Checkpoint, FailureConfig, Result, RunConfig, get_context
 from ray.train.torch import TorchConfig, TorchTrainer
 from ray.tune import TuneConfig, Tuner
 from ray.tune.experiment.trial import Trial
 
 from sitstart.aws.util import update_env
 from sitstart.logging import get_logger
+from sitstart.ml import DEFAULT_CHECKPOINT_ROOT
 from sitstart.ml.experiments.util import get_search_alg, resolve
 from sitstart.ml.train import train
 from sitstart.scm.git.repo_state import RepoState, get_repo
@@ -160,7 +161,7 @@ def _get_train_loop_per_worker(config: DictConfig) -> Callable[[dict[str, Any]],
         train(
             data_module=data_module,
             training_module=training_module,
-            ckpt_path=_get_ckpt_path(config),
+            ckpt_path=get_local_checkpoint_path(config),
             float32_matmul_precision=config.float32_matmul_precision,
             gradient_clip_algorithm=config.gradient_clip.algorithm,
             gradient_clip_val=config.gradient_clip.value,
@@ -204,6 +205,14 @@ def _get_ray_trainer(
         metadata=metadata,
         torch_config=TorchConfig(backend=config.torch.distributed_backend),
     )
+
+
+def get_local_checkpoint_path(config: DictConfig) -> str | None:
+    if (ckpt_path := _get_ckpt_path(config)) is None:
+        return None
+    ckpt = Checkpoint(ckpt_path)
+    ckpt_dir = ckpt.to_directory(f"{DEFAULT_CHECKPOINT_ROOT}/ckpt")
+    return str(Path(ckpt_dir) / "checkpoint.ckpt")
 
 
 def train_with_ray(config: DictConfig) -> None:

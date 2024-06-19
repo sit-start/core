@@ -8,8 +8,8 @@ from pytorch_lightning.callbacks import Callback
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.strategies import Strategy
 
-from sitstart.ml import DEFAULT_CHECKPOINT_ROOT
 from sitstart.logging import get_logger
+from sitstart.ml import DEFAULT_CHECKPOINT_ROOT
 from sitstart.ml.callbacks import LoggerCallback
 
 logger = get_logger(__name__)
@@ -37,8 +37,7 @@ def train(
     Args:
         data_module: PyTorch Lightning data module.
         training_module: PyTorch Lightning training module.
-        ckpt_path: Path to a checkpoint from which to resume training.
-            Must be a local path if _with_ray=False.
+        ckpt_path: Path to a local checkpoint from which to resume training.
         float32_matmul_precision: Precision for matrix multiplication.
         logging_interval: Logging interval in batches.
         max_num_epochs: Maximum number of epochs.
@@ -102,14 +101,10 @@ def train(
 
     if with_ray:
         trainer = prepare_trainer(trainer)
-
         if ckpt := ray.train.get_checkpoint():
             assert (
                 ckpt_path is None
             ), "Cannot load both trial- and user-specified checkpoints."
-        elif ckpt_path:
-            ckpt = ray.train.Checkpoint(ckpt_path)
-        if ckpt:
             ckpt_dir = ckpt.to_directory(f"{DEFAULT_CHECKPOINT_ROOT}/ckpt")
             ckpt_path = Path(ckpt_dir) / "checkpoint.ckpt"
 
