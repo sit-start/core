@@ -435,3 +435,27 @@ def one_hot(
     )
 
     return target_onehot.scatter_(1, target, 1.0)
+
+
+def get_outputs_and_targets(
+    model: torch.nn.Module,
+    dataloader: torch.utils.data.DataLoader,
+    max_num_batches: int | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Compute outputs and targets for the given model and dataloader."""
+    logger.info("Computing outputs and targets.")
+    max_num_batches = min(max_num_batches or len(dataloader), len(dataloader))
+    device = model.device
+    if max_num_batches == 0:
+        return torch.empty(0).to(device), torch.empty(0).to(device)
+
+    outputs, targets = [], []
+    model.eval()
+    with torch.no_grad():
+        for i, (input, target) in enumerate(dataloader):
+            if i >= max_num_batches:
+                break
+            outputs.append(model(input.to(device)))
+            targets.append(target.to(device))
+
+    return torch.concat(outputs), torch.concat(targets)
