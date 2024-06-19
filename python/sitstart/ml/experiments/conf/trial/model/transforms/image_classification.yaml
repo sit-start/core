@@ -1,4 +1,4 @@
-# ImageClassification transforms using the trial's target dims
-_target_: torchvision.transforms._presets.ImageClassification
-crop_size: ${trial.model.target_size.crop}
-resize_size: ${trial.model.target_size.resize}
+image_classification:
+  _target_: torchvision.transforms._presets.ImageClassification
+  crop_size: ${trial.model.target_size.crop}
+  resize_size: ${trial.model.target_size.resize}

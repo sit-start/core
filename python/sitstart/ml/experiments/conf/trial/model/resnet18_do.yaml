@@ -1,5 +1,5 @@
 defaults:
-  - transforms: image_classification
+  - transforms/image_classification
   - _self_
 dropout: 0.25
 module:

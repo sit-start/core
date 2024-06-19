@@ -1,5 +1,6 @@
 defaults:
-  - transforms: image_classification
+  - transforms/contrast
+  - transforms/image_classification
   - _self_
 attention_dropout: 0.0
 dropout: 0.0

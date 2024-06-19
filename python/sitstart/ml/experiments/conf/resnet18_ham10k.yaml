@@ -4,7 +4,6 @@ defaults:
   - trial/data: ham10k
   - trial/lr_scheduler: cosine_annealing
   - trial/model: resnet18_do
-  - override trial/model/transforms: image_classification
   - _self_
 max_num_epochs: 150
 param_space:
