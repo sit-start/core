@@ -55,15 +55,6 @@ class TrainingModule(pl.LightningModule):
     def test_step(self, batch: Any, batch_idx: int) -> None:
         self._val_test_step("test", batch, batch_idx)
 
-    def on_train_epoch_start(self) -> None:
-        self._log_start("train")
-
-    def on_validation_epoch_start(self) -> None:
-        self._log_start("val")
-
-    def on_test_epoch_start(self) -> None:
-        self._log_start("test")
-
     def configure_optimizers(self) -> OptimizerLRSchedulerConfig:
         return {
             "optimizer": self.optimizer,
@@ -74,22 +65,21 @@ class TrainingModule(pl.LightningModule):
             },
         }
 
-    def _log_start(self, stage: str):
-        for _, metric in self.metrics[stage].items():
-            metric.reset()
+    def to(self, *args, **kwargs) -> "TrainingModule":
+        super().to(*args, **kwargs)
+        self._update_metrics_device()
+        return self
 
     def _log_step(
         self, stage: str, loss: torch.Tensor, output: torch.Tensor, target: torch.Tensor
     ) -> None:
-        sync_dist = True  # TODO: eval penalty for sync_dist on each step
-        self.log(
-            f"{stage}_loss", loss, on_step=False, on_epoch=True, sync_dist=sync_dist
-        )
+        kwargs: dict[str, Any] = dict(on_step=False, on_epoch=True, sync_dist=True)
+        self.log(f"{stage}_loss", loss, **kwargs)
         for key, metric in self.metrics[stage].items():
-            val = metric.update(output, target).compute()
-            self.log(
-                f"{stage}_{key}", val, on_step=False, on_epoch=True, sync_dist=sync_dist
-            )
+            metric.update(output, target)
+            if self.trainer.is_last_batch:
+                self.log(f"{stage}_{key}", metric.compute(), **kwargs)
+                metric.reset()
 
     def _val_test_step(self, stage: str, batch: Any, _: int) -> None:
         inputs, targets = batch
@@ -102,8 +92,3 @@ class TrainingModule(pl.LightningModule):
         for stage in self.metrics:
             for metric in self.metrics[stage].values():
                 metric.to(self.device)
-
-    def to(self, *args, **kwargs) -> "TrainingModule":
-        super().to(*args, **kwargs)
-        self._update_metrics_device()
-        return self
