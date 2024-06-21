@@ -134,7 +134,9 @@ def _get_ckpt_path(cfg: DictConfig) -> str | None:
     return None
 
 
-def _get_train_loop_per_worker(config: DictConfig) -> Callable[[dict[str, Any]], None]:
+def _get_train_loop_per_worker(
+    config: DictConfig, with_ray: bool = True
+) -> Callable[[dict[str, Any]], None]:
     def train_loop_per_worker(train_loop_config: dict[str, Any]) -> None:
         register_omegaconf_resolvers()
         config_for_trial = copy.deepcopy(config)
@@ -172,7 +174,7 @@ def _get_train_loop_per_worker(config: DictConfig) -> Callable[[dict[str, Any]],
             storage_path=config.storage_path,
             use_gpu=config.param_space.scaling_config.use_gpu,
             wandb_enabled=config.wandb.enabled,
-            with_ray=True,
+            with_ray=with_ray,
         )
 
     return train_loop_per_worker

@@ -81,10 +81,17 @@ def train(
                 save_dir=str(storage_path) if storage_path else ".",
             )
 
+    if use_gpu:
+        accelerator = "gpu"
+    elif torch.backends.mps.is_available():
+        accelerator = "mps"
+    else:
+        accelerator = "cpu"
+
     # TODO: address warning re: missing tensorboard logging directory
     root_dir = str(storage_path) if storage_path else None
     trainer = pl.Trainer(
-        accelerator="gpu" if use_gpu else "cpu",
+        accelerator=accelerator,
         callbacks=callbacks,
         default_root_dir=root_dir if not with_ray else None,
         devices="auto",
