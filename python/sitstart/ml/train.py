@@ -25,6 +25,7 @@ def train(
     gradient_clip_algorithm: str | None = None,
     logging_interval: int = 100,
     max_num_epochs: int = 100,
+    num_sanity_val_steps: int | None = None,
     project_name: str | None = None,
     seed: int | None = None,
     storage_path: os.PathLike[str] | None = None,
@@ -41,6 +42,7 @@ def train(
         float32_matmul_precision: Precision for matrix multiplication.
         logging_interval: Logging interval in batches.
         max_num_epochs: Maximum number of epochs.
+        num_sanity_val_steps: Number of sanity validation steps. See pl.Trainer.
         project_name: Name of the project.
         seed: Random seed.
         storage_path: Path to save results. Must be a local path if
@@ -102,6 +104,7 @@ def train(
         logger=pl_logger,
         log_every_n_steps=logging_interval,
         max_epochs=max_num_epochs,
+        num_sanity_val_steps=num_sanity_val_steps,
         plugins=plugins,
         strategy=strategy,
     )

@@ -21,6 +21,7 @@ hydra:
     dir: ${oc.env:HOME}/.local/share/hydra/outputs/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
 max_num_epochs: 1
 name: ${hydra:job.config_name}
+num_sanity_val_steps: null
 logging_interval: 100
 param_space:
   _convert_: all

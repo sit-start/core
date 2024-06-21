@@ -169,6 +169,7 @@ def _get_train_loop_per_worker(
             gradient_clip_val=config.gradient_clip.value,
             logging_interval=config.logging_interval,
             max_num_epochs=config.max_num_epochs,
+            num_sanity_val_steps=config.num_sanity_val_steps,
             project_name=_get_project_name(config),
             seed=config.seed,
             storage_path=config.storage_path,
