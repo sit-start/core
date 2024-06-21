@@ -9,6 +9,10 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import ConstantLR, LRScheduler
 from torcheval.metrics import Metric
 
+from sitstart.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 class TrainingModule(pl.LightningModule):
     def __init__(
@@ -37,6 +41,7 @@ class TrainingModule(pl.LightningModule):
         for stage in self.metrics:
             for key, metric in metrics.items():
                 self.metrics[stage][key] = copy.deepcopy(metric)
+                self.metrics[stage][key].reset()
         self._update_metrics_device()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -54,6 +59,15 @@ class TrainingModule(pl.LightningModule):
 
     def test_step(self, batch: Any, batch_idx: int) -> None:
         self._val_test_step("test", batch, batch_idx)
+
+    def on_validation_epoch_end(self) -> None:
+        self._log_end("val")
+
+    def on_train_epoch_end(self) -> None:
+        self._log_end("train")
+
+    def on_test_epoch_end(self) -> None:
+        self._log_end("test")
 
     def configure_optimizers(self) -> OptimizerLRSchedulerConfig:
         return {
@@ -73,13 +87,15 @@ class TrainingModule(pl.LightningModule):
     def _log_step(
         self, stage: str, loss: torch.Tensor, output: torch.Tensor, target: torch.Tensor
     ) -> None:
-        kwargs: dict[str, Any] = dict(on_step=False, on_epoch=True, sync_dist=True)
-        self.log(f"{stage}_loss", loss, **kwargs)
+        self.log(f"{stage}_loss", loss, on_step=False, on_epoch=True, sync_dist=True)
         for key, metric in self.metrics[stage].items():
             metric.update(output, target)
-            if self.trainer.is_last_batch:
-                self.log(f"{stage}_{key}", metric.compute(), **kwargs)
-                metric.reset()
+
+    def _log_end(self, stage: str) -> None:
+        logger.info(f"_log_end({stage!r})")
+        for key, metric in self.metrics[stage].items():
+            self.log(f"{stage}_{key}", metric.compute(), sync_dist=True)
+            metric.reset()
 
     def _val_test_step(self, stage: str, batch: Any, _: int) -> None:
         inputs, targets = batch

@@ -33,18 +33,17 @@ def test_training_module(
     log_mock.assert_has_calls(
         [call("train_loss", ANY, on_step=False, on_epoch=True, sync_dist=True)]
     )
-    log_mock.assert_has_calls(
-        [call("train_acc", ANY, on_step=False, on_epoch=True, sync_dist=True)]
-    )
+
+    training_module.on_train_epoch_end()
+    log_mock.assert_has_calls([call("train_acc", ANY, sync_dist=True)])
 
     training_module.on_validation_epoch_start()
     metric_reset_mock.assert_has_calls([call()])
 
-    log_mock.reset_mock()
     training_module.validation_step(batch, 0)
     log_mock.assert_has_calls(
         [call("val_loss", ANY, on_step=False, on_epoch=True, sync_dist=True)]
     )
-    log_mock.assert_has_calls(
-        [call("val_acc", ANY, on_step=False, on_epoch=True, sync_dist=True)]
-    )
+
+    training_module.on_validation_epoch_end()
+    log_mock.assert_has_calls([call("val_acc", ANY, sync_dist=True)])
