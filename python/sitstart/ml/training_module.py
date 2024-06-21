@@ -92,7 +92,6 @@ class TrainingModule(pl.LightningModule):
             metric.update(output, target)
 
     def _log_end(self, stage: str) -> None:
-        logger.info(f"_log_end({stage!r})")
         for key, metric in self.metrics[stage].items():
             self.log(f"{stage}_{key}", metric.compute(), sync_dist=True)
             metric.reset()

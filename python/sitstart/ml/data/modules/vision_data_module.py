@@ -69,6 +69,7 @@ class VisionDataModule(pl.LightningDataModule):
         self.shuffle = shuffle
         self._test_as_val = test_as_val
         self._sampler = sampler
+        # TODO: augment before transform for augmentations like color_jitter
         self.train_transform = Compose((transform, augment)) if augment else transform
         self.prepare_data_per_node = True
 
