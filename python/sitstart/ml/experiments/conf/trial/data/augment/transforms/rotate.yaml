@@ -1,6 +1,6 @@
 rotate:
   _target_: torchvision.transforms.RandomRotation
-  degrees: 20
+  degrees: 5
   interpolation:
     _target_: torchvision.transforms.InterpolationMode
     _args_: [bilinear]
