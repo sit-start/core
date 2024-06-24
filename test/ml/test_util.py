@@ -23,10 +23,12 @@ def test_update_submodule():
             return self.fc2(x)
 
     model = TestModel()
-    update_module(model, freeze=["hidden_layers.0"])
+    update_module(model, require_grad=["", "-fc2"])
 
-    assert all(not p.requires_grad for p in model.hidden_layers[0].parameters())
+    assert all(p.requires_grad for p in model.hidden_layers[0].parameters())
     assert all(p.requires_grad for p in model.hidden_layers[1].parameters())
+    assert all(p.requires_grad for p in model.fc1.parameters())
+    assert all(not p.requires_grad for p in model.fc2.parameters())
 
     model = TestModel()
     for layer in model.hidden_layers:

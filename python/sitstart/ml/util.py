@@ -24,7 +24,7 @@ logger = get_logger(__name__)
 
 def update_module(
     module: nn.Module | ModuleCreator | DictConfig | None = None,
-    freeze: list[str] | ListConfig | None = None,
+    require_grad: list[str] | ListConfig | None = None,
     replace: dict[str, nn.Module | ModuleCreator] | DictConfig | None = None,
     append: dict[str, nn.Module | ModuleCreator] | DictConfig | None = None,
     init: dict[str, ModuleInitializer | None] | DictConfig | None = None,
@@ -60,7 +60,7 @@ def update_module(
       _convert_: none
       _recursive_: false
       _target_: sitstart.ml.util.update_module
-      freeze: [""]
+      require_grad: ["-"]
       module:
         _target_: torchvision.models.resnet34
         weights:
@@ -79,14 +79,20 @@ def update_module(
 
     Args:
         module: Module to update.
-        freeze: Names of sub-modules to freeze. All initialized
-            sub-modules will be unfrozen. Defaults to no sub-modules;
-            use `freeze=[""]` to freeze the entire module. Prefixing
-            the module name with '-' will unfreeze it.
+        require_grad: Names of sub-modules to train; sets
+            `requires_grad` for all sub-module parameters to False
+            if the name is prefixed with "-" and True otherwise.
+            Defaults to the root sub-module, [""], which trains all
+            sub-modules. Targets are processed in order, so, e.g.,
+            to train all but 'layer1', use ["", "-layer1"], or
+            only 'head', use ["-", "head"]. See `train_submodule`
+            for details.
         replace: Names of sub-modules to replace and their
-            replacements. See `update_submodule` for details.
+            replacements. Applied after the above step. See
+            `update_submodule` for details.
         append: Names of sub-modules to append to, and modules to
-            append. See `update_submodule` for details.
+            append. Applied after the above steps. See
+            `update_submodule` for details.
         init: List of submodule name or (name, initializer) tuples
             for initialization. Applied after the above steps.
             See `init_module` for details.
@@ -106,19 +112,14 @@ def update_module(
         )
     assert isinstance(module, nn.Module)
 
-    freeze = freeze or []
-    unfreeze = [target[1:] for target in freeze if target.startswith("-")]
-    freeze = [target for target in freeze if not target.startswith("-")]
-    for target in freeze:
-        freeze_module(module.get_submodule(target))
-    for target in unfreeze:
-        unfreeze_module(module.get_submodule(target))
-
-    for target, value in (append or {}).items():
-        update_submodule(SubmoduleAction.APPEND, module, str(target), value)
+    for target in [""] if require_grad is None else require_grad:
+        require_grad_submodule(module, target)
 
     for target, value in (replace or {}).items():
         update_submodule(SubmoduleAction.REPLACE, module, str(target), value)
+
+    for target, value in (append or {}).items():
+        update_submodule(SubmoduleAction.APPEND, module, str(target), value)
 
     for target, initializer in (init or {}).items():
         init_submodule(module, str(target), initializer)
@@ -157,15 +158,13 @@ def update_submodule(
     for details.
     """
     action = SubmoduleAction(action) if isinstance(action, str) else action
-    all_targets, _ = zip(*module.named_modules())
-    filtered_targets = fnmatch.filter(all_targets, target)
-    if not filtered_targets:
+    submodules = get_submodules(module, target)
+    if not submodules:
         raise ValueError(f"No sub-modules found for target {target!r}.")
     needs_copy = False
 
-    for filtered_target in filtered_targets:
-        target_module = module.get_submodule(filtered_target)
-        keys = filtered_target.split(".")
+    for name, submodule in submodules.items():
+        keys = name.split(".")
         parent = module.get_submodule(".".join(keys[:-1]))
 
         if isinstance(value, nn.Module):
@@ -179,7 +178,7 @@ def update_submodule(
             raise ValueError("Value must be an nn.Module, Callable, or DictConfig.")
 
         if action == SubmoduleAction.APPEND:
-            setattr(parent, keys[-1], nn.Sequential(target_module, val))
+            setattr(parent, keys[-1], nn.Sequential(submodule, val))
         elif action == SubmoduleAction.REPLACE:
             setattr(parent, keys[-1], val)
         else:
@@ -190,7 +189,7 @@ def init_parameter(
     module: nn.Module,
     target: str,
     initializer: ParameterInitializer | DictConfig,
-    unfreeze: bool = True,
+    requires_grad: bool = True,
 ) -> None:
     """Re-initialize the given named target parameter.
 
@@ -200,21 +199,38 @@ def init_parameter(
     if isinstance(initializer, DictConfig):
         initializer = cast(ParameterInitializer, instantiate(initializer))
 
-    all_targets, _ = zip(*module.named_parameters())
-    filtered_targets = fnmatch.filter(all_targets, target)
-
-    for filtered_target in filtered_targets:
-        param = module.get_parameter(filtered_target)
+    for param in get_parameters(module, target).values():
         initializer(param)
-        if unfreeze:
-            param.requires_grad = True
+        param.requires_grad = requires_grad
+
+
+def get_submodules(module: nn.Module, target: str) -> dict[str, nn.Module]:
+    """Get sub-modules for the given target.
+
+    Accepts shell-style `target` patterns, processed with
+    `fnmatch.filter`.
+    """
+    named_modules = {name: module for name, module in module.named_modules()}
+    filtered_names = fnmatch.filter(named_modules.keys(), target)
+    return {name: named_modules[name] for name in filtered_names}
+
+
+def get_parameters(module: nn.Module, target: str) -> dict[str, Parameter]:
+    """Get parameters for the given target.
+
+    Accepts shell-style `target` patterns, processed with
+    `fnmatch.filter`.
+    """
+    named_params = {name: param for name, param in module.named_parameters()}
+    filtered_names = fnmatch.filter(named_params.keys(), target)
+    return {name: named_params[name] for name in filtered_names}
 
 
 def init_submodule(
     module: nn.Module,
     target: str,
     initializer: ModuleInitializer | DictConfig | None = None,
-    unfreeze: bool = True,
+    requires_grad: bool = True,
 ) -> None:
     """Re-initialize parameters of the sub-module for the given target.
 
@@ -224,20 +240,17 @@ def init_submodule(
     If no initializer is provided, the sub-module must implement
     `reset_parameters`.
     """
-    all_targets, _ = zip(*module.named_modules())
-    filtered_targets = fnmatch.filter(all_targets, target)
-
     if isinstance(initializer, DictConfig):
         initializer = cast(ModuleInitializer, instantiate(initializer))
 
-    for filtered_target in filtered_targets:
-        init_module(module.get_submodule(filtered_target), initializer, unfreeze)
+    for submodule in get_submodules(module, target).values():
+        init_module(submodule, initializer, requires_grad=requires_grad)
 
 
 def init_module(
     module: nn.Module,
     initializer: Callable[[nn.Module], None] | None = None,
-    unfreeze: bool = True,
+    requires_grad: bool = True,
 ) -> nn.Module:
     """Re-initialize the parameters of the given module.
 
@@ -256,23 +269,33 @@ def init_module(
     initializer = initializer or default_init
     initializer(module)
 
-    if unfreeze:
-        unfreeze_module(module)
+    require_grad(module, requires_grad)
 
     return module
 
 
-def freeze_module(module: nn.Module) -> nn.Module:
-    """Freeze all parameters of a module."""
-    for param in module.parameters():
-        param.requires_grad = False
+def require_grad_submodule(module: nn.Module, target: str) -> nn.Module:
+    """Set `requires_grad` for all parameters of the `target` sub-module.
+
+    `requires_grad` is set to False if `target` is prefixed with '-' and
+    True otherwise.
+
+    Accepts shell-style `target` patterns, processed with
+    `fnmatch.filter`.
+    """
+    requires_grad = not target.startswith("-")
+    target = target if requires_grad else target[1:]
+
+    for submodule in get_submodules(module, target).values():
+        require_grad(submodule, requires_grad=requires_grad)
+
     return module
 
 
-def unfreeze_module(module: nn.Module) -> nn.Module:
-    """Unfreeze all parameters of a module."""
+def require_grad(module: nn.Module, requires_grad: bool = True) -> nn.Module:
+    """Set `requires_grad` for the module's parameters."""
     for param in module.parameters():
-        param.requires_grad = True
+        param.requires_grad = requires_grad
     return module
 
 
