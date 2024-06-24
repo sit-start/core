@@ -2,13 +2,14 @@ defaults:
   - augment/transforms/square_crop
   - augment/transforms/vflip
   - augment/transforms/hflip
-inv_class_freq:
-  _target_: torch.tensor
-  data: [9.11, 1.49, 87.1, 9.00, 70.5, 19.5, 30.6]
 dims: [3, 450, 600]
 mean: [0.7544, 0.5711, 0.6020]
 module:
   _partial_: true
   _target_: sitstart.ml.data.modules.ham10k.HAM10k
+nml_inv_class_freq:
+  _target_: torch.tensor
+  # from training set, with deduping
+  data: [0.0399, 0.0054, 0.0473, 0.0884, 0.1271, 0.2953, 0.3965]
 num_classes: 7
 std: [0.1319, 0.1442, 0.1571]
