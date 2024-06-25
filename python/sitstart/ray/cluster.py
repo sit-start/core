@@ -87,7 +87,6 @@ def stop_job(sub_id: str, delete: bool = False, dashboard_port=DASHBOARD_PORT) -
         stop_all_jobs(delete=delete, dashboard_port=dashboard_port)
         return
 
-    logger.info(f"Stopping job with submission ID {sub_id}.")
     client = get_job_submission_client(dashboard_port)
     try:
         job = client.get_job_info(sub_id)
