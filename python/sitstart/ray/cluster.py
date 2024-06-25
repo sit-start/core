@@ -12,6 +12,7 @@ from sitstart.logging import get_logger
 from sitstart.ml.experiments import CONFIG_ROOT
 from sitstart.ml.experiments.util import (
     get_experiment_wandb_url,
+    get_param_space_description,
     load_experiment_config,
 )
 from sitstart.scm.git.util import DOTFILES_REPO_PATH, list_tracked_dotfiles
@@ -170,6 +171,15 @@ def submit_job(
         do_sync_dotfiles=do_sync_dotfiles,
     )
 
+    # grab extra info if the job config is an experiment config
+    wandb_url = None
+    if job_config_path and _resolve_path(job_config_path).is_relative_to(CONFIG_ROOT):
+        exp_config = load_experiment_config(job_config_path.stem)
+        param_space_desc = get_param_space_description(exp_config)
+        prefix = f"{description}: " if description else ""
+        description = prefix + param_space_desc
+        wandb_url = get_experiment_wandb_url(exp_config)
+
     # submit the job; note that disallowing user-specified parameters,
     # aside from an optional job config that's part of the repository,
     # goes a long way to ensuring reproducibility from only the cached
@@ -184,10 +194,8 @@ def submit_job(
     logger.info(f"Job {sub_id} submitted")
     logger.info("Logs: http://localhost:3000/d/ray_logs_dashboard")
     logger.info("Ray dashboard: http://localhost:8265")
-    if job_config_path and _resolve_path(job_config_path).is_relative_to(CONFIG_ROOT):
-        exp_config = load_experiment_config(job_config_path.stem)
-        if wandb_url := get_experiment_wandb_url(exp_config):
-            logger.info(f"W&B project: {wandb_url}")
+    if wandb_url:
+        logger.info(f"W&B project: {wandb_url}")
 
     return sub_id
 

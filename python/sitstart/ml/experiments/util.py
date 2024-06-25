@@ -1,9 +1,9 @@
 import copy
-from os.path import dirname, realpath, relpath
+from pathlib import Path
 from typing import Any, cast
 
-import hydra
 import wandb
+import yaml
 from hydra.utils import instantiate
 from omegaconf import Container, DictConfig, OmegaConf, open_dict
 from ray.tune.experiment import Experiment
@@ -11,8 +11,8 @@ from ray.tune.search import SearchAlgorithm, Searcher, SearchGenerator, create_s
 
 from sitstart.ml.experiments import CONFIG_ROOT, HYDRA_VERSION_BASE
 from sitstart.util.container import get, walk
+from sitstart.util.hydra import load_config
 
-CONFIG_PATH = relpath(CONFIG_ROOT, realpath(dirname(__file__)))
 DEFAULT_PARAM_SPACE_KEY = "param_space"
 # https://docs.ray.io/en/latest/tune/api/search_space.html
 TUNE_SEARCH_SPACE_API = [
@@ -34,18 +34,18 @@ TUNE_SEARCH_SPACE_API = [
 
 def load_experiment_config(name: str, overrides: list[str] | None = None) -> Container:
     """Load an experiment config. For testing/debugging."""
-    with hydra.initialize(version_base=HYDRA_VERSION_BASE, config_path=CONFIG_PATH):
-        config = hydra.compose(config_name=name, overrides=overrides)
+    overrides = overrides or []
+    config = yaml.safe_load(Path(f"{CONFIG_ROOT}/{name}.yaml").read_text())
+    if "name" not in config:
+        if not any(override.startswith("name=") for override in overrides):
+            overrides += ["name=" + name]
 
-    # the HydraConfig singleton isn't available, so we set config.name manually;
-    # this is required for any node value that uses the `hydra` resolver
-    config_as_container = OmegaConf.to_container(config, resolve=False)
-    if isinstance(config_as_container, dict):
-        config_name = config_as_container.get("name") if config_as_container else None
-        if config_name == r"${hydra:job.config_name}":
-            config.name = name
-
-    return config
+    return load_config(
+        name,
+        config_path=CONFIG_ROOT,
+        overrides=overrides,
+        version_base=HYDRA_VERSION_BASE,
+    )
 
 
 def get_experiment_wandb_url(config: Container) -> str | None:
@@ -195,3 +195,25 @@ def validate_experiment_config(
                     "All interpolations of values in the config's parameter space "
                     f"must be in the parameter space node or the trial node ({key})."
                 )
+
+
+def get_param_space_description(
+    config: Container, param_space_key: str = DEFAULT_PARAM_SPACE_KEY
+) -> str:
+    """Returns a one-line description of the config's parameter search space."""
+    description = []
+    param_space = copy.deepcopy(OmegaConf.select(config, param_space_key))
+
+    for top, container_keys, obj_keys in walk(OmegaConf.to_container(param_space)):
+        if "_target_" in obj_keys:
+            key = ".".join((top, "_target_"))
+            if (fn := OmegaConf.select(param_space, key)) in TUNE_SEARCH_SPACE_API:
+                field = top.split(".")[-1]
+                fn = fn.split(".")[-1]
+                values = []
+                for container_key in container_keys:
+                    key = ".".join((top, container_key))
+                    values.append(str(OmegaConf.select(param_space, key)))
+                description.append(f"{field}={fn}({','.join(values)})")
+
+    return ",".join(description)
