@@ -10,6 +10,7 @@ from torch.optim.lr_scheduler import ConstantLR, LRScheduler
 from torcheval.metrics import Metric
 
 from sitstart.logging import get_logger
+from sitstart.ml.transforms import BatchTransform, IdentityBatchTransform
 
 logger = get_logger(__name__)
 
@@ -19,9 +20,11 @@ class TrainingModule(pl.LightningModule):
         self,
         loss_fn: nn.Module,
         lr_scheduler: LRScheduler | Callable[[Optimizer], LRScheduler] | None,
-        metrics: dict[str, Metric],
+        train_metrics: dict[str, Metric] | None,
+        test_metrics: dict[str, Metric] | None,
         model: nn.Module,
         optimizer: Optimizer | Callable[[Any], Optimizer],
+        train_batch_transform: BatchTransform | None = None,
     ) -> None:
         super().__init__()
 
@@ -36,21 +39,37 @@ class TrainingModule(pl.LightningModule):
         self.loss_fn = loss_fn
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
+        self.train_batch_transform = train_batch_transform or IdentityBatchTransform()
 
         self.metrics = {stage: {} for stage in ["train", "val", "test"]}
         for stage in self.metrics:
-            for key, metric in metrics.items():
+            stage_metrics = train_metrics if stage == "train" else test_metrics
+            for key, metric in (stage_metrics or {}).items():
                 self.metrics[stage][key] = copy.deepcopy(metric)
                 self.metrics[stage][key].reset()
         self._update_metrics_device()
+
+        if self.metrics["train"] and self.train_batch_transform.train_only:
+            logger.warning(
+                "Batch transform requires recomputing outputs for training metrics. "
+                "This may slow down training. Consider disabling training metrics."
+            )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model.forward(x)
 
     def training_step(self, batch: Any, _: int) -> torch.Tensor:
-        inputs, targets = batch
+        inputs, targets = self.train_batch_transform(batch)
         outputs = self.forward(inputs)
         loss = self.loss_fn(outputs, targets)
+
+        if self.metrics["train"] and self.train_batch_transform.train_only:
+            inputs, targets = batch
+            self.train(False)
+            with torch.no_grad():
+                outputs = self.forward(inputs)
+            self.train(True)
+
         self._log_step("train", loss, outputs, targets)
         return loss
 
@@ -88,7 +107,7 @@ class TrainingModule(pl.LightningModule):
         self, stage: str, loss: torch.Tensor, output: torch.Tensor, target: torch.Tensor
     ) -> None:
         self.log(f"{stage}_loss", loss, on_step=False, on_epoch=True, sync_dist=True)
-        for key, metric in self.metrics[stage].items():
+        for _, metric in self.metrics[stage].items():
             metric.update(output, target)
 
     def _log_end(self, stage: str) -> None:

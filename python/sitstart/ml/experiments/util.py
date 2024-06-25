@@ -197,6 +197,18 @@ def validate_experiment_config(
                 )
 
 
+def validate_trial_config(config: Container) -> None:
+    """Validate the trial node of the given config."""
+    train_collate_fn = OmegaConf.select(config, "trial.data.module.collate")
+    has_train_metrics = OmegaConf.select(config, "eval.train.metrics")
+
+    if train_collate_fn and has_train_metrics:
+        if instantiate(train_collate_fn).train_only:
+            raise ValueError(
+                "The training collate function cannot be used with training metrics."
+            )
+
+
 def get_param_space_description(
     config: Container, param_space_key: str = DEFAULT_PARAM_SPACE_KEY
 ) -> str:

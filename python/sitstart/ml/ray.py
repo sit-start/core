@@ -16,7 +16,7 @@ from ray.tune.experiment.trial import Trial
 from sitstart.aws.util import update_env
 from sitstart.logging import get_logger
 from sitstart.ml import DEFAULT_CHECKPOINT_ROOT
-from sitstart.ml.experiments.util import get_search_alg, resolve
+from sitstart.ml.experiments.util import get_search_alg, resolve, validate_trial_config
 from sitstart.ml.train import train
 from sitstart.scm.git.repo_state import RepoState, get_repo
 from sitstart.util.hydra import register_omegaconf_resolvers
@@ -141,12 +141,14 @@ def _get_train_loop_per_worker(
         register_omegaconf_resolvers()
         config_for_trial = copy.deepcopy(config)
         config_for_trial.param_space.train_loop_config = train_loop_config
+        validate_trial_config(config_for_trial)
         trial_config = instantiate(config_for_trial.trial)
 
         training_module = trial_config.training_module(
             loss_fn=trial_config.loss_fn,
             lr_scheduler=trial_config.lr_scheduler,
-            metrics=trial_config.metrics,
+            test_metrics=instantiate(config_for_trial.eval.test.metrics),
+            train_metrics=instantiate(config_for_trial.eval.train.metrics),
             model=trial_config.model.module,
             optimizer=trial_config.optimizer,
         )
