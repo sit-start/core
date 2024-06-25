@@ -39,7 +39,8 @@ def training_module(config: DictConfig) -> pl.LightningModule:
     return trial_config.training_module(
         loss_fn=trial_config.loss_fn,
         lr_scheduler=trial_config.lr_scheduler,
-        metrics=trial_config.metrics,
+        train_metrics=instantiate(config.eval.train.metrics),
+        test_metrics=instantiate(config.eval.test.metrics),
         model=trial_config.model.module,
         optimizer=trial_config.optimizer,
     )

@@ -1,8 +1,8 @@
 import os
 from typing import Any, Callable
 
-import torch
 import pytorch_lightning as pl
+import torch
 import torchvision.datasets as datasets
 from torch.utils.data import DataLoader, Sampler, Subset
 from torchvision.transforms import Compose
@@ -25,6 +25,7 @@ class VisionDataModule(pl.LightningDataModule):
         train_dataset_size: float | int | None = None,
         train_split_size: float | int = 0.8,
         augment: Callable | None = None,
+        collate: Callable | None = None,
         transform: Callable | None = None,
         n_workers: int = 8,
         shuffle: bool = True,
@@ -44,6 +45,7 @@ class VisionDataModule(pl.LightningDataModule):
                 dataset to use for training. If `test_as_val` is False,
                 the remaining samples are used for validation.
             augment: Augmentation transform applied to the training split.
+            collate: Collate function for the training split dataloader.
             transform: Base transform applied to the dataset.
             n_workers: Number of workers for data loaders.
             shuffle: Whether to shuffle the data in the training split.
@@ -51,9 +53,9 @@ class VisionDataModule(pl.LightningDataModule):
             test_as_val: Whether to use the test set as the validation set.
         """
         super().__init__()
-        if shuffle and sampler is not None:
-            logger.info("Sampler provided; ignoring `shuffle` and using `sampler`.")
-            shuffle = False
+        if collate and collate.requires_shuffle and not shuffle:
+            logger.warning("Collate function requires shuffling; enabling shuffle.")
+            shuffle = True
         if test_as_val:
             logger.info("Using test set as validation set and ignoring `train_split`.")
             train_split_size = 1.0
@@ -66,11 +68,12 @@ class VisionDataModule(pl.LightningDataModule):
         self.transform = transform
         self.n_workers = n_workers
         self.generator = torch.Generator().manual_seed(42)
-        self.shuffle = shuffle
+        self._shuffle = shuffle
         self._test_as_val = test_as_val
         self._sampler = sampler
         # TODO: augment before transform for augmentations like color_jitter
         self.train_transform = Compose((transform, augment)) if augment else transform
+        self.train_collate_fn = collate
         self.prepare_data_per_node = True
 
     @property
@@ -119,11 +122,15 @@ class VisionDataModule(pl.LightningDataModule):
 
     def train_dataloader(self) -> DataLoader:
         logger.info("Creating training data loader.")
+        if self.sampler:
+            logger.info("Using custom sampler and ignoring `shuffle`.")
+
         return DataLoader(
             self.train_split,
             batch_size=self.batch_size,
+            collate_fn=self.train_collate_fn,
             num_workers=self.n_workers,
-            shuffle=self.shuffle,
+            shuffle=self._shuffle if not self.sampler else False,
             sampler=self.sampler,
             generator=self.generator,
         )
