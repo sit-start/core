@@ -175,7 +175,7 @@ DescriptionOpt = Annotated[
     Option(help="A description for the job.", show_default=False),
 ]
 SubmissionIdArg = Annotated[
-    str,
+    list[str],
     Argument(
         help="The submission ID of the job to stop or 'all' to stop all jobs.",
         show_default=False,
@@ -236,7 +236,8 @@ def stop_job(
     dashboard_port: DashboardPortOpt = DASHBOARD_PORT,
 ) -> None:
     """Stops a job on the active Ray cluster."""
-    _stop_job(sub_id=submission_id, delete=delete, dashboard_port=dashboard_port)
+    for sub_id in submission_id:
+        _stop_job(sub_id=sub_id, delete=delete, dashboard_port=dashboard_port)
 
 
 @app.command()
