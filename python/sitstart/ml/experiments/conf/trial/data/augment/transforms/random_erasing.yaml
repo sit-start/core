@@ -1,0 +1,2 @@
+random_erase:
+  _target_: torchvision.transforms.v2.RandomErasing
