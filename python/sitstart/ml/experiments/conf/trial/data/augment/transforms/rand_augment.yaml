@@ -1,0 +1,2 @@
+rand_augment:
+  _target_: torchvision.transforms.v2.RandAugment
