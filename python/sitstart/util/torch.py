@@ -54,3 +54,47 @@ def overlay_text(
         result.append(PILToTensor()(pil_image))
 
     return torch.stack(result).squeeze(0)
+
+
+def randint(
+    *,
+    low: int | None = None,
+    high: int | None = None,
+    size: tuple[int, ...] | None = None,
+    generator: torch.Generator | None = None,
+    dtype: torch.dtype = torch.int32,
+) -> torch.Tensor:
+    """Generate random integers.
+
+    Same as torch.randint with default values for `low`, `high`, and `dtype`.
+    """
+    if not is_integer(dtype):
+        raise ValueError(f"`dtype` must be an integer type, got {dtype!r}.")
+    return torch.randint(
+        low=low if low is not None else torch.iinfo(dtype).min,
+        high=high if high is not None else torch.iinfo(dtype).max + 1,
+        size=size or (1,),
+        generator=generator,
+        dtype=dtype,
+    )
+
+
+def generator_from_seed(
+    seed: int | None = None, device: torch.device | str = "cpu"
+) -> torch.Generator:
+    """Create a torch.Generator from the given seed.
+
+    Uses a random seed if `seed` is None.
+    """
+    generator = torch.Generator(device=device)
+    if seed is not None:
+        generator.manual_seed(seed)
+    else:
+        generator.seed()
+    return generator
+
+
+def is_integer(input: torch.Tensor | torch.dtype) -> bool:
+    """Check if the input is an integer type."""
+    dtype = input if isinstance(input, torch.dtype) else input.dtype
+    return dtype in (torch.int8, torch.int16, torch.int32, torch.int64)
