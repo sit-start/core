@@ -106,9 +106,13 @@ class VisionDataModule(pl.LightningDataModule):
     def train_split_size(self) -> float | int:
         return self._train_split_size
 
-    @property
-    def sampler(self) -> Sampler | None:
+    @memoize
+    def get_sampler(self) -> Sampler | None:
         return self._sampler
+
+    @property
+    def has_sampler(self) -> bool:
+        return self._sampler is not None
 
     def prepare_data(self) -> None:
         if (not hasarg(self.dataset_class, "root", str)) or (
@@ -127,16 +131,18 @@ class VisionDataModule(pl.LightningDataModule):
 
     def train_dataloader(self) -> DataLoader:
         logger.info("Creating training data loader.")
-        if self.sampler:
+        shuffle = self._shuffle
+        if self.has_sampler and shuffle:
             logger.info("Using custom sampler and ignoring `shuffle`.")
+            shuffle = False
 
         return DataLoader(
             self.train_split,
             batch_size=self.batch_size,
             collate_fn=self.train_collate_fn,
             num_workers=self.n_workers,
-            shuffle=self._shuffle if not self.sampler else False,
-            sampler=self.sampler,
+            shuffle=shuffle,
+            sampler=self.get_sampler(),
             generator=self.generator,
         )
 
@@ -153,6 +159,11 @@ class VisionDataModule(pl.LightningDataModule):
         return DataLoader(
             self.test_dataset, batch_size=self.batch_size, num_workers=self.n_workers
         )
+
+    @property
+    def criteria_weight(self) -> torch.Tensor | torch.nn.Module | None:
+        """Weight for the loss function, if applicable."""
+        return None
 
     @property
     @memoize

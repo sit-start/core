@@ -7,12 +7,56 @@ import torch
 from pytorch_lightning.callbacks import Callback
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.strategies import Strategy
+from pytorch_lightning.utilities.compile import from_compiled
+from torch._dynamo import OptimizedModule
 
 from sitstart.logging import get_logger
 from sitstart.ml import DEFAULT_CHECKPOINT_ROOT
 from sitstart.ml.callbacks import LoggerCallback
+from sitstart.ml.data.modules.vision_data_module import VisionDataModule
+from sitstart.ml.training_module import TrainingModule
 
 logger = get_logger(__name__)
+
+
+class Trainer(pl.Trainer):
+    def fit(
+        self,
+        model: pl.LightningModule,
+        train_dataloaders: Any = None,
+        val_dataloaders: Any = None,
+        datamodule: pl.LightningDataModule | None = None,
+        ckpt_path: Path | str | None = None,
+    ) -> None:
+        if isinstance(model, OptimizedModule):
+            model = from_compiled(model)
+        self._setup_loss_fn(model, datamodule)
+        super().fit(
+            model=model,
+            train_dataloaders=train_dataloaders,
+            val_dataloaders=val_dataloaders,
+            datamodule=datamodule,
+            ckpt_path=ckpt_path,
+        )
+
+    @staticmethod
+    def _setup_loss_fn(
+        model: pl.LightningModule, data_module: pl.LightningDataModule | None
+    ) -> None:
+        # update loss function weights if applicable
+        is_vision_data_module = isinstance(data_module, VisionDataModule)
+        is_training_module = isinstance(model, TrainingModule)
+        if not (is_vision_data_module and is_training_module):
+            return
+        if not hasattr(model.loss_fn, "weight"):
+            return
+
+        weight = data_module.criteria_weight
+        if weight is None:
+            return
+
+        logger.info(f"Updating loss function with weight = {weight}")
+        model.loss_fn.weight = weight
 
 
 def train(
@@ -92,7 +136,7 @@ def train(
 
     # TODO: address warning re: missing tensorboard logging directory
     root_dir = str(storage_path) if storage_path else None
-    trainer = pl.Trainer(
+    trainer = Trainer(
         accelerator=accelerator,
         callbacks=callbacks,
         default_root_dir=root_dir if not with_ray else None,
