@@ -1,5 +1,5 @@
 import os
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 import pytorch_lightning as pl
 import torch
@@ -12,6 +12,7 @@ from sitstart.ml.data import DEFAULT_DATASET_ROOT
 from sitstart.ml.util import split_dataset
 from sitstart.util.decorators import memoize
 from sitstart.util.general import hasarg
+from sitstart.util.torch import generator_from_seed, randint
 
 logger = get_logger(__name__)
 
@@ -30,6 +31,7 @@ class VisionDataModule(pl.LightningDataModule):
         n_workers: int = 8,
         shuffle: bool = True,
         sampler: Sampler | None = None,
+        seed: int = 42,
         test_as_val: bool = False,
     ):
         """Data module for sub-classes of VisionDataset.
@@ -48,6 +50,9 @@ class VisionDataModule(pl.LightningDataModule):
             collate: Collate function for the training split dataloader.
             transform: Base transform applied to the dataset.
             n_workers: Number of workers for data loaders.
+            seed: Random seed for splitting and shuffling. Take care when
+                using a non-default value to avoid data leakage by, e.g.,
+                resuming from checkpoint with a different seed.
             shuffle: Whether to shuffle the data in the training split.
             sampler: Sampler for the training split.
             test_as_val: Whether to use the test set as the validation set.
@@ -67,7 +72,8 @@ class VisionDataModule(pl.LightningDataModule):
         self._train_split_size = train_split_size
         self.transform = transform
         self.n_workers = n_workers
-        self.generator = torch.Generator().manual_seed(42)
+        self.generator = generator_from_seed(seed)
+        self._split_seed = randint(generator=self.generator, dtype=torch.int32).item()
         self._shuffle = shuffle
         self._test_as_val = test_as_val
         self._sampler = sampler
@@ -183,7 +189,7 @@ class VisionDataModule(pl.LightningDataModule):
             dataset,
             dataset_size=self.train_dataset_size,
             train_split_size=self._train_split_size,
-            generator=self.generator,
+            seed=cast(int, self._split_seed),
             train_transform=self.train_transform,
             val_transform=self.transform,
             **kwargs,

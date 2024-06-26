@@ -14,6 +14,7 @@ from torchvision.datasets.vision import StandardTransform
 from torchvision.models import get_weight
 
 from sitstart.logging import get_logger
+from sitstart.util.torch import generator_from_seed
 
 ModuleCreator = Callable[[], nn.Module]
 ModuleInitializer = Callable[[nn.Module], None]
@@ -316,7 +317,7 @@ def split_dataset(
     train_split_size: float | int,
     dataset_size: float | int | None = None,
     ids: list[Any] | None = None,
-    generator: torch.Generator | None = None,
+    seed: int | None = None,
     train_transform: Callable | None = None,
     val_transform: Callable | None = None,
     dedupe: bool = False,
@@ -340,7 +341,7 @@ def split_dataset(
             but the first occurence of each ID when `dedupe=True`, and
             splitting the dataset by ID when `dedupe=False`. Defaults to
             `range(len(dataset))`.
-        generator: Random number generator for shuffling IDs.
+        seed: Seed for random number generation, for shuffling / splitting.
         train_transform: Alternative transform to apply to training images.
             If None, dataset.transform is used.
         val_transform: Alternative transform to apply to validation images.
@@ -380,6 +381,8 @@ def split_dataset(
     n_train = min(int(n_train), n_data)
     n_val = n_data - n_train
 
+    generator = generator_from_seed(seed)
+    logger.info(f"Using generator with initial seed {generator.initial_seed()}.")
     id_indices = randperm(n_ids, generator=generator).tolist()
 
     train_indices, val_indices = [], []

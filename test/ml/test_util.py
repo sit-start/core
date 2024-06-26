@@ -62,7 +62,7 @@ def test_update_submodule():
 def test_split_dataset():
     n = 30
     train_split_size = 0.7
-    generator = torch.Generator().manual_seed(42)
+    seed = 42
 
     def to_ids(X):
         return (torch.Tensor(X) % int(n * 0.7)).tolist()
@@ -84,26 +84,24 @@ def test_split_dataset():
             return len(self.data)
 
     dataset = TestDataset(X, Y)
-    train, val = split_dataset(dataset, train_split_size, generator=generator)
+    train, val = split_dataset(dataset, train_split_size, seed=seed)
     X_train, Y_train = zip(*train)
     X_val, Y_val = zip(*val)
 
     assert sorted(X_train + X_val) == sorted(X.tolist())
     assert sorted(Y_train + Y_val) == sorted(Y.tolist())
 
-    train, val = split_dataset(dataset, train_split_size=12, generator=generator)
+    train, val = split_dataset(dataset, train_split_size=12, seed=seed)
 
     assert len(train) == 12
     assert len(val) == 18
 
-    train, val = split_dataset(
-        dataset, train_split_size=5, dataset_size=10, generator=generator
-    )
+    train, val = split_dataset(dataset, train_split_size=5, dataset_size=10, seed=seed)
 
     assert len(train) == 5
     assert len(val) == 5
 
-    train, val = split_dataset(dataset, train_split_size, ids=ids, generator=generator)
+    train, val = split_dataset(dataset, train_split_size, ids=ids, seed=seed)
     X_train, Y_train = zip(*train)
     X_val, Y_val = zip(*val)
 
@@ -117,7 +115,7 @@ def test_split_dataset():
         dataset,
         train_split_size,
         ids=ids,
-        generator=generator,
+        seed=seed,
         train_transform=train_transform,
         val_transform=val_transform,
     )
