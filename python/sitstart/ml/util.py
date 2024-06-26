@@ -1,21 +1,21 @@
 import copy
 import fnmatch
 from enum import Enum
-from typing import Any, Callable, cast
+from typing import Any, Callable, Literal, Sequence, cast
 
+import numpy as np
 import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig, ListConfig
 from torch import nn, randperm
 from torch.nn.parameter import Parameter
-from torch.utils.data import Dataset, Sampler, Subset, WeightedRandomSampler
+from torch.utils.data import Dataset, Subset
 from torchvision.datasets import VisionDataset
 from torchvision.datasets.vision import StandardTransform
 from torchvision.models import get_weight
 
 from sitstart.logging import get_logger
 from sitstart.util.torch import generator_from_seed
-from sitstart.util.torch import int_hist, is_integer
 
 ModuleCreator = Callable[[], nn.Module]
 ModuleInitializer = Callable[[nn.Module], None]
@@ -415,41 +415,41 @@ def split_dataset(
     return train, val
 
 
-def normalized_inverse_frequency(
-    input: list[Any] | torch.Tensor, gamma: float = 1.0
+def gamma_correct(
+    input: list[Any] | torch.Tensor,
+    gamma: float,
+    norm: float | Literal["count"] | None = "count",
 ) -> torch.Tensor:
-    """Compute the normalized inverse frequency of the given input."""
-    input = input if isinstance(input, torch.Tensor) else torch.tensor(input)
-    if input.numel() == 0:
-        return torch.zeros_like(input)
-    if not is_integer(input):
-        raise NotImplementedError("Input must be of integer type.")
+    """Gamma-correct and normalize the input.
 
-    counts = int_hist(input)
-    if counts.sum() == 0:
-        return torch.zeros_like(input)
-
-    inv_freq = (counts.sum() / counts).pow(gamma)
-    inv_freq[counts == 0] = 0
-    nml_inv_freq = inv_freq / inv_freq.sum()
-
-    return nml_inv_freq.gather(0, input)
-
-
-def rebalancing_sampler(
-    sample_class: list[Any] | torch.Tensor,
-    gamma: float = 1.0,
-    generator: torch.Generator | None = None,
-) -> Sampler:
-    """Create a WeightedRandomSampler that rebalances the given classes.
-
-    Weights are computed with `normalized_inverse_frequency`.
+    The result's L1 norm == `norm`. `norm` defaults to the number of unique
+    values in the input.
     """
-    return WeightedRandomSampler(
-        normalized_inverse_frequency(sample_class, gamma=gamma).tolist(),
-        len(sample_class),
-        generator=generator,
-    )
+    input = input if isinstance(input, torch.Tensor) else torch.tensor(input)
+    norm = norm or float(input.numel())
+    if torch.any(input < 0):
+        raise ValueError("Input must be non-negative.")
+
+    gamma_corrected = input.pow(gamma)
+
+    if norm == "count":
+        norm = input.numel()
+    elif norm is None:
+        norm = gamma_corrected.sum().item()
+
+    return norm * (gamma_corrected / gamma_corrected.sum())
+
+
+def dedupe(input: Sequence[Any], ids: Sequence[Any]) -> Sequence[Any]:
+    """Remove duplicates from the input based on the given IDs.
+
+    Preserves the order of the input.
+    """
+    unique_indices = np.sort(np.unique(ids, return_index=True)[1])
+    try:
+        return input[unique_indices]
+    except TypeError:
+        return [input[i] for i in unique_indices]
 
 
 # adapted from
