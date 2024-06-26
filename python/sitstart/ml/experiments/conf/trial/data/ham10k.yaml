@@ -1,7 +1,6 @@
 defaults:
-  - augment/transforms/square_crop
-  - augment/transforms/vflip
-  - augment/transforms/hflip
+  - augment/transforms/rand_augment
+  - augment/transforms/random_erasing
 dims: [3, 450, 600]
 mean: [0.7544, 0.5711, 0.6020]
 module:
