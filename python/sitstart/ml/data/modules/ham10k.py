@@ -13,25 +13,31 @@ logger = get_logger(__name__)
 
 
 class HAM10k(VisionDataModule):
-    def __init__(self, *args, rebalance: bool = False, dedupe: bool = False, **kwargs):
-        if rebalance:
+    def __init__(
+        self, *args, rebalance_gamma: float = 0.0, dedupe: bool = False, **kwargs
+    ):
+        if rebalance_gamma > 0.0:
             if "sampler" in kwargs:
-                raise ValueError("Cannot specify `sampler` when `rebalance=True`")
+                raise ValueError("Cannot specify `sampler` when `rebalance_gamma > 0`")
             if kwargs.setdefault("shuffle", False):
                 logger.info("Ignoring `shuffle` and using rebalancing sampler.")
                 kwargs["shuffle"] = False
-        self._rebalance = rebalance
+        self._rebalance_gamma = rebalance_gamma
         self._dedupe = dedupe
         super().__init__(HAM10kDataset, *args, **kwargs)
 
     @VisionDataModule.sampler.getter
     @memoize
     def sampler(self) -> Sampler | None:
-        if self._rebalance:
-            logger.info("Creating rebalancing sampler.")
+        if self._rebalance_gamma > 0.0:
+            logger.info(
+                f"Creating rebalancing sampler with gamma = {self._rebalance_gamma}."
+            )
             train_dataset = cast(HAM10kDataset, self.train_dataset)
             train_targets = [train_dataset.targets[i] for i in self.train_split.indices]
-            return rebalancing_sampler(train_targets, self.generator)
+            return rebalancing_sampler(
+                train_targets, self._rebalance_gamma, self.generator
+            )
         return None
 
     def _split_train_val(self, dataset: VisionDataset) -> tuple[Subset, Subset]:

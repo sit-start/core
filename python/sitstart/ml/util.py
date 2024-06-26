@@ -15,6 +15,7 @@ from torchvision.models import get_weight
 
 from sitstart.logging import get_logger
 from sitstart.util.torch import generator_from_seed
+from sitstart.util.torch import int_hist, is_integer
 
 ModuleCreator = Callable[[], nn.Module]
 ModuleInitializer = Callable[[nn.Module], None]
@@ -414,19 +415,41 @@ def split_dataset(
     return train, val
 
 
+def normalized_inverse_frequency(
+    input: list[Any] | torch.Tensor, gamma: float = 1.0
+) -> torch.Tensor:
+    """Compute the normalized inverse frequency of the given input."""
+    input = input if isinstance(input, torch.Tensor) else torch.tensor(input)
+    if input.numel() == 0:
+        return torch.zeros_like(input)
+    if not is_integer(input):
+        raise NotImplementedError("Input must be of integer type.")
+
+    counts = int_hist(input)
+    if counts.sum() == 0:
+        return torch.zeros_like(input)
+
+    inv_freq = (counts.sum() / counts).pow(gamma)
+    inv_freq[counts == 0] = 0
+    nml_inv_freq = inv_freq / inv_freq.sum()
+
+    return nml_inv_freq.gather(0, input)
+
+
 def rebalancing_sampler(
-    element_class: list[Any] | torch.Tensor, generator: torch.Generator | None = None
+    sample_class: list[Any] | torch.Tensor,
+    gamma: float = 1.0,
+    generator: torch.Generator | None = None,
 ) -> Sampler:
-    """Create a WeightedRandomSampler that rebalances the given classes."""
-    el_cls = element_class
-    el_cls = el_cls.flatten().tolist() if isinstance(el_cls, torch.Tensor) else el_cls
+    """Create a WeightedRandomSampler that rebalances the given classes.
 
-    classes = list(dict.fromkeys(el_cls))
-    class_counts = [el_cls.count(c) for c in classes]
-    class_inv_freq = [len(el_cls) / count for count in class_counts]
-    el_inv_freq = [class_inv_freq[classes.index(c)] for c in el_cls]
-
-    return WeightedRandomSampler(el_inv_freq, len(el_cls), generator=generator)
+    Weights are computed with `normalized_inverse_frequency`.
+    """
+    return WeightedRandomSampler(
+        normalized_inverse_frequency(sample_class, gamma=gamma).tolist(),
+        len(sample_class),
+        generator=generator,
+    )
 
 
 # adapted from
