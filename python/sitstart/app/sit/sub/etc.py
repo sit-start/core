@@ -19,7 +19,7 @@ from sitstart.ml.experiments.util import (
     validate_experiment_config,
 )
 from sitstart.util.container import walk
-from sitstart.util.hydra import register_omegaconf_resolvers
+from sitstart.ml.experiments.util import register_omegaconf_resolvers
 from sitstart.util.run import run
 
 app = typer.Typer()

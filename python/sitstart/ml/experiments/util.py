@@ -1,16 +1,19 @@
 import copy
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 import wandb
 import yaml
 from hydra.utils import instantiate
-from omegaconf import Container, DictConfig, OmegaConf, open_dict
+from omegaconf import Container, DictConfig, ListConfig, OmegaConf, open_dict
 from ray.tune.experiment import Experiment
 from ray.tune.search import SearchAlgorithm, Searcher, SearchGenerator, create_searcher
+from ray.tune.search.sample import Domain
 
+import sitstart.util.hydra
 from sitstart.ml.experiments import CONFIG_ROOT, HYDRA_VERSION_BASE
 from sitstart.util.container import get, walk
+from sitstart.util.decorators import once
 from sitstart.util.hydra import load_config
 
 DEFAULT_PARAM_SPACE_KEY = "param_space"
@@ -30,6 +33,28 @@ TUNE_SEARCH_SPACE_API = [
     "ray.tune.sample_from",
     "ray.tune.grid_search",
 ]
+
+
+@once
+def register_omegaconf_resolvers():
+    """Register OmegaConf resolvers.
+
+    Calls `sitstart.util.hydra.register_omegaconf_resolvers` and
+    additional registers resolvers for Ray Tune search space API
+    functions under the `rt` namespace.
+    """
+    sitstart.util.hydra.register_omegaconf_resolvers()
+
+    def get_resolver(op: str) -> Callable:
+        def resolver(*args: Any) -> Any:
+            return DictConfig({"_target_": op, "_args_": ListConfig(args)})
+
+        return resolver
+
+    for op in TUNE_SEARCH_SPACE_API:
+        OmegaConf.register_new_resolver(
+            "rt." + op.split(".")[-1], get_resolver(op), replace=True
+        )
 
 
 def load_experiment_config(name: str, overrides: list[str] | None = None) -> Container:
@@ -98,14 +123,14 @@ def sample_param_space(
         )
 
     # instantiate any param space target in the search space API
-    # TODO: should we resolve when converting to a container, here and below?
     param_space = copy.deepcopy(OmegaConf.select(config, param_space_key))
-    for top, _, obj_keys in walk(OmegaConf.to_container(param_space)):
-        if "_target_" in obj_keys:
-            key = ".".join((top, "_target_"))
-            if OmegaConf.select(param_space, key) in TUNE_SEARCH_SPACE_API:
-                obj = instantiate(OmegaConf.select(param_space, top), _recursive_=False)
-                OmegaConf.update(param_space, top, obj, force_add=True, merge=False)
+    for top, _, _ in walk(OmegaConf.to_container(param_space, resolve=True)):
+        val = OmegaConf.select(param_space, top)
+        if val and val.get("_target_", None) in TUNE_SEARCH_SPACE_API:
+            obj = instantiate(OmegaConf.select(param_space, top), _recursive_=False)
+            if isinstance(obj, Domain):
+                obj = obj.sample()
+            OmegaConf.update(param_space, top, obj, force_add=True, merge=False)
 
     # a dummy trainable, so we can add an experiment to the search algo
     def trainable(config: dict[str, Any]) -> None:
@@ -213,10 +238,13 @@ def get_param_space_description(
     config: Container, param_space_key: str = DEFAULT_PARAM_SPACE_KEY
 ) -> str:
     """Returns a one-line description of the config's parameter search space."""
+    register_omegaconf_resolvers()
+
     description = []
     param_space = copy.deepcopy(OmegaConf.select(config, param_space_key))
+    param_space_as_container = OmegaConf.to_container(param_space, resolve=True)
 
-    for top, container_keys, obj_keys in walk(OmegaConf.to_container(param_space)):
+    for top, container_keys, obj_keys in walk(param_space_as_container):
         if "_target_" in obj_keys:
             key = ".".join((top, "_target_"))
             if (fn := OmegaConf.select(param_space, key)) in TUNE_SEARCH_SPACE_API:

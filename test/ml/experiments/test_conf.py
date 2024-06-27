@@ -2,8 +2,11 @@ import glob
 from pathlib import Path
 
 from sitstart.ml.experiments import CONFIG_ROOT
-from sitstart.ml.experiments.util import load_experiment_config, resolve
-from sitstart.util.hydra import register_omegaconf_resolvers
+from sitstart.ml.experiments.util import (
+    load_experiment_config,
+    register_omegaconf_resolvers,
+    resolve,
+)
 
 register_omegaconf_resolvers()
 

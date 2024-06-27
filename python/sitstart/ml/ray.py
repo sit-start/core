@@ -16,10 +16,14 @@ from ray.tune.experiment.trial import Trial
 from sitstart.aws.util import update_env
 from sitstart.logging import get_logger
 from sitstart.ml import DEFAULT_CHECKPOINT_ROOT
-from sitstart.ml.experiments.util import get_search_alg, resolve, validate_trial_config
+from sitstart.ml.experiments.util import (
+    get_search_alg,
+    register_omegaconf_resolvers,
+    resolve,
+    validate_trial_config,
+)
 from sitstart.ml.train import train
 from sitstart.scm.git.repo_state import RepoState, get_repo
-from sitstart.util.hydra import register_omegaconf_resolvers
 from sitstart.util.string import to_str
 
 register_omegaconf_resolvers()

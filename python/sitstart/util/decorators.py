@@ -40,7 +40,7 @@ def once(func):
     def wrapper(*args, **kwargs):
         nonlocal ran
         if ran:
-            logger.warning(f"Function {func.__name__!r} already ran once. Skipping.")
+            logger.debug(f"Function {func.__name__!r} already ran once. Skipping.")
             return None
         ran = True
         return func(*args, **kwargs)

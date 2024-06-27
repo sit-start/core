@@ -6,7 +6,7 @@ import pytorch_lightning as pl
 from omegaconf import DictConfig, OmegaConf
 
 from sitstart.ml import train
-from sitstart.util.hydra import register_omegaconf_resolvers
+from sitstart.ml.experiments.util import register_omegaconf_resolvers
 
 register_omegaconf_resolvers()
 
