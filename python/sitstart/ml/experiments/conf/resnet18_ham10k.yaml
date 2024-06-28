@@ -1,0 +1,29 @@
+# 81.1% val acc: https://wandb.ai/kevdale/resnet18_ham10k/runs/9495f_00000
+defaults:
+  - _defaults_
+  - trial/data: ham10k
+  - trial/lr_scheduler: cosine_annealing
+  - trial/model: resnet18_do
+  - override trial/model/transforms: image_classification
+  - _self_
+max_num_epochs: 150
+param_space:
+  train_loop_config:
+    crop: { _target_: ray.tune.grid_search, values: [300] }
+    resize: { _target_: ray.tune.grid_search, values: [450] }
+    dropout_p: { _target_: ray.tune.grid_search, values: [0.25] }
+    weight_decay: { _target_: ray.tune.grid_search, values: [5e-3] }
+    batch_size_lr: { _target_: ray.tune.grid_search, values: [[128, 5e-2]] }
+trial:
+  data:
+    batch_size: ${param_space.train_loop_config.batch_size_lr[0]}
+  model:
+    dropout_p: ${param_space.train_loop_config.dropout_p}
+    target_size:
+      crop: ${param_space.train_loop_config.crop}
+      resize: ${param_space.train_loop_config.resize}
+  optimizer:
+    dampening: 0.0
+    lr: ${param_space.train_loop_config.batch_size_lr[1]}
+    momentum: 0.9
+    weight_decay: ${param_space.train_loop_config.weight_decay}
