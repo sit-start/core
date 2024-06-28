@@ -13,16 +13,15 @@ logger = get_logger(__name__)
 
 
 class HAM10k(VisionDataModule):
-    def __init__(self, *args, rebalance: bool = False, **kwargs):
+    def __init__(self, *args, rebalance: bool = False, dedupe: bool = False, **kwargs):
         if rebalance:
             if "sampler" in kwargs:
-                raise ValueError(
-                    "Cannot specify both `sampler` and `class_balance_sampler`"
-                )
+                raise ValueError("Cannot specify `sampler` when `rebalance=True`")
             if kwargs.setdefault("shuffle", False):
                 logger.info("Ignoring `shuffle` and using rebalancing sampler.")
                 kwargs["shuffle"] = False
         self._rebalance = rebalance
+        self._dedupe = dedupe
         super().__init__(HAM10kDataset, *args, **kwargs)
 
     @VisionDataModule.sampler.getter
@@ -31,16 +30,15 @@ class HAM10k(VisionDataModule):
         if self._rebalance:
             logger.info("Creating rebalancing sampler.")
             train_dataset = cast(HAM10kDataset, self.train_dataset)
-            train_targets = train_dataset.targets
-            train_targets = [train_targets[i] for i in self.train_split.indices]
+            train_targets = [train_dataset.targets[i] for i in self.train_split.indices]
             return rebalancing_sampler(train_targets, self.generator)
         return None
 
-    def _split_train_val(
-        self, dataset: VisionDataset, **kwargs
-    ) -> tuple[Subset, Subset]:
-        # avoid data leakage, where different images of the same lesion appear
-        # in train and val
+    def _split_train_val(self, dataset: VisionDataset) -> tuple[Subset, Subset]:
+        # There are multiple images of the same lesion in the dataset,
+        # so we remove duplicates when `dedupe=True` and  split by lesion ID
+        # when `dedupe=False` to avoid data leakage .
+        logger.info("Splitting training and validation by lesion ID.")
         return super()._split_train_val(
-            dataset, ids=cast(HAM10kDataset, dataset).lesion_ids
+            dataset, ids=cast(HAM10kDataset, dataset).lesion_ids, dedupe=self._dedupe
         )
