@@ -1,0 +1,33 @@
+# 85.6% val_acc: https://wandb.ai/kevdale/swin_v2_t_ham10k/runs/11162_00004
+defaults:
+  - _defaults_
+  - trial/data: ham10k
+  - trial/model: swin_v2_t
+  - _self_
+max_num_epochs: 20
+param_space:
+  train_loop_config:
+    attention_dropout: { _target_: ray.tune.grid_search, values: [0.0] }
+    dropout: { _target_: ray.tune.grid_search, values: [0.05] }
+    batch_size: { _target_: ray.tune.grid_search, values: [12] }
+    lr: { _target_: ray.tune.grid_search, values: [3e-6] }
+    weight_decay: { _target_: ray.tune.grid_search, values: [0.01] }
+    opt: { _target_: ray.tune.grid_search, values: [AdamW] }
+trial:
+  data:
+    batch_size: 12
+    module:
+      rebalance: true
+      test_as_val: true
+  loss_fn:
+    _target_: torch.nn.CrossEntropyLoss
+  model:
+    attention_dropout: ${param_space.train_loop_config.attention_dropout}
+    dropout: ${param_space.train_loop_config.dropout}
+  optimizer:
+    _partial_: true
+    _target_: torch.optim.${param_space.train_loop_config.opt}
+    lr: 3e-6
+tune:
+  scheduler:
+    grace_period: ${max_num_epochs}

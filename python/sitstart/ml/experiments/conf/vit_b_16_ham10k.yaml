@@ -1,0 +1,38 @@
+# 81.0% val_acc: https://wandb.ai/kevdale/vit_b_16_ham10k_tl/runs/b04ea_00001
+defaults:
+  - _defaults_
+  - trial/data: ham10k
+  - trial/lr_scheduler: cosine_annealing
+  - trial/model: vit_b_16
+  - _self_
+max_num_epochs: 100
+name: vit_b_16_ham10k_tl
+param_space:
+  train_loop_config:
+    augment: { _target_: ray.tune.grid_search, values: [1] }
+    batch_size: { _target_: ray.tune.grid_search, values: [128] }
+    lr: { _target_: ray.tune.grid_search, values: [1e-1] }
+    weighted_loss: { _target_: ray.tune.grid_search, values: [0] }
+    rebalance: { _target_: ray.tune.grid_search, values: [0, 1] }
+trial:
+  model:
+    module:
+      freeze: [""]
+    target_size:
+      crop: 224
+      resize: 224
+  data:
+    batch_size: ${param_space.train_loop_config.batch_size}
+    module:
+      augment: ${if:${param_space.train_loop_config.augment},${trial.data.augment.transform},null}
+      rebalance: ${param_space.train_loop_config.rebalance}
+  loss_fn:
+    _target_: torch.nn.CrossEntropyLoss
+    weight: ${if:${param_space.train_loop_config.weighted_loss},${trial.data.inv_class_freq},null}
+  optimizer:
+    _partial_: true
+    _target_: torch.optim.SGD
+    lr: ${param_space.train_loop_config.lr}
+tune:
+  scheduler:
+    grace_period: ${max_num_epochs}
