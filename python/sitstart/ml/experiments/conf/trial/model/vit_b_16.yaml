@@ -1,21 +1,7 @@
 defaults:
-  - transforms: image_classification
+  - vit
   - _self_
 module:
-  _convert_: none
-  _recursive_: false
-  _target_: sitstart.ml.util.update_module
   module:
     _target_: torchvision.models.vit_b_16
-    weights:
-      _target_: torchvision.models.get_weight
-      name: ${trial.model.weights}
-  replace:
-    heads.head:
-      _target_: torch.nn.Linear
-      in_features: 768
-      out_features: ${trial.data.num_classes}
-target_size:
-  crop: 224
-  resize: 256
 weights: ViT_B_16_Weights.DEFAULT
