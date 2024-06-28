@@ -296,6 +296,7 @@ def split_dataset(
     generator: torch.Generator | None = None,
     train_transform: Callable | None = None,
     val_transform: Callable | None = None,
+    dedupe: bool = False,
 ) -> tuple[Subset, Subset]:
     """Split dataset into training and validation datasets.
 
@@ -308,10 +309,14 @@ def split_dataset(
         dataset: Dataset to split; must be an instance of VisionDataset
             if transforms are provided.
         train_split_size: Fraction or number of samples to use for
-            training. If ids are provided, the split is approximate.
+            training. If ids are provided and `dedupe=False`, the split
+            is approximate.
         dataset_size: Fraction or number of samples to use for both
             training and validation. Defaults to the full dataset size.
-        ids: List of IDs to be split. If None, dataset is split by index.
+        ids: List of `len(dataset)` sample IDs. Used for removing all
+            but the first occurence of each ID when `dedupe=True`, and
+            splitting the dataset by ID when `dedupe=False`. Defaults to
+            `range(len(dataset))`.
         generator: Random number generator for shuffling IDs.
         train_transform: Alternative transform to apply to training images.
             If None, dataset.transform is used.
@@ -340,6 +345,13 @@ def split_dataset(
     id_idx_to_data_idx = {}
     for data_idx, id_ in enumerate(ids):
         id_idx_to_data_idx.setdefault(id_, []).append(data_idx)
+
+    if dedupe:
+        n_data = len(unique_ids)
+        logger.info(f"After de-duplication, dataset size is {n_data}.")
+        for id_idx, data_idx in id_idx_to_data_idx.items():
+            id_idx_to_data_idx[id_idx] = data_idx[:1]
+        assert len(id_idx_to_data_idx) == n_data
 
     n_train = n_data * train_split_size if train_split_size <= 1 else train_split_size
     n_train = min(int(n_train), n_data)
