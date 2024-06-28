@@ -1,0 +1,10 @@
+defaults:
+  - swin_v2_t
+  - _self_
+module:
+  module:
+    _target_: torchvision.models.swin_v2_b
+  replace:
+    head:
+      in_features: 1024
+weights: Swin_V2_B_Weights.DEFAULT
