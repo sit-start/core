@@ -379,7 +379,7 @@ def split_dataset(
 def rebalancing_sampler(
     element_class: list[Any] | torch.Tensor, generator: torch.Generator | None = None
 ) -> Sampler:
-    """Returns a WeightedRandomSampler that rebalances the given classes."""
+    """Create a WeightedRandomSampler that rebalances the given classes."""
     el_cls = element_class
     el_cls = el_cls.flatten().tolist() if isinstance(el_cls, torch.Tensor) else el_cls
 
@@ -389,3 +389,37 @@ def rebalancing_sampler(
     el_inv_freq = [class_inv_freq[classes.index(c)] for c in el_cls]
 
     return WeightedRandomSampler(el_inv_freq, len(el_cls), generator=generator)
+
+
+# adapted from
+# @source: https://github.com/PhoenixDL/rising/blob/master/rising/transforms/functional/channel.py
+def one_hot(
+    target: torch.Tensor,
+    num_classes: int | None = None,
+    dtype: torch.dtype | None = None,
+) -> torch.Tensor:
+    """
+    Compute a one-hot encoding of the given target.
+
+    Input target shape is [N, 1, *], and output shape, [N, num_classes, *].
+
+    Args:
+        target: Tensor of type long; one-hot encoding is saved into dimension 1
+        num_classes: Number of classes; defaults to target.max()
+        dtype: Result dtype; defaults to target.dtype
+    """
+    if target.dtype != torch.long:
+        raise TypeError(
+            f"Target tensor needs to be of type torch.long, found {target.dtype}"
+        )
+    if target.ndim < 2 or target.shape[1] != 1:
+        raise ValueError(f"Expected target shape [N, 1, *], found {target.shape}.")
+
+    num_classes = num_classes or int(target.max().item() + 1)
+    target_onehot = torch.zeros(
+        size=(target.shape[0], num_classes, *target.shape[2:]),
+        dtype=dtype or target.dtype,
+        device=target.device,
+    )
+
+    return target_onehot.scatter_(1, target, 1.0)
