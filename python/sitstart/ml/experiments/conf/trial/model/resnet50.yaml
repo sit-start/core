@@ -1,25 +1,21 @@
 defaults:
   - transforms/image_classification
   - _self_
-attention_dropout: 0.0
-dropout: 0.0
 module:
   _convert_: none
   _recursive_: false
   _target_: sitstart.ml.util.update_module
   module:
-    _target_: torchvision.models.swin_v2_t
-    attention_dropout: ${trial.model.attention_dropout}
-    dropout: ${trial.model.dropout}
+    _target_: torchvision.models.resnet50
     weights:
       _target_: torchvision.models.get_weight
       name: ${trial.model.weights}
   replace:
-    head:
+    fc:
       _target_: torch.nn.Linear
-      in_features: 768
+      in_features: 2048
       out_features: ${trial.data.num_classes}
 target_size:
-  crop: 256
-  resize: 260
-weights: Swin_V2_T_Weights.DEFAULT
+  crop: 224
+  resize: 256
+weights: ResNet50_Weights.DEFAULT

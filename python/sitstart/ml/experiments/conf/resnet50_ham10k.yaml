@@ -1,11 +1,9 @@
-# https://wandb.ai/kevdale/swin_v2_t_ham10k_alt/runs/6cf11_00005
-# val: 88.8% mean recall, 91.3% accuracy
-# test: 85.9% mean recall, 87.0% accuracy
+# 75.3 val rec: https://wandb.ai/kevdale/resnet50_ham10k/runs/05075_00021
 defaults:
   - _defaults_
   - trial/data: ham10k
-  - trial/lr_scheduler: cosine_annealing
-  - trial/model: swin_v2_t
+  #- trial/lr_scheduler: cosine_annealing
+  - trial/model: resnet50
   - _self_
 eval:
   test:
@@ -24,33 +22,48 @@ eval:
   select:
     metric: val_rec
     mode: max
-max_num_epochs: 75
-name: swin_v2_t_ham10k_alt
+max_num_epochs: 50
+name: resnet50_ham10k
 param_space:
   train_loop_config:
-    lr: ${rt.grid_search:[3e-5]}
-    batch_size: ${rt.grid_search:[12]}
-    gamma: ${rt.grid_search:[2]}
+    note: ${rt.grid_search:['full_res']}
+    lr: ${rt.grid_search:[1e-3]}
+    batch_size: ${rt.grid_search:[48,48]}
+    dropout: ${rt.grid_search:[0]}
+    fc_dropout: ${rt.grid_search:[0]}
+    gamma: ${rt.grid_search:[2.5]}
     criteria_gamma: ${rt.grid_search:[0.5]}
-    rebalance_gamma: ${rt.grid_search:[0.25]}
-    weight_decay: ${rt.grid_search:[1e-8]}
-    seed: ${rt.grid_search:[5]}
+    rebalance_gamma: ${rt.grid_search:[0]}
+    weight_decay: ${rt.grid_search:[1e-4]}
 trial:
   data:
     batch_size: ${param_space.train_loop_config.batch_size}
     module:
+      augment: ${trial.data.augment.transform}
       collate:
         _target_: sitstart.ml.transforms.CutMixUpCollateTransform
         num_classes: ${trial.data.num_classes}
       criteria_gamma: ${param_space.train_loop_config.criteria_gamma}
       dedupe: true
       rebalance_gamma: ${param_space.train_loop_config.rebalance_gamma}
-      seed: ${param_space.train_loop_config.seed}
   loss_fn:
     _target_: sitstart.ml.losses.FocalLoss
     gamma: ${param_space.train_loop_config.gamma}
   model:
     target_size: { crop: 443, resize: 450 }
+    # target_size: { crop: 224, resize: 224 }
+    module:
+      append:
+        layer*.*.relu:
+          _target_: torch.nn.Dropout2d
+          p: ${param_space.train_loop_config.dropout}
+        avgpool:
+          _target_: torch.nn.Dropout2d
+          p: ${param_space.train_loop_config.fc_dropout}
+    transforms:
+      image_classification:
+        std: ${trial.data.std}
+        mean: ${trial.data.mean}
   optimizer:
     _partial_: true
     _target_: torch.optim.AdamW

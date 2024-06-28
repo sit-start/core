@@ -1,0 +1,5 @@
+convert:
+  _target_: torchvision.transforms.Compose
+  transforms:
+    - _target_: torchvision.transforms.ToTensor
+    - _target_: sitstart.ml.transforms.ImageToFloat32
