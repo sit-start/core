@@ -1,38 +1,55 @@
-# 81.0% val_acc: https://wandb.ai/kevdale/vit_b_16_ham10k_tl/runs/b04ea_00001
+# 83.8% val acc: https://wandb.ai/kevdale/vit_b_16_ham10k_ft/runs/3c6b3_00000
 defaults:
   - _defaults_
   - trial/data: ham10k
   - trial/lr_scheduler: cosine_annealing
   - trial/model: vit_b_16
   - _self_
-max_num_epochs: 100
-name: vit_b_16_ham10k_tl
+gradient_clip:
+  value: 1.0
+  algorithm: norm
+max_num_epochs: 200
+name: vit_b_16_ham10k_ft
 param_space:
   train_loop_config:
-    augment: { _target_: ray.tune.grid_search, values: [1] }
     batch_size: { _target_: ray.tune.grid_search, values: [128] }
-    lr: { _target_: ray.tune.grid_search, values: [1e-1] }
-    weighted_loss: { _target_: ray.tune.grid_search, values: [0] }
-    rebalance: { _target_: ray.tune.grid_search, values: [0, 1] }
+    fine_tune: { _target_: ray.tune.grid_search, values: [1] }
+    lr: { _target_: ray.tune.grid_search, values: [0.01] }
+    test_as_val: { _target_: ray.tune.grid_search, values: [1] }
+    dropout: { _target_: ray.tune.grid_search, values: [0.05] }
+    attention_dropout: { _target_: ray.tune.grid_search, values: [0.1] }
+    note: { _target_: ray.tune.grid_search, values: [mean-std] }
+    weight_decay: { _target_: ray.tune.grid_search, values: [0] }
+    loss_fn: { _target_: ray.tune.grid_search, values: [focal] }
+    gamma: { _target_: ray.tune.grid_search, values: [0.0, 1.0] }
+    weighted_loss: { _target_: ray.tune.grid_search, values: [0, 1] }
+    rebalance: { _target_: ray.tune.grid_search, values: [0] }
 trial:
   model:
     module:
-      freeze: [""]
-    target_size:
-      crop: 224
-      resize: 224
+      freeze: ${if:${param_space.train_loop_config.fine_tune},null,${oc.create:[""]}}
+      module:
+        attention_dropout: ${param_space.train_loop_config.attention_dropout}
+        dropout: ${param_space.train_loop_config.dropout}
+    target_size: { crop: 224, resize: 228 }
+    transforms:
+      mean: ${trial.data.mean}
+      std: ${trial.data.std}
   data:
     batch_size: ${param_space.train_loop_config.batch_size}
     module:
-      augment: ${if:${param_space.train_loop_config.augment},${trial.data.augment.transform},null}
       rebalance: ${param_space.train_loop_config.rebalance}
+      test_as_val: ${param_space.train_loop_config.test_as_val}
   loss_fn:
-    _target_: torch.nn.CrossEntropyLoss
-    weight: ${if:${param_space.train_loop_config.weighted_loss},${trial.data.inv_class_freq},null}
+    _target_: sitstart.ml.losses.FocalLoss
+    weight: ${if:${param_space.train_loop_config.weighted_loss},${trial.data.nml_inv_class_freq},null}
+    gamma: ${param_space.train_loop_config.gamma}
   optimizer:
     _partial_: true
     _target_: torch.optim.SGD
     lr: ${param_space.train_loop_config.lr}
+    momentum: 0.9
+    weight_decay: ${param_space.train_loop_config.weight_decay}
 tune:
   scheduler:
     grace_period: ${max_num_epochs}
