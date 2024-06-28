@@ -259,14 +259,12 @@ def tune_with_ray(config: DictConfig) -> None:
 
     results = tuner.fit()
 
-    best_result = results.get_best_result(
-        config.eval.select.metric, config.eval.select.mode
-    )
+    metric = config.eval.select.metric
+    best_result = results.get_best_result(metric, config.eval.select.mode)
+
     logger.info(f"Best trial config: {best_result.config}")
     if not best_result.metrics:
         logger.warning("No metrics found in best trial result")
         return
-    logger.info(f"Best trial final validation loss: {best_result.metrics['val_loss']}")
-    logger.info(
-        f"Best trial final validation accuracy: {best_result.metrics['val_acc']}"
-    )
+    logger.info(f"Best trial final val_loss: {best_result.metrics['val_loss']}")
+    logger.info(f"Best trial final {metric!r}: {best_result.metrics[metric]}")
