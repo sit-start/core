@@ -1,4 +1,4 @@
-# 80.0% val rec: https://wandb.ai/kevdale/swin_v2_t_ham10k/runs/9f62d_00006
+# 88.1% val rec: https://wandb.ai/kevdale/swin_v2_t_ham10k_alt/runs/3a464_00003
 defaults:
   - _defaults_
   - trial/data: ham10k
@@ -17,40 +17,34 @@ eval:
     metric: val_rec
     mode: max
 max_num_epochs: 50
+name: swin_v2_t_ham10k_alt
 param_space:
   train_loop_config:
-    loss_fn: { _target_: ray.tune.grid_search, values: [focal] } # note
-    gamma: { _target_: ray.tune.grid_search, values: [1.5] }
-    weighted_loss: { _target_: ray.tune.grid_search, values: [1] }
-    rebalance: { _target_: ray.tune.grid_search, values: [1] }
-    lr: { _target_: ray.tune.grid_search, values: [3e-5] }
-    dedupe: { _target_: ray.tune.grid_search, values: [1] }
-    contrast: { _target_: ray.tune.grid_search, values: [1.0] }
-    test_as_val: { _target_: ray.tune.grid_search, values: [0] }
-    augment: { _target_: ray.tune.grid_search, values: [1] }
-    attention_dropout: { _target_: ray.tune.grid_search, values: [0.0] }
-    dropout: { _target_: ray.tune.grid_search, values: [0.0] }
-    train_feat: { _target_: ray.tune.grid_search, values: ["567"] }
+    loss_fn: ${rt.grid_search:[focal]} # note
+    gamma: ${rt.grid_search:[2.5]}
+    lr: ${rt.grid_search:[3e-5]}
+    train_feat: ${rt.grid_search:['1234567']}
+    rebalance_gamma: ${rt.grid_search:[0.25]}
+    criteria_gamma: ${rt.grid_search:[0.5]}
+    augment: ${rt.grid_search:[1]}
+    t_max_scale: ${rt.grid_search:[1.0]}
+    batch_xform: ${rt.grid_search:[CutMixUp]}
 trial:
   data:
     batch_size: 12
     module:
-      rebalance: ${param_space.train_loop_config.rebalance}
-      dedupe: ${param_space.train_loop_config.dedupe}
       augment: ${if:${param_space.train_loop_config.augment},${trial.data.augment.transform},null}
+      collate:
+        _target_: sitstart.ml.transforms.${param_space.train_loop_config.batch_xform}CollateTransform
+        num_classes: ${trial.data.num_classes}
+      criteria_gamma: ${param_space.train_loop_config.criteria_gamma}
+      dedupe: true
+      rebalance_gamma: ${param_space.train_loop_config.rebalance_gamma}
   loss_fn:
     _target_: sitstart.ml.losses.FocalLoss
-    weight: ${if:${param_space.train_loop_config.weighted_loss},${trial.data.nml_inv_class_freq},null}
     gamma: ${param_space.train_loop_config.gamma}
   model:
-    attention_dropout: ${param_space.train_loop_config.attention_dropout}
-    dropout: ${param_space.train_loop_config.dropout}
-    target_size:
-      crop: 443
-      resize: 450
-    transforms:
-      contrast:
-        factor: ${param_space.train_loop_config.contrast}
+    target_size: { crop: 443, resize: 450 }
     module:
       require_grad:
         - "-"
@@ -61,6 +55,7 @@ trial:
     _partial_: true
     _target_: torch.optim.AdamW
     lr: ${param_space.train_loop_config.lr}
+    weight_decay: 1e-8
 tune:
   scheduler:
     grace_period: ${max_num_epochs}
