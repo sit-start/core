@@ -309,10 +309,6 @@ def get_transforms(name: str) -> Callable:
     return get_weight(name).transforms()
 
 
-def hash_tensor(x: torch.Tensor) -> int:
-    return hash(tuple(x.cpu().reshape(-1).tolist()))
-
-
 def split_dataset(
     dataset: Dataset,
     train_split_size: float | int,

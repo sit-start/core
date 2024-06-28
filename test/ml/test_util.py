@@ -1,7 +1,7 @@
 import torch
 from torchvision.datasets import VisionDataset
 
-from sitstart.ml.util import hash_tensor, split_dataset, update_module
+from sitstart.ml.util import split_dataset, update_module
 
 
 def test_update_submodule():
@@ -125,8 +125,3 @@ def test_split_dataset():
 
     assert isinstance(val.dataset, VisionDataset)
     assert val.dataset.transform == val_transform
-
-
-def test_hash_tensor():
-    x = torch.tensor([1, 2, 3])
-    assert hash_tensor(x) == hash((1, 2, 3))
