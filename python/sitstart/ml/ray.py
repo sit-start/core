@@ -157,7 +157,7 @@ def tune_with_ray(config: DictConfig) -> None:
     logger.info(f"Tuning with config:\n{OmegaConf.to_yaml(config)}")
     # we postpone resolution of the trial node until the Tuner has
     # selected values from the parameter space for the trial.
-    resolve(config, exclude=["trial"])
+    resolve(config, resolve_trial="exclude")
 
     trainer = _get_ray_trainer(config, repo_state=repo_state, tuning=True)
     trial_name_args = dict(incl_params=config.tune.long_trial_names)

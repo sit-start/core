@@ -21,4 +21,4 @@ def test_experiment_configs() -> None:
 
         print(config_name)
         config = load_experiment_config(Path(config_path).stem)
-        resolve(config, sample_params=True)
+        resolve(config, resolve_trial="sample")
