@@ -14,12 +14,13 @@ from sitstart import PYTHON_ROOT, REPO_ROOT
 from sitstart.logging import get_logger
 from sitstart.ml.experiments import CONFIG_ROOT
 from sitstart.ml.experiments.util import (
+    TrialResolution,
     load_experiment_config,
+    register_omegaconf_resolvers,
     resolve,
     validate_experiment_config,
 )
 from sitstart.util.container import walk
-from sitstart.ml.experiments.util import register_omegaconf_resolvers
 from sitstart.util.run import run
 
 app = typer.Typer()
@@ -85,30 +86,19 @@ def test_config(
             show_default=False,
         ),
     ] = False,
-    exclude: Annotated[
-        list[str],
-        Option(
-            help="Exclude a node from resolution.",
-            show_default=True,
-        ),
-    ] = [],
     tune: Annotated[
         bool,
         Option(
             "--tune",
-            help="Test a tuning config. Adds --sample-params if instantiating "
-            "and --exclude=trial otherwise",
+            help="Test a tuning config. Adds --resolve-trial=sample if instantiating "
+            "and --resolve-trial=exclude otherwise.",
             show_default=False,
         ),
     ] = False,
-    sample_params: Annotated[
-        bool,
-        Option(
-            "--sample-params",
-            help="Sample the parameter search space to resolve the param_space node.",
-            show_default=False,
-        ),
-    ] = False,
+    resolve_trial: Annotated[
+        TrialResolution,
+        Option(help="How to process the config's trial node if resolving the config."),
+    ] = TrialResolution.RESOLVE,
     instantiate: Annotated[
         bool,
         Option(
@@ -125,17 +115,17 @@ def test_config(
 
     if tune:
         if instantiate:
-            if not sample_params:
+            if resolve_trial != TrialResolution.SAMPLE:
                 logger.info(
-                    "Setting --sample-params=True for tuning config instantiation."
+                    "Setting --resolve-trial=sample for tuning config instantiation."
                 )
-            sample_params = True
-        elif "trial" not in exclude:
-            logger.info("Adding 'trial' to --exclude for tuning config resolution.")
-            exclude.append("trial")
+                resolve_trial = TrialResolution.SAMPLE
+        elif resolve_trial == TrialResolution.RESOLVE:
+            logger.info("Setting --resolve-trial=exclude for tuning config.")
+            resolve_trial = TrialResolution.EXCLUDE
 
     if not no_resolve:
-        resolve(config, exclude=exclude or [], sample_params=sample_params)
+        resolve(config, resolve_trial=resolve_trial)
 
     logger.info(f"Config {name!r}:\n{OmegaConf.to_yaml(config)}")
 

@@ -1,7 +1,8 @@
 import copy
+from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, cast
 from tempfile import TemporaryDirectory
+from typing import Any, Callable, cast
 
 import pytorch_lightning as pl
 import wandb
@@ -15,7 +16,7 @@ from ray.tune.search.sample import Domain
 import sitstart.util.hydra
 from sitstart.logging import get_logger
 from sitstart.ml.experiments import CONFIG_ROOT, HYDRA_VERSION_BASE
-from sitstart.util.container import get, walk
+from sitstart.util.container import walk
 from sitstart.util.decorators import once
 from sitstart.util.hydra import load_config
 
@@ -170,36 +171,51 @@ def sample_param_space(
     )
 
 
+class TrialResolution(str, Enum):
+    RESOLVE = "resolve"
+    EXCLUDE = "exclude"
+    SAMPLE = "sample"
+
+    def __str__(self) -> str:
+        return self.value
+
+
 def resolve(
     config: Container,
-    exclude: list[str] | None = None,
-    sample_params: bool = False,
+    resolve_trial: str | TrialResolution = "resolve",
     param_space_key: str = DEFAULT_PARAM_SPACE_KEY,
+    trial_key: str = "trial",
 ) -> None:
-    """Resolves an OmegaConf config.
+    """Resolve an OmegaConf config in-place.
 
-    Optionally excludes the given keylists from resolution.
-
-    Optionally samples the parameter search space; useful for
-    testing config resolution without relying on Ray tune to
-    resolve the parameter space for a specific trial.
+    Args:
+        config: The config to resolve.
+        param_space_key: The key for the parameter search space node.
+        trial_key: The key for the trial node.
+        resolve_trial: How to handle the trial node's parameters:
+            - "resolve": Resolve the trial node's parameters.
+            - "exclude": Exclude the trial node's parameters from resolution.
+            - "sample": Sample the parameter search space for the trial node.
     """
-    validate_experiment_config(config, param_space_key=param_space_key)
+    register_omegaconf_resolvers()
 
-    config_copy = copy.deepcopy(config)
-    with open_dict(config):
-        for key in exclude or []:
-            OmegaConf.update(config, key, None)
+    resolve_trial = str(resolve_trial)
+    validate_experiment_config(
+        config, param_space_key=param_space_key, trial_key=trial_key
+    )
 
-    if sample_params:
+    if resolve_trial == "sample":
         sample_param_space(config, param_space_key)
 
-    OmegaConf.resolve(config)
-
-    with open_dict(config):
-        for key in exclude or []:
-            unresolved_val = OmegaConf.select(config_copy, key)
-            OmegaConf.update(config, key, unresolved_val)
+    for root_key in config:
+        if root_key == trial_key and resolve_trial == "exclude":
+            continue
+        node = OmegaConf.select(config, root_key)
+        if isinstance(node, Container):
+            OmegaConf.resolve(node)
+        else:
+            # ensure we resolve any root nodes that are simple interpolations
+            OmegaConf.update(config, root_key, OmegaConf.select(config, root_key))
 
 
 def validate_experiment_config(
@@ -207,39 +223,54 @@ def validate_experiment_config(
     param_space_key: str = DEFAULT_PARAM_SPACE_KEY,
     trial_key: str = "trial",
 ) -> None:
-    """Validate the experiment config.
+    """Validate the given experiment config.
 
-    Requires that:
-    - all parameter samplers and grid searches are in the parameter
-      space node
-    - interpolations of nodes in the parameter space and trial nodes
-      are only in the trial node
+    Requires the following:
+    - The trial key must specify a root config node.
+    - No direct or indirect dependencies on the parameter space
+      node appear outside the trial node.
+    - All parameter samplers and grid searches must be in the
+      parameter space node.
+
+    Raises a ValueError if any of the above conditions are not met.
     """
+    if any(c in trial_key for c in ".[]"):
+        raise ValueError("Trial key must specify a root config node.")
+    if not isinstance(config, DictConfig):
+        raise ValueError("Config must be a `DictConfig`.")
 
-    def in_node(key: str, node_key: str) -> bool:
-        return key.startswith(tuple(node_key + x for x in (".", "[]")))
+    config = copy.deepcopy(config)
+    with open_dict(config):
+        _ = config.pop(param_space_key, None)
 
-    container = OmegaConf.to_container(config, resolve=False)
-    for top, _, obj_keys in walk(container):
-        if "_target_" in obj_keys and not in_node(top, param_space_key):
-            key = ".".join((top, "_target_"))
-            if get(container, key) in TUNE_SEARCH_SPACE_API:
-                raise ValueError(
-                    "All parameter samplers / grid search must be in the config's "
-                    f"parameter space node ({key})."
-                )
-        for obj_key in obj_keys:
-            key = ".".join((top, obj_key))
-            val = get(container, key)
-            # TODO: update test to catch refs in ray.tune.sample_from
-            has_pspace_interp = isinstance(val, str) and f"${{{param_space_key}" in val
-            has_trial_interp = isinstance(val, str) and f"${{{trial_key}" in val
+    dict_types, list_types = [dict, DictConfig], [list, ListConfig]
+    container_types: Any = dict(dict_types=dict_types, list_types=list_types)
 
-            if (has_pspace_interp or has_trial_interp) and not in_node(key, trial_key):
-                raise ValueError(
-                    "All interpolations of values in the config's parameter space "
-                    f"must be in the parameter space node or the trial node ({key})."
-                )
+    for root_key in [str(k) for k in config]:
+        if root_key == trial_key:
+            continue
+        # check for resolution failures in general, and in particular
+        # those due to transitive dependencies on the parameter space node
+        try:
+            node = OmegaConf.select(config, root_key)
+            if not isinstance(node, Container):
+                continue
+            OmegaConf.resolve(node)
+        except Exception as e:
+            raise ValueError(
+                f"Failed to resolve config node {root_key!r} without the "
+                "parameter space node, possibly due to a transitive "
+                f"dependency on the parameter space node."
+            ) from e
+
+        # check for param samplers / grid searches outside the param space node
+        for key, _, obj_keys in walk(node, **container_types):
+            if "_target_" in obj_keys:
+                if OmegaConf.select(node, key + "._target_") in TUNE_SEARCH_SPACE_API:
+                    raise ValueError(
+                        "All parameter samplers and grid searches must be "
+                        f"in the config's parameter space node ({key})."
+                    )
 
 
 def validate_trial_config(config: Container) -> None:
