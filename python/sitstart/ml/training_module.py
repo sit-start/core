@@ -8,8 +8,9 @@ from pytorch_lightning.utilities.types import OptimizerLRSchedulerConfig
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import ConstantLR, LRScheduler
 from torcheval.metrics import Metric
-
+from torchmetrics import Metric as TorchMetric
 from sitstart.logging import get_logger
+from sitstart.ml.logging import is_multidim_metric, log_multidim_metric
 from sitstart.ml.transforms import BatchTransform, IdentityBatchTransform
 
 logger = get_logger(__name__)
@@ -20,8 +21,8 @@ class TrainingModule(pl.LightningModule):
         self,
         loss_fn: nn.Module,
         lr_scheduler: LRScheduler | Callable[[Optimizer], LRScheduler] | None,
-        train_metrics: dict[str, Metric] | None,
-        test_metrics: dict[str, Metric] | None,
+        train_metrics: dict[str, Metric | TorchMetric] | None,
+        test_metrics: dict[str, Metric | TorchMetric] | None,
         model: nn.Module,
         optimizer: Optimizer | Callable[[Any], Optimizer],
         train_batch_transform: BatchTransform | None = None,
@@ -112,7 +113,13 @@ class TrainingModule(pl.LightningModule):
 
     def _log_end(self, stage: str) -> None:
         for key, metric in self.metrics[stage].items():
-            self.log(f"{stage}_{key}", metric.compute(), sync_dist=True)
+            metric_name = f"{stage}_{key}"
+            if is_multidim_metric(metric):
+                for pl_logger in self.trainer.loggers:
+                    log_multidim_metric(pl_logger, metric_name, metric)
+            else:
+                self.log(metric_name, metric.compute(), sync_dist=True)
+
             metric.reset()
 
     def _val_test_step(self, stage: str, batch: Any, _: int) -> None:
