@@ -7,7 +7,7 @@ from typing import Annotated
 
 import typer
 from hydra.utils import instantiate as instantiate_config
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 from typer import Argument, Option
 
 from sitstart import PYTHON_ROOT, REPO_ROOT
@@ -15,6 +15,7 @@ from sitstart.logging import get_logger
 from sitstart.ml.experiments import CONFIG_ROOT
 from sitstart.ml.experiments.util import (
     TrialResolution,
+    get_lightning_modules_from_config,
     load_experiment_config,
     register_omegaconf_resolvers,
     resolve,
@@ -132,6 +133,8 @@ def test_config(
     if instantiate:
         container = OmegaConf.to_container(config)
         instantiated = []
+
+        logger.info("Instantiating config.")
         for top, _, obj_keys in walk(container, topdown=True):
             if "_target_" in obj_keys:
                 if not any(top.startswith(node) for node in instantiated):
@@ -139,3 +142,9 @@ def test_config(
                     obj = instantiate_config(OmegaConf.select(config, top))
                     instantiated.append(top)
                     logger.info(f"Instantiated {top!r}:\n{obj}")
+
+        logger.info("Fully instantiating lightning modules.")
+        assert isinstance(config, DictConfig)
+        data_module, training_module = get_lightning_modules_from_config(config)
+        logger.info(f"Data module:\n{data_module}")
+        logger.info(f"Training module:\n{training_module}")
