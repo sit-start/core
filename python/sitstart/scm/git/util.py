@@ -16,8 +16,8 @@ DOTFILES_REPO_PATH = "~/.local/share/yadm/repo.git"
 logger = get_logger(__name__)
 
 
-def get_repo(path: str) -> Repo:
-    path = str(Path(path).expanduser().resolve())
+def get_repo(path: str | None = None) -> Repo:
+    path = str(Path(path or __file__).expanduser().resolve())
     return Repo(path, search_parent_directories=True)
 
 

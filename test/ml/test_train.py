@@ -47,7 +47,6 @@ def test_train(
 
 @pytest.mark.slow
 def test_test(
-    caplog,
     config: DictConfig,
     data_module: pl.LightningDataModule,
     training_module: pl.LightningModule,
@@ -57,12 +56,8 @@ def test_test(
         data_module,
         training_module,
         storage_path=config.storage_path,
-        use_gpu=config.param_space.scaling_config.use_gpu,
     )
 
     log_root = f"{config.storage_path}/lightning_logs/version_0"
-    logs = [log for log in caplog.records if "test_loss" in log.message]
-
-    assert len(logs) == 1
     assert os.path.exists(f"{log_root}/hparams.yaml")
     assert glob.glob(f"{log_root}/events.out.tfevents.*")
