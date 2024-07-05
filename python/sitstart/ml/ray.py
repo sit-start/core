@@ -13,7 +13,7 @@ from ray.train.torch import TorchConfig, TorchTrainer
 from ray.tune import TuneConfig, Tuner
 from ray.tune.experiment.trial import Trial
 
-from sitstart.aws.util import update_env
+from sitstart.aws.util import update_aws_env
 from sitstart.logging import get_logger
 from sitstart.ml import DEFAULT_CHECKPOINT_ROOT
 from sitstart.ml.experiments.util import (
@@ -119,7 +119,7 @@ def _get_ckpt_path(cfg: DictConfig) -> str | None:
         )
 
     if cfg.storage_path.startswith("s3://"):
-        update_env()
+        update_aws_env()
 
     project_path = f"{cfg.storage_path}/{_get_project_name(cfg)}"
     run_path = f"{project_path}_{cfg.restore.run.group}/{cfg.restore.run.trial_id}"

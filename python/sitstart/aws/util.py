@@ -11,6 +11,8 @@ from sitstart.logging import get_logger
 
 logger = get_logger(__name__)
 
+logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
+
 
 def is_logged_in(session: Optional[boto3.Session] = None) -> bool:
     """Check if the given session is logged in"""
@@ -53,9 +55,9 @@ def get_aws_session(profile: str | None = None) -> boto3.Session:
     return boto3.Session(profile_name=profile)
 
 
-def update_env(
+def update_aws_env(
     session: boto3.Session | None = None, profile: str | None = None
-) -> None:
+) -> boto3.Session:
     """Update AWS environment variables.
 
     Useful for components like pyarrow that rely on environment
@@ -65,6 +67,10 @@ def update_env(
         raise ValueError("Only one of session or profile should be provided.")
 
     if not session or profile is not None:
+        _ = os.environ.pop("AWS_ACCESS_KEY_ID", None)
+        _ = os.environ.pop("AWS_SECRET_ACCESS_KEY", None)
+        _ = os.environ.pop("AWS_SESSION_TOKEN", None)
+        _ = os.environ.pop("AWS_DEFAULT_REGION", None)
         session = get_aws_session(profile=profile)
     credentials = session.get_credentials()
 
@@ -76,3 +82,5 @@ def update_env(
         os.environ["AWS_SESSION_TOKEN"] = credentials.token
     if session.region_name:
         os.environ["AWS_DEFAULT_REGION"] = session.region_name
+
+    return session
