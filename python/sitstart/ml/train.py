@@ -1,9 +1,10 @@
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import pytorch_lightning as pl
 import torch
+from pytorch_lightning.accelerators.accelerator import Accelerator
 from pytorch_lightning.callbacks import Callback
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.strategies import Strategy
@@ -175,16 +176,34 @@ def train(
 def test(
     data_module: pl.LightningDataModule,
     training_module: pl.LightningModule,
-    storage_path: os.PathLike[str] | None = None,
-    use_gpu: bool = False,
-    with_ray: bool = False,
-) -> None:
-    root_dir = str(storage_path) if storage_path else None
+    checkpoint_path: str | os.PathLike[str] | None = None,
+    storage_path: str | os.PathLike[str] | None = None,
+    accelerator: str | Accelerator = "auto",
+) -> list[Mapping[str, float]]:
+    """Test a model.
+
+    Args:
+        data_module: PyTorch Lightning data module, whose
+            `test_dataloader` will be used.
+        training_module: PyTorch Lightning training module.
+        checkpoint_path: Path to a checkpoint from which model weights
+            are loaded.
+        storage_path: Path to save results.
+        accelerator: Accelerator to use.
+    """
     trainer = pl.Trainer(
         devices="auto",
-        accelerator="gpu" if use_gpu else "cpu",
+        accelerator=accelerator,
         enable_progress_bar=False,
-        default_root_dir=root_dir if not with_ray else None,
+        default_root_dir=str(storage_path) if storage_path else None,
     )
-    output = trainer.test(training_module, datamodule=data_module)
-    logger.info(output)
+
+    if not training_module and not checkpoint_path:
+        raise ValueError("Either training_module or checkpoint_path must be provided.")
+
+    logger.info("Testing model" + " with checkpoint." if checkpoint_path else ".")
+    return trainer.test(
+        training_module,
+        datamodule=data_module,
+        ckpt_path=str(checkpoint_path) if checkpoint_path else None,
+    )

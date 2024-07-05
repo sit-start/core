@@ -1,7 +1,9 @@
 import copy
 from pathlib import Path
 from typing import Any, Callable, cast
+from tempfile import TemporaryDirectory
 
+import pytorch_lightning as pl
 import wandb
 import yaml
 from hydra.utils import instantiate
@@ -11,6 +13,7 @@ from ray.tune.search import SearchAlgorithm, Searcher, SearchGenerator, create_s
 from ray.tune.search.sample import Domain
 
 import sitstart.util.hydra
+from sitstart.logging import get_logger
 from sitstart.ml.experiments import CONFIG_ROOT, HYDRA_VERSION_BASE
 from sitstart.util.container import get, walk
 from sitstart.util.decorators import once
@@ -33,6 +36,8 @@ TUNE_SEARCH_SPACE_API = [
     "ray.tune.sample_from",
     "ray.tune.grid_search",
 ]
+
+logger = get_logger(__name__)
 
 
 @once
@@ -57,20 +62,35 @@ def register_omegaconf_resolvers():
         )
 
 
-def load_experiment_config(name: str, overrides: list[str] | None = None) -> Container:
+def load_experiment_config(
+    name: str, overrides: list[str] | None = None, config_path: str | None = None
+) -> Container:
     """Load an experiment config. For testing/debugging."""
     overrides = overrides or []
-    config = yaml.safe_load(Path(f"{CONFIG_ROOT}/{name}.yaml").read_text())
-    if "name" not in config:
+    config_path = config_path or CONFIG_ROOT
+
+    base_config = yaml.safe_load(Path(f"{config_path}/{name}.yaml").read_text())
+    if "name" not in base_config:
         if not any(override.startswith("name=") for override in overrides):
             overrides += ["name=" + name]
 
     return load_config(
         name,
-        config_path=CONFIG_ROOT,
+        config_path=config_path,
         overrides=overrides,
         version_base=HYDRA_VERSION_BASE,
     )
+
+
+def apply_experiment_config_overrides(
+    config: Container, overrides: list[str]
+) -> Container:
+    """Apply overrides to the given experiment config."""
+    with TemporaryDirectory() as temp_dir:
+        config_name = OmegaConf.select(config, "name")
+        temp_path = Path(temp_dir) / f"{config_name}.yaml"
+        temp_path.write_text(OmegaConf.to_yaml(config))
+        return load_config(config_name, overrides=overrides, config_path=temp_dir)
 
 
 def get_experiment_wandb_url(config: Container) -> str | None:
@@ -257,6 +277,37 @@ def get_param_space_description(
                 description.append(f"{field}={fn}({','.join(values)})")
 
     return ",".join(description)
+
+
+def get_lightning_modules_from_config(
+    config: DictConfig,
+    train_loop_config: dict[str, Any] | None = None,
+    num_workers: int = 1,
+) -> tuple[pl.LightningDataModule, pl.LightningModule]:
+    """Get the data and training modules from the given main and train loop configs."""
+    register_omegaconf_resolvers()
+    config_for_trial = copy.deepcopy(config)
+    if train_loop_config:
+        config_for_trial.param_space.train_loop_config = train_loop_config
+    validate_trial_config(config_for_trial)
+    trial_config = instantiate(config_for_trial.trial)
+
+    batch_size = trial_config.data.batch_size // num_workers
+    logger.info(
+        f"Batch size: {trial_config.data.batch_size} (global), {batch_size} (worker)"
+    )
+    data_module = trial_config.data.module(batch_size=batch_size)
+
+    training_module = trial_config.training_module(
+        loss_fn=trial_config.loss_fn,
+        lr_scheduler=trial_config.lr_scheduler,
+        test_metrics=instantiate(config_for_trial.eval.test.metrics),
+        train_metrics=instantiate(config_for_trial.eval.train.metrics),
+        model=trial_config.model.module,
+        optimizer=trial_config.optimizer,
+    )
+
+    return data_module, training_module
 
 
 def get_default_storage_path() -> str:
