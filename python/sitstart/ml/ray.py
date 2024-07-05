@@ -1,7 +1,6 @@
 import copy
 import os
 import sys
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, cast
 
@@ -11,11 +10,16 @@ from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.train import Checkpoint, FailureConfig, Result, RunConfig, get_context
 from ray.train.torch import TorchConfig, TorchTrainer
 from ray.tune import TuneConfig, Tuner
-from ray.tune.experiment.trial import Trial
 
 from sitstart.aws.util import update_aws_env
 from sitstart.logging import get_logger
 from sitstart.ml import DEFAULT_CHECKPOINT_ROOT
+from sitstart.ml.experiments.name import (
+    get_group_name,
+    get_project_name,
+    get_trial_dirname,
+    get_trial_name,
+)
 from sitstart.ml.experiments.util import (
     get_search_alg,
     register_omegaconf_resolvers,
@@ -24,54 +28,10 @@ from sitstart.ml.experiments.util import (
 )
 from sitstart.ml.train import train
 from sitstart.scm.git.repo_state import RepoState, get_repo
-from sitstart.util.string import to_str
 
 register_omegaconf_resolvers()
 
 logger = get_logger(__name__)
-
-
-def _get_project_name(config: DictConfig) -> str:
-    return config.get("name", Path(sys.argv[0]).stem)
-
-
-def _get_group_name() -> str:
-    return datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
-
-def _get_trial_dirname(trial: Trial) -> str:
-    return trial.trial_id
-
-
-def _get_trial_name(trial: Trial, incl_params: bool = False) -> str:
-    # trial_id is of the form <run_id>_<trial_num>. The unique run_id
-    # distinguishes trials from different runs in the same group, and
-    # the trial_num, from different trials in the same run. This is
-    # particularly important if we're allowing multiple runs to use
-    # the same group when those runs may be different.
-    if not incl_params:
-        return trial.trial_id
-
-    # trial.evaluated_params includes the 'path' of the variable in the
-    # config, e.g., train_loop_config/lr=1e-1. We drop the path here
-    # unless there's a collision between variable names.
-    var_to_params = {}
-    for k, v in trial.evaluated_params.items():
-        var = k.split("/")[-1]
-        var_to_params.setdefault(var, []).append([k, v])
-    params = {}
-    for k, v in var_to_params.items():
-        if len(v) == 1:
-            params[k] = v[0][1]
-        else:
-            for k0, v0 in v:
-                params[k0] = v0
-
-    param_str = to_str(
-        params, precision=4, list_sep=",", dict_sep=",", dict_kv_sep="=", use_repr=False
-    )[1:-1]
-    trial_id = trial.trial_id
-    return trial_id if not param_str else f"{trial_id}({param_str})"
 
 
 def _get_repo_state_and_add_to_config(config: DictConfig) -> RepoState | None:
@@ -100,7 +60,7 @@ def _get_callbacks(config: DictConfig) -> list:
     if config["wandb"]["enabled"]:
         callbacks.append(
             WandbLoggerCallback(
-                project=_get_project_name(config), group=_get_group_name()
+                project=get_project_name(config), group=get_group_name()
             )
         )
     return callbacks
@@ -121,7 +81,7 @@ def _get_ckpt_path(cfg: DictConfig) -> str | None:
     if cfg.storage_path.startswith("s3://"):
         update_aws_env()
 
-    project_path = f"{cfg.storage_path}/{_get_project_name(cfg)}"
+    project_path = f"{cfg.storage_path}/{get_project_name(cfg)}"
     run_path = f"{project_path}_{cfg.restore.run.group}/{cfg.restore.run.trial_id}"
     result = Result.from_path(run_path)
 
@@ -176,7 +136,7 @@ def _get_train_loop_per_worker(
             logging_interval=config.logging_interval,
             max_num_epochs=config.max_num_epochs,
             num_sanity_val_steps=config.num_sanity_val_steps,
-            project_name=_get_project_name(config),
+            project_name=get_project_name(config),
             seed=config.seed,
             storage_path=config.storage_path,
             use_gpu=config.param_space.scaling_config.use_gpu,
@@ -193,7 +153,7 @@ def _get_ray_trainer(
     tuning: bool = False,
 ):
     run_config = RunConfig(
-        name="_".join([_get_project_name(config), _get_group_name()]),
+        name="_".join([get_project_name(config), get_group_name()]),
         checkpoint_config=instantiate(config.checkpoint),
         storage_path=config.storage_path,
         callbacks=_get_callbacks(config),
@@ -250,8 +210,8 @@ def tune_with_ray(config: DictConfig) -> None:
         tune_config=TuneConfig(
             num_samples=config.tune.num_samples,
             scheduler=instantiate(config.tune.scheduler),
-            trial_name_creator=lambda trial: _get_trial_name(trial, **trial_name_args),
-            trial_dirname_creator=_get_trial_dirname,
+            trial_name_creator=lambda trial: get_trial_name(trial, **trial_name_args),
+            trial_dirname_creator=get_trial_dirname,
             search_alg=get_search_alg(config),
         ),
         param_space=instantiate(config.param_space),
