@@ -257,3 +257,9 @@ def get_param_space_description(
                 description.append(f"{field}={fn}({','.join(values)})")
 
     return ",".join(description)
+
+
+def get_default_storage_path() -> str:
+    """Returns the default storage path for experiments."""
+    config = load_experiment_config("_defaults_")
+    return OmegaConf.select(config, "storage_path")
