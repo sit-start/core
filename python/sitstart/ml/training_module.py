@@ -112,6 +112,12 @@ class TrainingModule(pl.LightningModule):
             metric.update(output, target)
 
     def _log_end(self, stage: str) -> None:
+        if stage == "train":
+            last_lr = self.lr_scheduler.get_last_lr()
+            suffix = "" if len(last_lr) == 1 else "_{i}"
+            for i, lr in enumerate(last_lr):
+                self.log(f"lr{suffix.format(i)}", lr, sync_dist=True)
+
         for key, metric in self.metrics[stage].items():
             metric_name = f"{stage}_{key}"
             if is_multidim_metric(metric):
