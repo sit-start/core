@@ -1,30 +1,33 @@
-import copy
 import os
 import sys
-from pathlib import Path
 from typing import Any, Callable, cast
 
+import ray
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from ray.air.integrations.wandb import WandbLoggerCallback
-from ray.train import Checkpoint, FailureConfig, Result, RunConfig, get_context
+from ray.train import FailureConfig, RunConfig, get_context
 from ray.train.torch import TorchConfig, TorchTrainer
 from ray.tune import TuneConfig, Tuner
 
-from sitstart.aws.util import update_aws_env
 from sitstart.logging import get_logger
-from sitstart.ml import DEFAULT_CHECKPOINT_ROOT
 from sitstart.ml.experiments.name import (
     get_group_name,
     get_project_name,
+    get_run_name,
     get_trial_dirname,
     get_trial_name,
 )
+from sitstart.ml.experiments.restore import (
+    get_checkpoint_file_path,
+    get_checkpoint_from_config,
+    to_local_checkpoint,
+)
 from sitstart.ml.experiments.util import (
+    get_lightning_modules_from_config,
     get_search_alg,
     register_omegaconf_resolvers,
     resolve,
-    validate_trial_config,
 )
 from sitstart.ml.train import train
 from sitstart.scm.git.repo_state import RepoState, get_repo
@@ -66,70 +69,32 @@ def _get_callbacks(config: DictConfig) -> list:
     return callbacks
 
 
-def _get_ckpt_path(cfg: DictConfig) -> str | None:
-    if cfg.restore.checkpoint_path:
-        return cfg.restore.checkpoint_path
-    if not cfg.restore.run.group or not cfg.restore.run.trial_id:
-        return None
-
-    select = cfg.restore.run.get("select", "last")
-    if select not in ("best", "last"):
-        raise ValueError(
-            f"Invalid restore.run.select value; should be 'best' or 'last' ({select})."
-        )
-
-    if cfg.storage_path.startswith("s3://"):
-        update_aws_env()
-
-    project_path = f"{cfg.storage_path}/{get_project_name(cfg)}"
-    run_path = f"{project_path}_{cfg.restore.run.group}/{cfg.restore.run.trial_id}"
-    result = Result.from_path(run_path)
-
-    last_ckpt = result.checkpoint
-    best_ckpt = result.get_best_checkpoint(cfg.eval.select.metric, cfg.eval.select.mode)
-    ckpt = last_ckpt if select == "last" else best_ckpt
-
-    fs_prefix = {"s3": "s3://", "gcs": "gs://"}
-    if ckpt:
-        fs = ckpt.filesystem
-        prefix = fs_prefix.get(fs.type_name, "") if fs else ""
-        return prefix + ckpt.path
-
-    return None
-
-
 def _get_train_loop_per_worker(
     config: DictConfig, with_ray: bool = True
 ) -> Callable[[dict[str, Any]], None]:
     def train_loop_per_worker(train_loop_config: dict[str, Any]) -> None:
-        register_omegaconf_resolvers()
-        config_for_trial = copy.deepcopy(config)
-        config_for_trial.param_space.train_loop_config = train_loop_config
-        validate_trial_config(config_for_trial)
-        trial_config = instantiate(config_for_trial.trial)
-
-        training_module = trial_config.training_module(
-            loss_fn=trial_config.loss_fn,
-            lr_scheduler=trial_config.lr_scheduler,
-            test_metrics=instantiate(config_for_trial.eval.test.metrics),
-            train_metrics=instantiate(config_for_trial.eval.train.metrics),
-            model=trial_config.model.module,
-            optimizer=trial_config.optimizer,
+        train_context = get_context()
+        num_workers = train_context.get_world_size() if train_context else 1
+        data_module, training_module = get_lightning_modules_from_config(
+            config, train_loop_config, num_workers=num_workers
         )
 
-        batch_size = trial_config.data.batch_size
-        worker_batch_size = batch_size
-        if train_context := get_context():
-            worker_batch_size = batch_size // train_context.get_world_size()
-            logger.info(
-                f"Batch size: {batch_size} (global), {worker_batch_size} (worker)"
-            )
-        data_module = trial_config.data.module(batch_size=worker_batch_size)
+        ckpt = get_checkpoint_from_config(config)
+        if ray_ckpt := ray.train.get_checkpoint():
+            if ckpt:
+                logger.warning(
+                    "Ray is resuming from the session's last checkpoint."
+                    "This overrides the user-specified checkpoint."
+                )
+            ckpt = ray_ckpt
+        ckpt_path = (
+            get_checkpoint_file_path(to_local_checkpoint(ckpt)) if ckpt else None
+        )
 
         train(
             data_module=data_module,
             training_module=training_module,
-            ckpt_path=get_local_checkpoint_path(config),
+            ckpt_path=ckpt_path,
             float32_matmul_precision=config.float32_matmul_precision,
             gradient_clip_algorithm=config.gradient_clip.algorithm,
             gradient_clip_val=config.gradient_clip.value,
@@ -153,7 +118,7 @@ def _get_ray_trainer(
     tuning: bool = False,
 ):
     run_config = RunConfig(
-        name="_".join([get_project_name(config), get_group_name()]),
+        name=get_run_name(get_project_name(config)),
         checkpoint_config=instantiate(config.checkpoint),
         storage_path=config.storage_path,
         callbacks=_get_callbacks(config),
@@ -174,14 +139,6 @@ def _get_ray_trainer(
         metadata=metadata,
         torch_config=TorchConfig(backend=config.torch.distributed_backend),
     )
-
-
-def get_local_checkpoint_path(config: DictConfig) -> str | None:
-    if (ckpt_path := _get_ckpt_path(config)) is None:
-        return None
-    ckpt = Checkpoint(ckpt_path)
-    ckpt_dir = ckpt.to_directory(f"{DEFAULT_CHECKPOINT_ROOT}/ckpt")
-    return str(Path(ckpt_dir) / "checkpoint.ckpt")
 
 
 def train_with_ray(config: DictConfig) -> None:
