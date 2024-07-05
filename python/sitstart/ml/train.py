@@ -12,7 +12,6 @@ from pytorch_lightning.utilities.compile import from_compiled
 from torch._dynamo import OptimizedModule
 
 from sitstart.logging import get_logger
-from sitstart.ml import DEFAULT_CHECKPOINT_ROOT
 from sitstart.ml.callbacks import LoggerCallback
 from sitstart.ml.data.modules.vision_data_module import VisionDataModule
 from sitstart.ml.training_module import TrainingModule
@@ -101,8 +100,6 @@ def train(
         pl.seed_everything(seed)
 
     if with_ray:
-        import ray
-        import ray.train
         from ray.train.lightning import (
             RayDDPStrategy,
             RayLightningEnvironment,
@@ -134,6 +131,7 @@ def train(
         accelerator = "mps"
     else:
         accelerator = "cpu"
+    logger.info(f"Training with {accelerator=!r}.")
 
     # TODO: address warning re: missing tensorboard logging directory
     root_dir = str(storage_path) if storage_path else None
@@ -156,15 +154,6 @@ def train(
 
     if with_ray:
         trainer = prepare_trainer(trainer)
-        if ckpt := ray.train.get_checkpoint():
-            assert (
-                ckpt_path is None
-            ), "Cannot load both trial- and user-specified checkpoints."
-            ckpt_dir = ckpt.to_directory(f"{DEFAULT_CHECKPOINT_ROOT}/ckpt")
-            ckpt_path = Path(ckpt_dir) / "checkpoint.ckpt"
-
-    if ckpt_path:
-        logger.info(f"Loading checkpoint from: {ckpt_path}")
 
     trainer.fit(
         training_module,
