@@ -59,5 +59,6 @@
   "python.testing.pytestEnabled": true,
   "rewrap.wrappingColumn": 72,
   "shellcheck.customArgs": ["--rcfile=${workspaceFolder}/.shellcheckrc"],
-  "shellformat.flag": "--indent 2"
+  "shellformat.flag": "--indent 2",
+  "jupyter.jupyterCommandLineArguments": ["-Xfrozen_modules=off"]
 }

@@ -16,6 +16,15 @@ def get_group_name() -> str:
     return datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
 
+def get_run_name(project_name: str, group_name: str | None = None) -> str:
+    group_name = group_name or get_group_name()
+    return "_".join([project_name, group_name])
+
+
+def get_group_name_from_run_name(project_name: str, run_name: str) -> str:
+    return run_name[len(project_name) + 1 :]
+
+
 def get_trial_dirname(trial: Trial) -> str:
     return trial.trial_id
 
