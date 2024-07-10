@@ -72,6 +72,10 @@ setup_commands:
   - git -C $CORE fetch --all --prune --prune-tags
   # login and configure wandb
   - test -z "$WANDB_DIR" || { mkdir -p "$WANDB_DIR"; wandb login; }
+  # update python venv
+  - |
+    activate_py_env "$CORE/.venv" &&
+      pip install -r "$CORE/requirements-dev.txt"
 head_setup_commands:
   # create the prometheus service file
   - |
