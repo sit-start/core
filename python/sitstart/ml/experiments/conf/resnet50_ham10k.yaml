@@ -2,7 +2,6 @@
 defaults:
   - _defaults_
   - trial/data: ham10k
-  #- trial/lr_scheduler: cosine_annealing
   - trial/model: resnet50
   - _self_
 eval:
@@ -17,7 +16,6 @@ eval:
         labels: ${trial.data.class_labels}
         normalize: "true"
   train:
-    # don't track train split metrics since we're using cutmix/mixup
     metrics: null
   select:
     metric: val_rec
@@ -26,9 +24,8 @@ max_num_epochs: 50
 name: resnet50_ham10k
 param_space:
   train_loop_config:
-    note: ${rt.grid_search:['full_res']}
     lr: ${rt.grid_search:[1e-3]}
-    batch_size: ${rt.grid_search:[48,48]}
+    batch_size: ${rt.grid_search:[48]}
     dropout: ${rt.grid_search:[0]}
     fc_dropout: ${rt.grid_search:[0]}
     gamma: ${rt.grid_search:[2.5]}
@@ -51,7 +48,6 @@ trial:
     gamma: ${param_space.train_loop_config.gamma}
   model:
     target_size: { crop: 443, resize: 450 }
-    # target_size: { crop: 224, resize: 224 }
     module:
       append:
         layer*.*.relu:
