@@ -28,7 +28,7 @@ from sitstart.util.vscode import open_vscode_over_ssh
 DEFAULT_CONFIG = "main"
 CLUSTER_CONFIG_ROOT = f"{PYTHON_ROOT}/sitstart/ray/config/cluster"
 SCRIPT_ROOT = f"{PYTHON_ROOT}/sitstart/ml/experiments"
-JOB_CONFIG_DIR = "conf"
+SCRIPT_CONFIG_DIR = "conf"
 FORWARDED_PORTS = {  # (service, remote port) pairs
     "Ray Dashboard": DASHBOARD_PORT,
     "Prometheus": 9090,
@@ -162,11 +162,11 @@ ScriptArg = Annotated[
         show_default=False,
     ),
 ]
-JobConfigOpt = Annotated[
+ScriptConfigOpt = Annotated[
     Optional[str],
     Option(
-        help="The job config path, or filename or stem in the "
-        f"{JOB_CONFIG_DIR!r} directory adjacent to the script.",
+        help="The script config path, or filename or stem in the "
+        f"{SCRIPT_CONFIG_DIR!r} directory adjacent to the script.",
         show_default=False,
     ),
 ]
@@ -202,6 +202,14 @@ SyncDotfilesOpt = Annotated[
     Option(
         "--sync-dotfiles",
         help="Sync dotfiles to the head node.",
+        show_default=False,
+    ),
+]
+NoCloneVenvOpt = Annotated[
+    bool,
+    Option(
+        "--no-clone-venv",
+        help="Do not clone the Python virtual environment; use the cluster default.",
         show_default=False,
     ),
 ]
@@ -251,35 +259,24 @@ def list_jobs(
 @app.command()
 def submit(
     script: ScriptArg,
-    config: ConfigOpt = DEFAULT_CONFIG,
-    cluster_name: ClusterNameOpt = None,
     profile: ProfileOpt = None,
-    job_config: JobConfigOpt = None,
-    restart: RestartOpt = False,
-    sync_dotfiles: SyncDotfilesOpt = False,
+    config: ScriptConfigOpt = None,
     dashboard_port: DashboardPortOpt = DASHBOARD_PORT,
+    no_clone_venv: NoCloneVenvOpt = False,
     description: DescriptionOpt = None,
 ) -> str:
     """Run a job on a Ray cluster."""
     _ = get_aws_session(profile=profile)
-    config_path = _resolve_cluster_config_path(config)
     script_path = _resolve_path(script, SCRIPT_ROOT, ["py", "sh"])
-    job_config_root = str(script_path.parent / JOB_CONFIG_DIR)
-    job_config_path = (
-        _resolve_path(job_config, job_config_root, ["yaml", "yml"])
-        if job_config
-        else None
+    config_root = str(script_path.parent / SCRIPT_CONFIG_DIR)
+    config_path = (
+        _resolve_path(config, config_root, ["yaml", "yml"]) if config else None
     )
-    cluster_name = cluster_name or config_path.stem
-
     try:
         return submit_job(
             script_path=script_path,
+            clone_venv=not no_clone_venv,
             config_path=config_path,
-            cluster_name=cluster_name,
-            job_config_path=job_config_path,
-            restart=restart,
-            do_sync_dotfiles=sync_dotfiles,
             dashboard_port=dashboard_port,
             description=description,
         )

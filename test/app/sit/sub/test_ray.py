@@ -19,7 +19,7 @@ RAY_CONFIG_NAME = f"test-{ray.DEFAULT_CONFIG}-" + rand_str(
 )
 TEST_DASHBOARD_PORT = 8266
 TEST_SCRIPT = "tune"
-TEST_JOB_CONFIG = "test2d"
+TEST_SCRIPT_CONFIG = "test2d"
 SSH_CONFIG = """CanonicalizeHostname yes
 Host *.compute.amazonaws.com
     User ec2-user
@@ -99,13 +99,12 @@ def test_up(ray_cluster, run_on_head):
 
 @pytest.mark.integration
 @pytest.mark.slow
-def test_submit(ray_cluster, ray_config):
+def test_submit(ray_cluster):
     client = get_job_submission_client(dashboard_port=TEST_DASHBOARD_PORT)
 
     sub_id = ray.submit(
         TEST_SCRIPT,
-        config=ray_config,
-        job_config=TEST_JOB_CONFIG,
+        config=TEST_SCRIPT_CONFIG,
         dashboard_port=TEST_DASHBOARD_PORT,
     )
     status = wait_for_job_status(client, sub_id, JobStatus.RUNNING)
@@ -117,13 +116,12 @@ def test_submit(ray_cluster, ray_config):
 
 @pytest.mark.integration
 @pytest.mark.slow
-def test_stop_jobs(ray_cluster, ray_config):
+def test_stop_jobs(ray_cluster):
     client = get_job_submission_client(dashboard_port=TEST_DASHBOARD_PORT)
 
     sub_id = ray.submit(
         TEST_SCRIPT,
-        config=ray_config,
-        job_config=TEST_JOB_CONFIG,
+        config=TEST_SCRIPT_CONFIG,
         dashboard_port=TEST_DASHBOARD_PORT,
     )
     status = wait_for_job_status(client, sub_id, JobStatus.RUNNING)
