@@ -4,10 +4,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-import git
 import yaml
+from ray.cluster_utils import ray_constants
 from ray.job_submission import JobDetails, JobStatus, JobSubmissionClient
 
+from sitstart import PYTHON_ROOT, REPO_ROOT
 from sitstart.logging import get_logger
 from sitstart.ml.experiments import CONFIG_ROOT
 from sitstart.ml.experiments.util import (
@@ -20,11 +21,26 @@ from sitstart.util.run import run
 
 DASHBOARD_PORT = 8265
 
+WORKING_DIR = REPO_ROOT
+REMOTE_WORKING_DIR = Path(
+    f"'${{{ray_constants.RAY_RUNTIME_ENV_CREATE_WORKING_DIR_ENV_VAR}}}'"
+)
+
 logger = get_logger(__name__)
 
 
-def get_job_submission_client(dashboard_port=DASHBOARD_PORT) -> JobSubmissionClient:
+def get_job_submission_client(
+    dashboard_port: int = DASHBOARD_PORT,
+) -> JobSubmissionClient:
     return JobSubmissionClient(f"http://127.0.0.1:{dashboard_port}")
+
+
+def get_job_runtime_env(clone_venv: bool = True) -> dict[str, Any]:
+    return {
+        "working_dir": WORKING_DIR,
+        "pip": "requirements.txt" if clone_venv else None,
+        "env_vars": {"PYTHONPATH": str(Path(PYTHON_ROOT).relative_to(WORKING_DIR))},
+    }
 
 
 def wait_for_job_status(
@@ -47,7 +63,7 @@ def _resolve_path(path: str | Path) -> Path:
 
 
 def _stop_job(
-    job: JobDetails, delete: bool = False, dashboard_port=DASHBOARD_PORT
+    job: JobDetails, delete: bool = False, dashboard_port: int = DASHBOARD_PORT
 ) -> None:
     logger.info(f"Stopping job {job.submission_id} ({job.job_id})")
     if not job.submission_id:
@@ -82,7 +98,9 @@ def get_file_mounts(config_path: Path, user_root: str = "/home") -> dict[Path, P
     return {expand_user(dst, user): _resolve_path(src) for dst, src in mounts.items()}
 
 
-def stop_job(sub_id: str, delete: bool = False, dashboard_port=DASHBOARD_PORT) -> None:
+def stop_job(
+    sub_id: str, delete: bool = False, dashboard_port: int = DASHBOARD_PORT
+) -> None:
     if sub_id == "all":
         stop_all_jobs(delete=delete, dashboard_port=dashboard_port)
         return
@@ -95,14 +113,14 @@ def stop_job(sub_id: str, delete: bool = False, dashboard_port=DASHBOARD_PORT) -
     _stop_job(job, delete=delete, dashboard_port=dashboard_port)
 
 
-def stop_all_jobs(delete: bool = False, dashboard_port=DASHBOARD_PORT) -> None:
+def stop_all_jobs(delete: bool = False, dashboard_port: int = DASHBOARD_PORT) -> None:
     logger.info("Stopping all jobs.")
     client = get_job_submission_client(dashboard_port)
     for job in client.list_jobs():
         _stop_job(job, delete=delete, dashboard_port=dashboard_port)
 
 
-def list_jobs(dashboard_port=DASHBOARD_PORT) -> None:
+def list_jobs(dashboard_port: int = DASHBOARD_PORT) -> None:
     client = get_job_submission_client(dashboard_port)
     start = "\n" + "-" * 50 + "\n"
     message = "Listing all jobs."
@@ -120,79 +138,62 @@ def list_jobs(dashboard_port=DASHBOARD_PORT) -> None:
 
 def submit_job(
     script_path: Path,
-    config_path: Path,
-    cluster_name: str,
-    job_config_path: Path | None = None,
-    description: str | None = None,
-    restart: bool = False,
-    do_sync_dotfiles: bool = False,
     dashboard_port: int = DASHBOARD_PORT,
+    description: str | None = None,
+    clone_venv: bool = True,
+    config_path: Path | None = None,
 ) -> str:
-    # get the script path's containing repo
-    try:
-        repo = git.Repo(script_path, search_parent_directories=True)
-    except git.InvalidGitRepositoryError:
-        logger.error(f"No git repository found for {str(script_path)!r}; exiting")
+    """Submit a job to the Ray cluster.
+
+    Args:
+        script_path: The path to the script to run. Must be in `WORKING_DIR`.
+        dashboard_port: The port for the Ray dashboard.
+        description: A description of the job, shown in`list_jobs`.
+        clone_venv: Whether to clone the current virtual environment.
+        config_path: The path to the script's Hydra config.
+    """
+    script_path = _resolve_path(script_path)
+    if not script_path.is_relative_to(WORKING_DIR):
+        logger.error(f"Script path {script_path} not in working dir {WORKING_DIR}.")
         sys.exit(-1)
-    repo_path = Path(repo.working_dir)
+    script_path_in_working_dir = script_path.relative_to(WORKING_DIR)
 
-    # make sure the job config is also in the repo
-    if job_config_path and not job_config_path.is_relative_to(repo.working_dir):
-        logger.error(f"Job config {str(job_config_path)!r} not in repository; exiting")
-        sys.exit(-1)
+    if config_path:
+        config_path = _resolve_path(config_path)
+        if not config_path.is_relative_to(WORKING_DIR):
+            logger.error(f"Config path {config_path} not in working dir {WORKING_DIR}.")
+            sys.exit(-1)
+        config_path_in_working_dir = config_path.relative_to(script_path.parent)
 
-    # ensure the repo is in the cluster config's `file_mounts`, which
-    # map cluster paths to local paths for syncing local -> head ->
-    # worker
-    mounts = get_file_mounts(config_path)
-    mount = next((m for m in mounts.items() if repo_path.is_relative_to(m[1])), None)
-    if not mount:
-        msg = f"Repo {repo.working_dir!r} not in file_mounts and cannot be synced."
-        logger.error(msg)
-        sys.exit(-1)
-
-    # setup remote command, w/ hydra config args if job_config was provided
-    cluster_script_path = Path(mount[0]) / script_path.relative_to(mount[1])
-    cmd = ["python", str(cluster_script_path)]
-    if job_config_path:
-        remote_job_config_path = Path(mount[0]) / job_config_path.relative_to(mount[1])
-        cmd.append(f"--config-path={str(remote_job_config_path.parent)}")
-        cmd.append(f"--config-name={remote_job_config_path.stem}")
-
-    # invoke ray-up, syncing file mounts and running setup commands
-    # even if the config hasn't changed
-    logger.info("Running 'ray up' to sync files and run setup commands")
-    cluster_up(
-        config_path=config_path,
-        cluster_name=cluster_name or Path(config_path).stem,
-        no_restart=not restart,
-        no_config_cache=True,
-        do_sync_dotfiles=do_sync_dotfiles,
-    )
+    # setup the remote command
+    cmd = ["python", str(script_path_in_working_dir)]
+    if config_path:
+        cmd.append(f"--config-path={config_path_in_working_dir.parent}")
+        cmd.append(f"--config-name={config_path_in_working_dir.stem}")
 
     # grab extra info if the job config is an experiment config
     wandb_url = None
-    if job_config_path and _resolve_path(job_config_path).is_relative_to(CONFIG_ROOT):
-        exp_config = load_experiment_config(job_config_path.stem)
+    if config_path and config_path == Path(CONFIG_ROOT) / config_path.name:
+        exp_config = load_experiment_config(config_path.stem)
         param_space_desc = get_param_space_description(exp_config)
         prefix = f"{description}: " if description else ""
         description = prefix + param_space_desc
         wandb_url = get_experiment_wandb_url(exp_config)
 
-    # submit the job; note that disallowing user-specified parameters,
-    # aside from an optional job config that's part of the repository,
-    # goes a long way to ensuring reproducibility from only the cached
-    # repository state
-    # TODO: control env vars here as well w/ ray envs
+    # submit the job
+    # TODO: https://github.com/sit-start/core/issues/126
     client = get_job_submission_client(dashboard_port=dashboard_port)
     entrypoint = " ".join(cmd)
     metadata = {"description": description} if description else None
+    runtime_env = get_job_runtime_env(clone_venv=clone_venv)
     logger.info(f"Submitting job with entrypoint {entrypoint!r}")
-    sub_id = client.submit_job(entrypoint=entrypoint, metadata=metadata)
+    sub_id = client.submit_job(
+        entrypoint=entrypoint, metadata=metadata, runtime_env=runtime_env
+    )
 
     logger.info(f"Job {sub_id} submitted")
     logger.info("Logs: http://localhost:3000/d/ray_logs_dashboard")
-    logger.info("Ray dashboard: http://localhost:8265")
+    logger.info(f"Ray dashboard: http://localhost:{dashboard_port}")
     if wandb_url:
         logger.info(f"W&B project: {wandb_url}")
 
