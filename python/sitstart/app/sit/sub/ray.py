@@ -205,11 +205,12 @@ SyncDotfilesOpt = Annotated[
         show_default=False,
     ),
 ]
-NoCloneVenvOpt = Annotated[
+CloneVenvOpt = Annotated[
     bool,
     Option(
-        "--no-clone-venv",
-        help="Do not clone the Python virtual environment; use the cluster default.",
+        "--clone-venv",
+        help="Create a new virtual environment for the job "
+        "from the requirements.txt",
         show_default=False,
     ),
 ]
@@ -262,7 +263,7 @@ def submit(
     profile: ProfileOpt = None,
     config: ScriptConfigOpt = None,
     dashboard_port: DashboardPortOpt = DASHBOARD_PORT,
-    no_clone_venv: NoCloneVenvOpt = False,
+    clone_venv: CloneVenvOpt = False,
     description: DescriptionOpt = None,
 ) -> str:
     """Run a job on a Ray cluster."""
@@ -275,7 +276,7 @@ def submit(
     try:
         return submit_job(
             script_path=script_path,
-            clone_venv=not no_clone_venv,
+            clone_venv=clone_venv,
             config_path=config_path,
             dashboard_port=dashboard_port,
             description=description,
