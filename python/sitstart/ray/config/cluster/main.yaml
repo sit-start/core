@@ -108,12 +108,14 @@ head_setup_commands:
         install_components loki'
 worker_setup_commands: []
 head_start_ray_commands:
-  # restart ray
+  # restart ray, with a longer runtime expiration to allow for
+  # extended setup times from, e.g., venv setup
   - ray stop
   - |
-    ray start --head --port=6379 --object-manager-port=8076 \
-      --autoscaling-config=~/ray_bootstrap_config.yaml \
-      --dashboard-host=0.0.0.0 --ray-debugger-external
+    RAY_RUNTIME_ENV_TEMPORARY_REFERENCE_EXPIRATION_S=1800 \
+      ray start --head --port=6379 --object-manager-port=8076 \
+        --autoscaling-config=~/ray_bootstrap_config.yaml \
+        --dashboard-host=0.0.0.0 --ray-debugger-external
   # add loki dashboard and datasource to grafana
   - |
     cp "$CORE/python/sitstart/ray/config/aux/loki_grafana_datasource.yml" \
@@ -128,11 +130,13 @@ head_start_ray_commands:
   - sudo systemctl restart loki
   - sudo systemctl restart tensorboard
 worker_start_ray_commands:
-  # restart ray
+  # restart ray, with a longer runtime expiration to allow for
+  # extended setup times from, e.g., venv setup
   - ray stop
   - |
-    ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076 \
-      --ray-debugger-external
+    RAY_RUNTIME_ENV_TEMPORARY_REFERENCE_EXPIRATION_S=1800 \
+      ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076 \
+        --ray-debugger-external
   # update the fluent-bit config with $RAY_HEAD_IP
   - |
     sudo mkdir -p /etc/fluent-bit &&
