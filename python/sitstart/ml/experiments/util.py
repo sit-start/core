@@ -145,13 +145,18 @@ def sample_param_space(
 
     # instantiate any param space target in the search space API
     param_space = copy.deepcopy(OmegaConf.select(config, param_space_key))
-    for top, _, _ in walk(OmegaConf.to_container(param_space, resolve=True)):
+    param_space_as_container = OmegaConf.to_container(param_space, resolve=True)
+
+    for top, _, _ in walk(param_space_as_container, topdown=False):
         val = OmegaConf.select(param_space, top)
-        if val and val.get("_target_", None) in TUNE_SEARCH_SPACE_API:
-            obj = instantiate(OmegaConf.select(param_space, top), _recursive_=False)
-            if isinstance(obj, Domain):
-                obj = obj.sample()
-            OmegaConf.update(param_space, top, obj, force_add=True, merge=False)
+        if not isinstance(val, DictConfig):
+            continue
+        if val.get("_target_", None) not in TUNE_SEARCH_SPACE_API:
+            continue
+        obj = instantiate(OmegaConf.select(param_space, top), _recursive_=False)
+        if isinstance(obj, Domain):
+            obj = obj.sample()
+        OmegaConf.update(param_space, top, obj, force_add=True, merge=False)
 
     # a dummy trainable, so we can add an experiment to the search algo
     def trainable(config: dict[str, Any]) -> None:
