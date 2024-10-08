@@ -3,7 +3,7 @@ import re
 import shlex
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 
 import typer
 from hydra.utils import instantiate as instantiate_config
@@ -13,6 +13,7 @@ from typer import Argument, Option
 from sitstart import PYTHON_ROOT, REPO_ROOT
 from sitstart.logging import get_logger
 from sitstart.ml.experiments import CONFIG_ROOT
+from sitstart.ml.experiments.restore import get_trial_path_from_trial
 from sitstart.ml.experiments.util import (
     TrialResolution,
     get_lightning_modules_from_config,
@@ -30,6 +31,15 @@ logger = get_logger(__name__, format="simple")
 DEFAULT_PROJECT_PATH = PYTHON_ROOT
 DEFAULT_REQUIREMENTS_PATH = f"{REPO_ROOT}/requirements.txt"
 DEFAULT_PACKAGE_VARIANTS = ["ray[data,default,train,tune]"]
+TRIAL_ARCHIVE_URL = "s3://ktd-ray/archive/trials"
+
+ConfigNameArg = Annotated[
+    str,
+    Argument(
+        help=f"Name of the experiment config in {CONFIG_ROOT}.",
+        show_default=False,
+    ),
+]
 
 
 @app.command()
@@ -68,6 +78,90 @@ def update_requirements(
         except RuntimeError as e:
             logger.error(f"Failed to update {package!r} to {entry!r}: {e}")
     Path(requirements_path).write_text(requirements)
+
+
+@app.command()
+def archive_trial(
+    trial_id: Annotated[
+        str,
+        Argument(help="The trial ID to archive.", show_default=False),
+    ],
+    run_group: Annotated[
+        Optional[str],
+        Option(
+            help="The run group. If not specified, runs are searched based on trial ID "
+            "and project name.",
+            show_default=False,
+        ),
+    ] = None,
+    config_name: Annotated[
+        Optional[str],
+        Option(
+            help=f"Name of the experiment config in {CONFIG_ROOT}.", show_default=False
+        ),
+    ] = None,
+    storage_path: Annotated[
+        Optional[str],
+        Option(
+            help="The storage path. Defaults to the storage path in the config.",
+            show_default=False,
+        ),
+    ] = None,
+    project_name: Annotated[
+        Optional[str],
+        Option(
+            help="The project name. Defaults to the project name in the config.",
+            show_default=False,
+        ),
+    ] = None,
+) -> None:
+    """Archive a trial."""
+
+    # load the config if overrides aren't provided
+    if use_config := (storage_path is None or project_name is None):
+        if use_config and config_name is None:
+            logger.error(
+                "Either config_name or project_name + storage_path is required."
+            )
+            return
+        assert config_name is not None
+
+        config = load_experiment_config(config_name)
+        if not isinstance(config, DictConfig):
+            logger.error(f"Failed to load a `DictConfig` from {config_name!r}.")
+            return
+
+        storage_path = storage_path or config.storage_path
+        project_name = project_name or config.name
+
+    assert project_name is not None
+    assert storage_path is not None
+
+    # get the trial path, searching for the run group if it's not provided
+    trial_path = get_trial_path_from_trial(
+        project_name=project_name,
+        storage_path=storage_path,
+        trial_id=trial_id,
+        run_group=run_group,
+    )
+    cmd = f"aws s3 ls {trial_path}"
+    if trial_path is None or run(shlex.split(cmd), check=False).returncode != 0:
+        logger.error(f"Failed to find path for trial {trial_id!r}.")
+        return
+
+    # copy the trial to the archive
+    target_trial_path = f"{TRIAL_ARCHIVE_URL}/{project_name}/{trial_id}"
+    logger.info(
+        f"Archiving trial {trial_id!r} from {trial_path!r} to {target_trial_path!r}."
+    )
+    cmd = f"aws s3 cp {trial_path}/ {target_trial_path} --recursive"
+    result = run(shlex.split(cmd), check=False)
+    if result.returncode != 0:
+        logger.error(
+            f"Archiving failed with command {cmd!r} and "
+            f"return code {result.returncode}."
+        )
+        return
 
 
 @app.command()

@@ -41,24 +41,6 @@ def _get_run_group_from_trial(
     return result
 
 
-def _get_trial_path_from_trial(
-    project_name: str,
-    storage_path: str,
-    trial_id: str,
-    run_group: str | None = None,
-) -> str | None:
-    if not trial_id:
-        return None
-    run_group = run_group or _get_run_group_from_trial(
-        storage_path, project_name, trial_id
-    )
-    if not run_group:
-        return None
-    project_path = f"{storage_path}/{project_name}"
-
-    return f"{project_path}_{run_group}/{trial_id}"
-
-
 def _get_checkpoint_path_from_trial(
     project_name: str,
     storage_path: str,
@@ -76,7 +58,7 @@ def _get_checkpoint_path_from_trial(
             "select_metric and select_mode must be provided when select='best'."
         )
 
-    trial_path = _get_trial_path_from_trial(
+    trial_path = get_trial_path_from_trial(
         project_name=project_name,
         storage_path=storage_path,
         trial_id=trial_id,
@@ -115,6 +97,24 @@ def _get_trial_params_from_trial_path(trial_path: CloudPath | Path) -> dict[str,
     return json.loads(params_path.read_text())
 
 
+def get_trial_path_from_trial(
+    project_name: str,
+    storage_path: str,
+    trial_id: str,
+    run_group: str | None = None,
+) -> str | None:
+    if not trial_id:
+        return None
+    run_group = run_group or _get_run_group_from_trial(
+        storage_path, project_name, trial_id
+    )
+    if not run_group:
+        return None
+    project_path = f"{storage_path}/{project_name}"
+
+    return f"{project_path}_{run_group}/{trial_id}"
+
+
 def to_local_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
     """Converts a remote checkpoint to a local checkpoint.
 
@@ -141,7 +141,7 @@ def get_trial_params(
     logger.info(
         f"Getting trial parameters for trial {trial_id!r} in project {project_name!r}."
     )
-    trial_path = _get_trial_path_from_trial(
+    trial_path = get_trial_path_from_trial(
         project_name=project_name,
         storage_path=storage_path or get_default_storage_path(),
         trial_id=trial_id,
