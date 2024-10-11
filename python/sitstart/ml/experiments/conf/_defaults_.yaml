@@ -41,7 +41,7 @@ restore:
     select: last # best or last
 save_repo_state: true
 seed: null
-storage_path: s3://ktd-ray/runs
+storage_path: s3://sitstart-ray-runs
 torch:
   distributed_backend: nccl
 trial:

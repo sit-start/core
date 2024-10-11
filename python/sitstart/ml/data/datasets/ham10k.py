@@ -18,7 +18,7 @@ from sitstart.logging import get_logger
 from sitstart.ml.data import DEFAULT_DATASET_ROOT
 
 _MISSING_OR_CORRUPTED_IMAGE_IDS = ["ISIC_0035068"]
-_DOWNLOAD_URL = "s3://ktd-datasets/ham10k"
+_DOWNLOAD_URL = "s3://sitstart-datasets/ham10k"
 _EXCLUDED_FILES = [".DS_Store"]
 _SOURCE_FILES = """
 train:
