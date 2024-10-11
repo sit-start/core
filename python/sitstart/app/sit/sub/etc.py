@@ -31,7 +31,7 @@ logger = get_logger(__name__, format="simple")
 DEFAULT_PROJECT_PATH = PYTHON_ROOT
 DEFAULT_REQUIREMENTS_PATH = f"{REPO_ROOT}/requirements.txt"
 DEFAULT_PACKAGE_VARIANTS = ["ray[data,default,train,tune]"]
-TRIAL_ARCHIVE_URL = "s3://ktd-ray/archive/trials"
+TRIAL_ARCHIVE_URL = "s3://sitstart/archive/trials"
 
 ConfigNameArg = Annotated[
     str,
