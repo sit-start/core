@@ -29,6 +29,7 @@ def test_trial(
     select: Literal["best", "last"] = "last",
     select_metric: str | None = None,
     select_mode: str | None = None,
+    is_archived: bool = False,
 ) -> Any:
     """Test the trial with the given project name and trial ID.
 
@@ -44,6 +45,7 @@ def test_trial(
         select=select,
         select_metric=select_metric,
         select_mode=select_mode,
+        is_archived=is_archived,
     )
     if not ckpt:
         raise ValueError(

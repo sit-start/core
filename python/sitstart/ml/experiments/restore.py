@@ -11,7 +11,7 @@ from ray.train import Checkpoint, Result
 from sitstart.aws.util import update_aws_env
 from sitstart.cloudpathlib.util import get_local_path
 from sitstart.logging import get_logger
-from sitstart.ml.experiments import RUN_ROOT
+from sitstart.ml.experiments import RUN_ROOT, TRIAL_ARCHIVE_URL
 from sitstart.ml.experiments.name import get_group_name_from_run_name
 from sitstart.ml.experiments.util import get_default_storage_path
 from sitstart.scm.git.repo_state import RepoState
@@ -41,32 +41,12 @@ def _get_run_group_from_trial(
     return result
 
 
-def _get_checkpoint_path_from_trial(
-    project_name: str,
-    storage_path: str,
-    trial_id: str,
-    run_group: str | None = None,
+def _get_checkpoint_path(
+    trial_path: str,
     select: Literal["best", "last"] = "last",
     select_metric: str | None = None,
     select_mode: str | None = None,
 ) -> str | None:
-    """Returns the checkpoint directory path"""
-    if select not in ("best", "last"):
-        raise ValueError(f"Invalid value for select: {select}")
-    if select == "best" and (select_metric is None or select_mode is None):
-        raise ValueError(
-            "select_metric and select_mode must be provided when select='best'."
-        )
-
-    trial_path = get_trial_path_from_trial(
-        project_name=project_name,
-        storage_path=storage_path,
-        trial_id=trial_id,
-        run_group=run_group,
-    )
-    if not trial_path:
-        return None
-
     _ = _get_aws_session()
     result = Result.from_path(trial_path)
 
@@ -113,6 +93,15 @@ def get_trial_path_from_trial(
     project_path = f"{storage_path}/{project_name}"
 
     return f"{project_path}_{run_group}/{trial_id}"
+
+
+def get_trial_path_from_archived_trial(
+    project_name: str,
+    trial_id: str,
+) -> str | None:
+    if not trial_id:
+        return None
+    return f"{TRIAL_ARCHIVE_URL}/{project_name}/{trial_id}"
 
 
 def to_local_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
@@ -164,6 +153,7 @@ def get_checkpoint(
     select_metric: str | None = None,
     select_mode: str | None = None,
     to_local: bool = False,
+    is_archived: bool = False,
 ) -> Checkpoint | None:
     """Get the checkpoint for the given trial.
 
@@ -177,11 +167,29 @@ def get_checkpoint(
     logger.info(
         f"Getting checkpoint for trial {trial_id!r} in project {project_name!r}."
     )
-    ckpt_path = _get_checkpoint_path_from_trial(
-        project_name=project_name,
-        storage_path=storage_path or get_default_storage_path(),
-        run_group=run_group,
-        trial_id=trial_id,
+
+    if is_archived:
+        if run_group or storage_path:
+            logger.warning(
+                "`run_group` and `storage_path` parameters are ignored when "
+                "`is_archive == True`."
+            )
+        trial_path = get_trial_path_from_archived_trial(
+            project_name=project_name, trial_id=trial_id
+        )
+    else:
+        trial_path = get_trial_path_from_trial(
+            project_name=project_name,
+            storage_path=storage_path or get_default_storage_path(),
+            run_group=run_group,
+            trial_id=trial_id,
+        )
+    if not trial_path:
+        logger.info(f"Trial not found for trial {trial_id!r}.")
+        return
+
+    ckpt_path = _get_checkpoint_path(
+        trial_path=trial_path,
         select=select,
         select_metric=select_metric,
         select_mode=select_mode,
@@ -201,22 +209,20 @@ def get_checkpoint_from_config(
 
     Remote checkpoints not in the local cache are downloaded.
     """
-    if not (ckpt_path := config.restore.checkpoint_path):
-        ckpt_path = _get_checkpoint_path_from_trial(
-            project_name=config.name,
-            storage_path=config.storage_path,
-            run_group=config.restore.run.group,
-            trial_id=config.restore.run.trial_id,
-            select=config.restore.run.get("select", "last"),
-            select_metric=config.eval.select.metric,
-            select_mode=config.eval.select.mode,
-        )
-    if not ckpt_path:
-        logger.info(f"Checkpoint not found for config with name {config.name!r}.")
-        return None
+    if config.restore.checkpoint_path:
+        ckpt = Checkpoint(config.restore.checkpoint_path)
+        return to_local_checkpoint(ckpt) if to_local else ckpt
 
-    ckpt = Checkpoint(ckpt_path)
-    return to_local_checkpoint(ckpt) if to_local else ckpt
+    return get_checkpoint(
+        project_name=config.name,
+        storage_path=config.storage_path,
+        run_group=config.restore.run.group,
+        trial_id=config.restore.run.trial_id,
+        select=config.restore.run.get("select", "last"),
+        select_metric=config.eval.select.metric,
+        select_mode=config.eval.select.mode,
+        to_local=to_local,
+    )
 
 
 def get_checkpoint_file_path(checkpoint: Checkpoint) -> str:
