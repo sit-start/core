@@ -51,6 +51,9 @@
     "**/node_modules/*/**": true,
     ".venv/**": true
   },
+  "markdown.copyFiles.destination": {
+    "*.md": "${documentDirName}/assets/${documentBaseName}--${fileName}"
+  },
   "notebook.codeActionsOnSave": {
     "notebook.source.organizeImports": "explicit"
   },
