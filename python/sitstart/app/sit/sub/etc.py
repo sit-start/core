@@ -12,7 +12,7 @@ from typer import Argument, Option
 
 from sitstart import PYTHON_ROOT, REPO_ROOT
 from sitstart.logging import get_logger
-from sitstart.ml.experiments import CONFIG_ROOT
+from sitstart.ml.experiments import CONFIG_ROOT, TRIAL_ARCHIVE_URL
 from sitstart.ml.experiments.restore import get_trial_path_from_trial
 from sitstart.ml.experiments.util import (
     TrialResolution,
@@ -31,7 +31,6 @@ logger = get_logger(__name__, format="simple")
 DEFAULT_PROJECT_PATH = PYTHON_ROOT
 DEFAULT_REQUIREMENTS_PATH = f"{REPO_ROOT}/requirements.txt"
 DEFAULT_PACKAGE_VARIANTS = ["ray[data,default,train,tune]"]
-TRIAL_ARCHIVE_URL = "s3://sitstart/archive/trials"
 
 ConfigNameArg = Annotated[
     str,
