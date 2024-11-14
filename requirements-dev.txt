@@ -2,6 +2,7 @@
 callee==0.3.1
 cfn-lint==0.86.4
 coverage==7.4.4
+handsdown==2.1.0
 ipykernel==6.27.1
 pigar==2.1.4
 pre-commit==3.7.0
