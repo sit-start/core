@@ -41,9 +41,10 @@ The following sections demonstrate the main components implemented in the reposi
     - [Weights \& Biases project](#weights--biases-project)
     - [TensorBoard](#tensorboard)
   - [Etc.](#etc)
-    - [Analyzing results](#analyzing-results)
-    - [Testing](#testing)
+    - [Analyze experiment results](#analyze-experiment-results)
+    - [Evaluate on the test set](#evaluate-on-the-test-set)
     - [Experiment reproducibility](#experiment-reproducibility)
+    - [Repository tests](#repository-tests)
 
 ### Explore the `sit` command-line application
 
@@ -419,9 +420,8 @@ sit etc test-config swin_v2_t_ham10k_demo
 ```
 
 <details>
-<summary>Command output</summary>
+<summary>Composite configuration</summary>
 <div class="tip" markdown="1">
-<!-- I2024-11-07 08:12:35,081 76857 etc.py:225] Config 'swin_v2_t_ham10k_demo': -->
 
 ```yaml
 checkpoint:
@@ -683,7 +683,7 @@ I2024-11-07 07:48:34,034 45759 ray.py:353] [ray-main-head] Forwarding ports for 
 Run the hyperparameter tuning job via `sit ray submit`.
 
 ```bash
-sit ray submit tune --config my_experiment
+sit ray submit tune --config swin_v2_t_ham10k_demo
 ```
 
 <details>
@@ -731,7 +731,7 @@ open http://localhost:8265/#/metrics
 open https://wandb.ai/kevdale/swin_v2_t_ham10k_demo
 ```
 
-![Weights & Biases](docs/assets/README--image-2.png)
+![Weights & Biases](docs/assets/README--image-4.png)
 
 ##### TensorBoard
 
@@ -743,7 +743,7 @@ open https://localhost:6006
 
 #### Etc.
 
-##### Analyzing results
+##### Analyze experiment results
 
 We can load the best checkpoint from a trial, selected based on the experiment configuration's selection criteria, and analyze the model, inside a Jupyter notebook for example, with:
 
@@ -764,9 +764,9 @@ checkpoint = get_checkpoint(
 )
 ```
 
-##### Testing
+##### Evaluate on the test set
 
-We can test a model against the test set, computing final loss and any other metrics specified in the experiment configuration (accuracy and mean recall here) as:
+We can evaluate a model against the test set, computing final loss and any other metrics specified in the experiment configuration (accuracy and mean recall here) as:
 
 ```python
 from sitstart.ml.experiments.util import load_experiment_config
@@ -812,3 +812,88 @@ repo = "~/dev/core"
 repo_state, _ = get_experiment_state(checkpoint)
 repo_state.replay("~/dev/core")
 ```
+
+##### Repository tests
+
+**Integration tests** To run all tests, including those marked with `slow` and `integration` - as executed for all pushes to the main branch and all pull requests as GitHub Actions (specified in [python.yml](.github/workflows/python.yml)) - run pytest:
+
+```bash
+pytest
+```
+
+This includes tests for creating and managing dev server and cluster node instances and training and fine-tuning on the cluster.
+
+<br>
+
+**Unit tests** Run unit tests locally as:
+
+```bash
+pytest -m "not slow"
+```
+
+<details>
+<summary>Output</summary>
+<div class="tip" markdown="1">
+
+```
+================================================================================== test session starts ===================================================================================
+platform darwin -- Python 3.11.7, pytest-7.4.4, pluggy-1.3.0
+rootdir: /Volumes/Data-CS/dev/core
+configfile: pyproject.toml
+plugins: anyio-4.2.0, hydra-core-1.3.2
+collected 93 items / 15 deselected / 78 selected
+
+test/test_logging.py .                                                                                                                                                             [  1%]
+test/ml/test_training_module.py .                                                                                                                                                  [  2%]
+test/ml/test_util.py ..                                                                                                                                                            [  5%]
+test/ml/experiments/test_conf.py .                                                                                                                                                 [  6%]
+test/ml/experiments/test_util.py .                                                                                                                                                 [  7%]
+test/scm/test_github.py ....                                                                                                                                                       [ 12%]
+test/scm/git/test_repo_state.py ....                                                                                                                                               [ 17%]
+test/scm/git/test_util.py ............                                                                                                                                             [ 33%]
+test/util/test_container.py ....                                                                                                                                                   [ 38%]
+test/util/test_decorators.py ..                                                                                                                                                    [ 41%]
+test/util/test_general.py ...                                                                                                                                                      [ 44%]
+test/util/test_google_drive.py .......                                                                                                                                             [ 53%]
+test/util/test_identifier.py ...                                                                                                                                                   [ 57%]
+test/util/test_run.py ....                                                                                                                                                         [ 62%]
+test/util/test_ssh.py ......                                                                                                                                                       [ 70%]
+test/util/test_string.py ............                                                                                                                                              [ 85%]
+test/util/test_system.py ..........                                                                                                                                                [ 98%]
+test/util/test_vscode.py .                                                                                                                                                         [100%]
+
+=========================================================================== 78 passed, 15 deselected in 8.68s ============================================================================
+```
+
+</div>
+</details>
+
+<br>
+
+**Code formatting** Pre-commit hooks, defined in [.pre-commit-config.yaml](.pre-commit-config.yaml), enforce general formatting, along with language- and format-specific checks for Python, shell, YAML, JSON, and AWS CloudFormation templates. The same rules are enforced for all pushes to the main branch and all pull requests as above. Manually execute locally as:
+
+```bash
+pre-commit
+```
+
+<details>
+<summary>Output</summary>
+<div class="tip" markdown="1">
+
+```
+Trim Trailing Whitespace.............................(no files to check)Skipped
+Fix End of Files.....................................(no files to check)Skipped
+Check Yaml...........................................(no files to check)Skipped
+Check for added large files..........................(no files to check)Skipped
+Prettier Formatter (json)............................(no files to check)Skipped
+AWS CloudFormation Linter............................(no files to check)Skipped
+ruff.................................................(no files to check)Skipped
+ruff-format..........................................(no files to check)Skipped
+shfmt................................................(no files to check)Skipped
+Test shell scripts with shellcheck...................(no files to check)Skipped
+pyright..............................................(no files to check)Skipped
+System file archive..................................(no files to check)Skipped
+```
+
+</div>
+</details>

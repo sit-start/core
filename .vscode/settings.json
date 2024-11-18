@@ -52,7 +52,7 @@
     ".venv/**": true
   },
   "markdown.copyFiles.destination": {
-    "*.md": "${documentDirName}/assets/${documentBaseName}--${fileName}"
+    "*.md": "${documentDirName}/docs/assets/${documentBaseName}--${fileName}"
   },
   "notebook.codeActionsOnSave": {
     "notebook.source.organizeImports": "explicit"
