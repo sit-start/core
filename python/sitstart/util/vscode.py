@@ -24,7 +24,6 @@ def open_vscode_over_ssh(
     run(
         [
             "code",
-            "--",
             f"--{target.value}-uri",
             f"vscode-remote://ssh-remote+{hostname}{path}",
         ]
