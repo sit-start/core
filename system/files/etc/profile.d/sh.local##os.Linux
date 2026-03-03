@@ -1,5 +1,8 @@
 #!/use/bin/env bash
 
+[ -n "$SH_LOCAL_SOURCED" ] && return
+export SH_LOCAL_SOURCED=1
+
 # Bash
 export BASH_SILENCE_DEPRECATION_WARNING=1
 export EDITOR="code --wait"
